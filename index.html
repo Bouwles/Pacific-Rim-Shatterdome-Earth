@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pacific Rim: Shatterdome Earth</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #05070a;
+      }
+      #renderCanvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        touch-action: none;
+      }
+
+      #diagnosticsPanel {
+        position: fixed;
+        left: 12px;
+        bottom: 10px;
+        z-index: 25;
+        font:
+          12px/1.4 "Consolas",
+          monospace;
+        color: #7fd6ff;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        user-select: none;
+      }
+      #diagnosticsPanel[hidden] {
+        display: none;
+      }
+      #diagnosticsPanel .diag-readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        max-width: 70vw;
+        pointer-events: none;
+      }
+      #diagnosticsPanel .diag-label {
+        color: #4f7f99;
+        margin-right: 4px;
+      }
+      #diagnosticsPanel .diag-controls {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+        pointer-events: auto;
+      }
+      #diagnosticsPanel .diag-controls button,
+      #diagnosticsPanel .diag-controls select {
+        font: inherit;
+        color: #cfe9f7;
+        background: rgba(8, 12, 18, 0.85);
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        border-radius: 3px;
+        padding: 2px 8px;
+        cursor: pointer;
+      }
+
+      #contextBanner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        padding: 8px 16px;
+        text-align: center;
+        font:
+          13px/1.4 "Consolas",
+          monospace;
+        color: #fff;
+        background: #7a1f1f;
+      }
+      #contextBanner[hidden] {
+        display: none;
+      }
+
+      #uiRoot {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      #uiRoot:empty {
+        display: none;
+      }
+      #uiRoot .screen {
+        pointer-events: auto;
+        background: rgba(8, 12, 18, 0.82);
+        border: 1px solid rgba(127, 214, 255, 0.35);
+        border-radius: 6px;
+        padding: 28px 36px;
+        max-width: 420px;
+        text-align: center;
+        color: #e8f4ff;
+        font:
+          14px/1.5 "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      #uiRoot h1 {
+        font-size: 20px;
+        margin: 0 0 8px;
+      }
+      #uiRoot h2 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      #uiRoot p {
+        margin: 0 0 16px;
+        color: #a9c3d6;
+      }
+      #uiRoot button {
+        font: inherit;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 1px solid rgba(127, 214, 255, 0.5);
+      }
+      #uiRoot .primary-button {
+        background: #1c6ea4;
+        color: #fff;
+      }
+      #uiRoot .secondary-button {
+        background: transparent;
+        color: #a9c3d6;
+      }
+      #uiRoot .screen-error {
+        border-color: rgba(255, 120, 120, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="appRoot">
+      <canvas id="renderCanvas"></canvas>
+      <div id="contextBanner" hidden></div>
+      <div id="uiRoot"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
