@@ -63,6 +63,50 @@ parts actually run today, so it never implies working systems that do not exist.
 same style. Internal engineering documents under `docs/` and the other root memory files are not bound by
 this and may keep their existing punctuation.
 
+## 2026-08-20 — Milestone 02: asset pipeline shape
+
+**Decision (parameterised generators, not per-unit factories).** Eight generators cover all seven asset
+classes, each driven entirely by manifest params. Three different bipeds (two Jaegers and a kaiju) share
+one `biped` generator.
+**Reason:** The contract explicitly forbids a unique hand-coded mesh factory per unit. Parameterisation
+means a new unit is a data row, and a fix to limb construction reaches every unit at once instead of
+needing twelve edits.
+
+**Decision (generators report true height).** Each generator normalises its proportions so the geometry it
+builds actually measures `heightMeters`.
+**Reason:** The alternative was a hand-tuned `nominalHeightMeters` per manifest to satisfy scale
+validation, which turns a real check into a rubber stamp. Two of my own placeholders failed the check
+before this change, which is the check doing its job.
+
+**Decision (overrides are structurally limited).** `AssetManifestOverride` exposes only `source`,
+`fallbackGenerator`, `materials` and `portrait`.
+**Reason:** "Changing an asset manifest must not alter unit statistics" is enforced by the type rather than
+by discipline. Collision, sockets, nominal height and animation tags simply cannot be reached from an
+override, so the rule cannot be broken by a future careless edit.
+
+**Decision (fallback is mandatory, and warns once).** Every manifest must name a fallback generator, and a
+failed model load warns once per asset id and then renders the placeholder.
+**Reason:** A missing asset is a content gap, not a crash. Warning once per asset rather than per attempt
+keeps a render loop from flooding the console, while still naming the asset, the path, the generator that
+took over, and where to put the file.
+
+**Decision (gallery borrows the boot scene).** The gallery swaps content inside the existing scene instead
+of creating and disposing its own.
+**Reason:** The debug overlay's `SceneInstrumentation` is bound to a specific scene, so a scene swap would
+mean rebuilding the overlay too. Content swap gets the same result with less machinery. A real scene
+lifecycle belongs in the milestone that first has two genuinely different environments.
+
+**Decision (damage preview ranks parts geometrically).** Detachment order is by distance from the
+silhouette's centre, with vertical distance weighted at half.
+**Reason:** The obvious alternative, matching part names, is exactly the name-keyed branching the contract
+forbids, and would need updating for every new generator. Distance ranking works for a Jaeger, a serpent
+and a warehouse without the gallery knowing what any part is called. Alphabetical ordering was tried first
+and read wrongly on screen, dropping the torso while arms floated.
+
+**Decision (vehicle material budget raised from 2 to 3).**
+**Reason:** A road vehicle needs body, glass and tyres. The original figure was a guess that forced a
+texture atlas for no benefit at that size. Raising it was correcting the budget, not silencing the check.
+
 ## 2026-08-20 — Milestone 01: kernel determinism rules, and moving the diagnostics panel into `src/debug/`
 
 **Decision (determinism).** Authoritative code in `src/simulation/**` and `src/entities/**` may not call

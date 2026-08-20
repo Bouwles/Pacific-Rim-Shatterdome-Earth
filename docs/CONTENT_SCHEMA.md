@@ -64,6 +64,44 @@ entities sorted by id so the form is canonical.
 snapshot whose seed differs from the target kernel's, because continuing a run under a different seed would
 silently diverge.
 
+## Asset manifests (Milestone 02)
+
+Defined in `src/assets/manifest.ts`, registered in `src/data/assets.ts`, validated by
+`validateAssetManifest` at registration and by `validateAssetInspection` after loading.
+
+| Field                      | Type                                                | Constraint                                                       |
+| -------------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| `id`                       | `string`                                            | required, unique                                                 |
+| `displayName`              | `string`                                            | required                                                         |
+| `assetClass`               | enum                                                | jaeger, kaiju, building, vehicle, ship, prop, shatterdome-module |
+| `source.url`               | `string \| null`                                    | path under `public/`, or null while only the generator exists    |
+| `source.format`            | `"glb" \| "gltf"`                                   | production asset format                                          |
+| `fallbackGenerator.id`     | `string`                                            | required, so an asset is never unrenderable                      |
+| `fallbackGenerator.params` | record of number/string/boolean                     | validated by the named generator                                 |
+| `nominalHeightMeters`      | `number`                                            | positive; loaded model must match within 10 percent              |
+| `materials[]`              | slot id, `#rrggbb`, metallic, roughness, textureUrl | metallic and roughness within [0, 1]; ids unique                 |
+| `animations[]`             | gameplay tag, clip name, loop                       | tags unique; clip must exist in the model                        |
+| `sockets[]`                | socket id, position, nodeName                       | ids from the known set, no duplicates                            |
+| `collision`                | box/capsule/sphere, size, center                    | finite vectors                                                   |
+| `audio[]`                  | slot id, url                                        | ids unique                                                       |
+| `portrait`                 | slot id, url, or null                               | optional                                                         |
+| `provenance`               | author, license, sourceUrl, notes                   | author and license required                                      |
+| `seed`                     | `number`                                            | finite; makes generated geometry reproducible                    |
+
+### Socket ids
+
+`head`, `chest`, `back`, `reactor`, `hand.L`, `hand.R`, `forearm.L`, `forearm.R`, `foot.L`, `foot.R`, `muzzle`.
+
+### Conventions a production model must follow
+
+Authored in metres, facing +Z, origin at the base centre. Enforced by `validateAssetInspection`, not by
+convention alone.
+
+### Overrides
+
+`AssetManifestOverride` exposes only `source`, `fallbackGenerator`, `materials` and `portrait`. Gameplay
+fields are structurally unreachable from an override.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

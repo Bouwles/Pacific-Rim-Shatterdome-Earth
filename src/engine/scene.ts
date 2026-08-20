@@ -13,6 +13,8 @@ import {
 
 export interface BootScene {
   readonly scene: Scene;
+  readonly camera: ArcRotateCamera;
+  readonly ground: ReturnType<typeof MeshBuilder.CreateGround>;
   readonly jaegerPlaceholder: ReturnType<typeof MeshBuilder.CreateBox>;
 }
 
@@ -64,5 +66,5 @@ export function buildBootScene(engine: AbstractEngine, canvas: HTMLCanvasElement
   shadowGenerator.addShadowCaster(jaegerPlaceholder);
   shadowGenerator.usePoissonSampling = true;
 
-  return { scene, jaegerPlaceholder };
+  return { scene, camera, ground, jaegerPlaceholder };
 }

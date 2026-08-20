@@ -17,11 +17,23 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Debug overlay (F3) showing renderer, Babylon version, fps, frame time, draw calls, sim tick, entity count, physics bodies, seed, and run state, with working transport controls.
 - `?seed=N` reproduces a run; `DEFAULT_SEED` is a fixed constant otherwise.
 - Full disposal: resize listener, context-lost/restored observers, render loop, engine, overlay keydown listener + Babylon observer + instrumentation, kernel event bus and command queue, state-machine listeners — all released via `AppHandle.dispose()`, wired to Vite HMR.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (84 unit+integration), `smoke` (10 Playwright), `build` all pass.
+- **Asset pipeline** that starts procedural and accepts production models without touching gameplay code:
+  - typed manifests with materials, animation tags, sockets, collision proxy, audio and portrait slots, provenance and licence;
+  - eight parameterised generators covering all seven asset classes, so a new unit is a data row rather than a mesh factory;
+  - named sockets (`head`, `chest`, `back`, `reactor`, `hand.L/R`, `forearm.L/R`, `foot.L/R`, `muzzle`);
+  - validation of scale, forward axis, origin, socket nodes, animation clips, missing textures and per-class budgets;
+  - model-first resolution with a procedural fallback and exactly one actionable warning per asset;
+  - overrides that structurally cannot reach gameplay fields.
+- Asset gallery (main menu, then Asset Gallery) loading all twelve placeholders side by side with measured dimensions, triangle and material counts against budget, socket lists, validation status, turntable, damage preview and manifest swapping.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (120 unit+integration), `smoke` (19 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
 - The Jaeger placeholder box and Shatterdome screen are labeled placeholders. Clicking through to "Shatterdome" says "Not yet implemented" rather than faking a system.
+- Assets exist only in the gallery. Nothing in the boot scene or the simulation uses a manifest yet, and no entity is bound to an asset. The placeholder box in the boot scene is still the old hard-coded one from Milestone 00.
+- Animation tags, audio slots and portrait slots are declared, validated and carried through the pipeline, but nothing plays animation, audio or portraits. There is no animation system and no audio system.
+- The gallery's damage slider is a presentation preview, not the component damage model. It tints and detaches parts by distance from centre; it does not track armour, subsystems or persistence.
+- Collision proxies are declared in manifests but unused, since no physics backend is wired.
 - `Deployment`, `Combat`, `Results` app states are valid graph nodes with no screens; nothing transitions into them yet.
 - The kernel runs with **zero entities in the main app** — entity count honestly reads 0. Spawn commands exist and are exercised by tests and the scenario runner, but no gameplay system issues them yet, and nothing in the 3D scene is bound to entity transforms. That binding arrives with the first real gameplay entity.
 - Motion integration is the only system. It is real and used forever, but it is one system, not a physics step.
@@ -45,6 +57,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Entities: [src/entities/entity.ts](src/entities/entity.ts)
 - Debug: [src/debug/overlay.ts](src/debug/overlay.ts), [src/debug/scenarioRunner.ts](src/debug/scenarioRunner.ts)
 - Content registry: [src/data/registry.ts](src/data/registry.ts), [src/data/jaegers.ts](src/data/jaegers.ts)
+- Asset pipeline: [src/assets/manifest.ts](src/assets/manifest.ts), [inspection.ts](src/assets/inspection.ts), [budgets.ts](src/assets/budgets.ts), [generators.ts](src/assets/generators.ts), [resolver.ts](src/assets/resolver.ts), [src/data/assets.ts](src/data/assets.ts)
+- Asset gallery: [src/debug/gallery.ts](src/debug/gallery.ts), [src/ui/galleryScreen.ts](src/ui/galleryScreen.ts), [src/app/galleryOverrides.ts](src/app/galleryOverrides.ts)
+- Model drop point: [public/assets/models/README.md](public/assets/models/README.md)
 - DOM screens: [src/ui/screens.ts](src/ui/screens.ts)
 - Tests: [tests/unit/](tests/unit/), [tests/integration/](tests/integration/), [tests/e2e/](tests/e2e/)
 - Docs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONTENT_SCHEMA.md](docs/CONTENT_SCHEMA.md), [docs/PERFORMANCE_BUDGETS.md](docs/PERFORMANCE_BUDGETS.md), [docs/CONTROLS.md](docs/CONTROLS.md)
@@ -56,7 +71,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Context-loss recovery wired but unverified end-to-end.
 - WebGPU-vs-WebGL parity beyond this scene (post-process, GUI) unchecked.
 - Entity iteration relies on Map insertion order being deterministic given deterministic commands. True today; if a future system iterates in a data-dependent order, canonical id sorting will be needed in `each()`, not just in `serialize()`.
+- The GLB load path has never run against a real GLB file, because no model exists to test with. Its validation logic is unit tested against synthetic inspection data, and its failure path is exercised constantly, but the success path is unverified. First real model installed will be the real test of it.
+- The gallery borrows the boot scene rather than owning one. Fine for two environments; a real scene lifecycle will be needed once the Shatterdome interior and a combat map both exist.
 
 ## Exact next task
 
-Start Phase 2 (ROADMAP.md), beginning with `src/saves/`: IndexedDB persistence built on the kernel's existing `serialize()`/`restore()`/`hash()` — multiple slots, autosave, rotating backups, export/import, corruption recovery, and migration scaffolding against `SIM_SCHEMA_VERSION`. Then the on-foot player controller and the first real Shatterdome interior.
+Start Phase 2 (ROADMAP.md), beginning with `src/saves/`: IndexedDB persistence built on the kernel's existing `serialize()`/`restore()`/`hash()` — multiple slots, autosave, rotating backups, export/import, corruption recovery, and migration scaffolding against `SIM_SCHEMA_VERSION`. Then the on-foot player controller and the first real Shatterdome interior, which is the first consumer of `shatterdome.jaeger-bay` and the point where an entity gets bound to an asset manifest.

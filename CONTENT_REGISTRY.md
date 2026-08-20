@@ -4,9 +4,30 @@ Tracks every Jaeger, kaiju, copilot, location, weapon, research node, and crosso
 
 ## Jaegers
 
-| Name                 | Manufacturer/Origin                            | Unlock condition                | Status                                                                      |
-| -------------------- | ---------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
-| Placeholder Sentinel | Shatterdome Earth R&D (procedural placeholder) | always available (dev stand-in) | data only — `src/data/jaegers.ts`, no model/animation/gameplay behavior yet |
+| Name                 | Manufacturer/Origin                            | Unlock condition                | Status                                                                                                           |
+| -------------------- | ---------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Placeholder Sentinel | Shatterdome Earth R&D (procedural placeholder) | always available (dev stand-in) | stats in `src/data/jaegers.ts`, asset `jaeger.placeholder-mk0` (biped generator, 75m); no gameplay behaviour yet |
+| Heavy Frame Mk-4     | Shatterdome Earth R&D (procedural placeholder) | not obtainable yet              | asset only, `jaeger.heavy-mk4` (biped generator, 68m); no stats entry yet                                        |
+
+## Asset manifests
+
+All original procedural placeholders. No production models are installed; each falls back to the named
+generator. See `src/data/assets.ts` and `docs/CONTENT_SCHEMA.md`.
+
+| Asset id                 | Class              | Generator          | Height | Sockets           |
+| ------------------------ | ------------------ | ------------------ | ------ | ----------------- |
+| jaeger.placeholder-mk0   | jaeger             | biped              | 75 m   | full biped set    |
+| jaeger.heavy-mk4         | jaeger             | biped              | 68 m   | full biped set    |
+| kaiju.biped-alpha        | kaiju              | biped              | 82 m   | full biped set    |
+| kaiju.quadruped-alpha    | kaiju              | quadruped          | 55 m   | head, chest, back |
+| kaiju.serpentine-alpha   | kaiju              | serpentine         | 44 m   | head, chest       |
+| building.tower           | building           | block-building     | 120 m  | none              |
+| building.warehouse       | building           | block-building     | 14 m   | none              |
+| vehicle.civilian-car     | vehicle            | wheeled-vehicle    | 1.5 m  | none              |
+| ship.container-freighter | ship               | hull-ship          | 24 m   | back              |
+| prop.cargo-crate         | prop               | prop (crate)       | 2.6 m  | none              |
+| prop.shore-cannon        | prop               | prop (cannon)      | 4.2 m  | muzzle            |
+| shatterdome.jaeger-bay   | shatterdome-module | shatterdome-module | 104 m  | none              |
 
 ## Kaiju
 

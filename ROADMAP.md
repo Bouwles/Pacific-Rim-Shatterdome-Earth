@@ -59,6 +59,25 @@ runner, and a real debug overlay. Created `src/entities/`, `src/debug/`, `src/ap
 - `npm run typecheck`, `lint`, `format:check`, `test` (84), `smoke` (10), `build` all pass.
   **Next action:** none — complete. Proceed to Phase 2.
 
+## Phase 1.75 / Milestone 02 — Asset manifest and procedural placeholder factory
+
+**Depends on:** Milestone 01.
+**Status:** done.
+**Scope:** typed asset manifests with provenance and licensing, eight parameterised procedural generators
+covering all seven asset classes, named attachment sockets, GLB validation against manifest and budget,
+model-first resolution with a generator fallback, and an asset gallery for inspection. Created
+`src/assets/`, `src/data/assets.ts`, `src/debug/gallery.ts`, `src/ui/galleryScreen.ts`,
+`src/app/galleryOverrides.ts`, `public/assets/models/`.
+**Acceptance tests:**
+
+- A missing production model falls back to the placeholder and logs one actionable warning per asset,
+  naming the path and the fix. Verified in tests and in the browser across all twelve assets.
+- A manifest override swaps materials and source while collision, sockets, nominal height, animation tags
+  and asset class stay byte-identical, and the simulation hash is unchanged.
+- The gallery loads all twelve assets, measures each from its built geometry, and reports budget status.
+- `npm run typecheck`, `lint`, `format:check`, `test` (120), `smoke` (19), `build` all pass.
+  **Next action:** none — complete. Proceed to Phase 2.
+
 ## Phase 2 — Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.

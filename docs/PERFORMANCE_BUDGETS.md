@@ -15,6 +15,34 @@ active physics bodies, seed, and run state, backed by Babylon's `SceneInstrument
 Not tracked yet: AI agents, debris, particles, shadow map count, texture memory, streamed sectors, audio
 voices. Those budgets are meaningless before the systems that would consume them exist.
 
+## Per-asset budgets (Milestone 02)
+
+Ceilings for a single instance of a production asset, enforced by `src/assets/budgets.ts` and reported by
+the Asset Gallery. Exceeding one is a warning, not an error: the asset still loads, it just costs more than
+its class allows.
+
+| Class              | Triangles | Materials | Texture memory |
+| ------------------ | --------- | --------- | -------------- |
+| jaeger             | 150,000   | 8         | 32 MB          |
+| kaiju              | 150,000   | 8         | 32 MB          |
+| shatterdome-module | 60,000    | 6         | 16 MB          |
+| ship               | 20,000    | 4         | 8 MB           |
+| building           | 8,000     | 3         | 8 MB           |
+| vehicle            | 4,000     | 3         | 4 MB           |
+| prop               | 2,000     | 2         | 2 MB           |
+
+Hero units get the largest share because they are on screen constantly and close to camera. Scenery is
+tighter because it is instanced heavily, so per-instance cost dominates the frame.
+
+The vehicle material budget was raised from 2 to 3 during this milestone: a road vehicle genuinely needs
+body, glass and tyres, and the original figure forced an atlas for no benefit at that size.
+
+### Current placeholder cost
+
+All twelve shipped placeholders sit far below their ceilings, between 12 and 664 triangles each, because
+they are box and cylinder primitives. These numbers say nothing about production cost; they only confirm
+the measurement and reporting path works.
+
 ## Frame pacing guarantees (Milestone 01)
 
 Simulation cost per frame is bounded by construction, independent of how long the tab was suspended:

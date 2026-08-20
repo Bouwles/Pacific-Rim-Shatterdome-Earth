@@ -29,10 +29,21 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 
 ## Menu
 
-| Input            | Action                                                                 |
-| ---------------- | ---------------------------------------------------------------------- |
-| **New Game**     | MainMenu → Loading → Shatterdome placeholder                           |
-| **Back to Menu** | Return to MainMenu from the Shatterdome placeholder or an error screen |
+| Input             | Action                                                                           |
+| ----------------- | -------------------------------------------------------------------------------- |
+| **New Game**      | MainMenu → Loading → Shatterdome placeholder                                     |
+| **Asset Gallery** | MainMenu → Asset Gallery                                                         |
+| **Back to Menu**  | Return to MainMenu from the Shatterdome placeholder, gallery, or an error screen |
+
+## Asset gallery
+
+| Input               | Action                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| Asset list          | Select an asset; the camera reframes to its measured size                               |
+| **Rotate**          | Start or stop the turntable                                                             |
+| **Damage preview**  | 0 to 100 percent presentation damage: parts tint, then detach outward                   |
+| **Manifest** select | Default, alternate palette, or an uninstalled production model to exercise the fallback |
+| Left-drag / wheel   | Orbit and zoom, same as the boot scene                                                  |
 
 ## Not yet bound
 

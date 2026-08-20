@@ -28,9 +28,12 @@
   - `appState` — unchanged from Milestone 00.
   - `kernel` — command boundary (queued not immediate, unknown type, schema-version mismatch, field-level payload errors, idempotent despawn, spawn/despawn events), determinism (same seed+commands ⇒ same hash; different seed ⇒ different hash; different commands ⇒ different hash; hash advances with motion; step grouping does not affect result), and snapshot round-trip (identical hash, deterministic continuation after restore, seed/schema mismatch rejected).
   - `scenarioRunner` — repeated runs of `kernel-smoke` hash identically; entity count reflects the mid-run despawn; hash changes on seed change and on command change; scenario validation rejects out-of-range scheduling and non-positive tick counts.
+- **Unit, assets** (`tests/unit/assetManifest.test.ts`, `assetInspection.test.ts`): manifest validation (fallback generator required, unknown and duplicate sockets, malformed colours, out of range material values, duplicate animation tags, provenance required, registry rejects rather than stores), override containment, shipped manifests cover every class and ship no third party content; inspection validation (wrong unit, tolerated drift, wrong forward axis, offset origin, missing socket node, missing clip, failed textures, budget overruns warn rather than error, class-specific budgets).
+- **Integration, assets** (`tests/integration/assetResolver.test.ts`): fallback on a missing model with one actionable warning, one warning per asset however many instances, loud failure on an unknown generator or invalid params, every shipped placeholder resolving within 10 percent of its declared height with no errors and inside its triangle budget, every declared socket present, the cannon's muzzle, reproducibility from seed, one generator producing differently proportioned units, scene node and material counts returning to baseline after disposal and after ten resolve/dispose cycles, and the simulation hash staying identical under every manifest override including the failing-model path.
 - **Browser smoke** (`tests/e2e/`, Playwright/Chromium):
   - `boot.spec.ts` (Milestone 00, still passing unchanged): truthful backend label, zero console errors, New Game flow, reload does not duplicate canvas/render loop, resize keeps one canvas.
   - `debugOverlay.spec.ts`: all overlay fields report real values and physics reads "n/a (no backend)"; ticks advance on their own; pause halts ticks, Step advances exactly one and does not resume, Resume continues; slow motion advances more slowly than 1×; F3 toggles visibility; `?seed=` drives the seed.
+  - `assetGallery.spec.ts`: all twelve assets load with a budget summary and no console errors; measurements come from geometry; selecting another asset reframes and updates every figure; sockets including the cannon's muzzle are exposed; the damage preview is reversible; rotation can be paused; swapping to an uninstalled model falls back visibly and warns once; an alternate palette leaves measurements identical; leaving the gallery returns to the menu with the simulation still running.
 
 Every deterministic system added from here on (attack director seeding, damage math, prestige curves, save migrations) needs its own unit tests per GAME_SPEC's quality contract.
 
@@ -69,6 +72,25 @@ Every deterministic system added from here on (attack director seeding, damage m
   - **Spiral-of-death guard**: blocking the main thread for 4 s (the same enormous resume delta a suspended tab produces) advanced ~25 ticks instead of the 240 an unguarded accumulator would queue. An earlier attempt to test this by backgrounding the tab was discarded — the tab never actually reported hidden (691 frames kept rendering), so it proved nothing.
   - Console clean apart from Vite HMR debug logs and the Babylon boot log. One accessibility issue surfaced during this pass (time-scale `<select>` had no name) and was fixed, then re-verified clean.
 - **Not verified:** genuine tab suspension via the browser's own lifecycle freeze, and GPU context loss (both still unforceable from this environment). The main-thread stall exercises the identical code path the resume delta takes.
+
+### Phase 1.75 / Milestone 02 (2026-08-20)
+
+- All automated checks green: `typecheck`, `lint`, `format:check`, `test` (120/120), `smoke` (19/19), `build`.
+- Manual browser verification via Chrome DevTools MCP on the WebGPU path:
+  - Gallery loads all twelve assets in a row, summary reads "12 assets loaded, all within budget".
+  - Selected asset panel shows measured values: 75.00 m height, 26.10 x 14.02 m extent, 192/150,000 triangles, 3/8 materials, all ten biped sockets, "within budget, no issues".
+  - Damage preview at 85 percent scorched the asset and detached its head, feet and forearms while the torso and legs remained, then returned to pristine at 0.
+  - Rotate toggle stops and starts the turntable.
+  - Switching the manifest to the uninstalled production model kept all twelve assets rendering and produced exactly twelve warnings, one per asset, each naming the asset, the missing path, the generator that took over, and where to place the file. No repeats and no errors.
+  - Alternate palette changed colours while height and triangle count stayed identical.
+  - Leaving the gallery restored the menu, left one canvas, and the simulation kept ticking.
+  - Zero console errors throughout.
+- Two defects were found by the project's own validator during this milestone and fixed rather than
+  suppressed: the serpentine kaiju floated 3.29 m above its origin, and the civilian car exceeded a vehicle
+  material budget that was itself too tight.
+- Two presentation defects were found by looking at the screen rather than by any test: the placeholders
+  rendered nearly black under the boot scene's single directional light, and most of the row floated past
+  the 60 m boot ground. The gallery now owns a fill light and a deck sized to the row.
 
 ## Performance budgets
 

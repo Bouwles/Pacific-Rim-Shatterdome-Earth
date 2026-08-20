@@ -19,8 +19,14 @@ The project is built in numbered milestones. Everything listed here actually run
 - Debug overlay on F3 showing renderer, framerate, frame time, draw calls, simulation tick, entity count, physics bodies, seed and run state
 - Pause, single step, and 0.25x to 2x slow motion from that overlay
 - Headless scenario runner that replays a fixed scenario and hashes the result, so any loss of determinism is caught by a test
+- Asset pipeline with typed manifests, eight parameterised procedural generators covering Jaegers, kaiju, buildings, vehicles, ships, props and Shatterdome modules, named attachment sockets, and validation of scale, orientation, origin, skeletons, animation clips, textures and per class budgets
+- Asset gallery reachable from the main menu, where every placeholder can be rotated, measured, damaged and swapped to a different manifest
 
-Not built yet: the walkable Shatterdome, Jaeger combat, the world map, kaiju, the economy, copilots, and everything else in the list below. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: the walkable Shatterdome, Jaeger combat, the world map, kaiju behaviour, the economy, copilots, and everything else in the list below. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+
+### Using your own models
+
+The game ships with no model files and renders entirely from generated placeholders. To install a real one, drop a GLB into `public/assets/models` and point that asset's `source.url` at it in `src/data/assets.ts`. Nothing else changes, because gameplay refers to manifest ids and socket names rather than to meshes. If a file is missing or broken the game logs one warning naming the path and falls back to the placeholder instead of crashing. Open the Asset Gallery to see any model measured against its manifest and its budget. Full details are in `public/assets/models/README.md`.
 
 ## What the finished game is meant to be
 
@@ -103,11 +109,13 @@ npm run smoke         Playwright browser tests
 ```
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
+src/assets       asset manifests, procedural generators, model validation, resolver
 src/engine       Babylon engine selection and the boot scene
 src/app          bootstrap, application state machine, config
-src/debug        developer overlay and the deterministic scenario runner
-src/data         typed content registries
+src/debug        developer overlay, asset gallery, deterministic scenario runner
+src/data         typed content registries and asset manifests
 src/ui           menus and screens
+public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
 docs             architecture, content schema, controls, performance budgets
 ```

@@ -137,6 +137,94 @@
       #uiRoot .screen-error {
         border-color: rgba(255, 120, 120, 0.5);
       }
+
+      /* The gallery is a working panel, not a dialog: it needs room and must not
+         cover the asset it is describing. */
+      #uiRoot .screen-gallery {
+        max-width: none;
+        width: min(420px, 34vw);
+        text-align: left;
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        bottom: 92px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+        font-size: 13px;
+      }
+      #uiRoot .gallery-header {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #uiRoot .gallery-summary {
+        margin: 0;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+        flex: 1;
+      }
+      #uiRoot .gallery-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        max-height: 40%;
+        border: 1px solid rgba(127, 214, 255, 0.2);
+        border-radius: 4px;
+      }
+      #uiRoot .gallery-list button {
+        width: 100%;
+        text-align: left;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: #cfe3f2;
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-list button.selected {
+        background: rgba(28, 110, 164, 0.55);
+        color: #fff;
+      }
+      #uiRoot .gallery-detail {
+        overflow-y: auto;
+        font-family: "Consolas", monospace;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-row {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      #uiRoot .gallery-key {
+        color: #6f97b0;
+        flex: 0 0 108px;
+      }
+      #uiRoot .gallery-value {
+        color: #e8f4ff;
+        word-break: break-word;
+      }
+      #uiRoot .gallery-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-controls label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #uiRoot .gallery-controls input[type="range"] {
+        flex: 1;
+      }
     </style>
   </head>
   <body>

@@ -8,7 +8,11 @@ function clear(container: HTMLElement): void {
   container.replaceChildren();
 }
 
-export function renderMainMenu(container: HTMLElement, onNewGame: () => void): void {
+export function renderMainMenu(
+  container: HTMLElement,
+  onNewGame: () => void,
+  onOpenGallery?: () => void,
+): void {
   clear(container);
   const panel = document.createElement("div");
   panel.className = "screen screen-menu";
@@ -16,7 +20,7 @@ export function renderMainMenu(container: HTMLElement, onNewGame: () => void): v
   const title = document.createElement("h1");
   title.textContent = "Pacific Rim: Shatterdome Earth";
   const subtitle = document.createElement("p");
-  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 00.";
+  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 02.";
 
   const newGameButton = document.createElement("button");
   newGameButton.type = "button";
@@ -25,6 +29,16 @@ export function renderMainMenu(container: HTMLElement, onNewGame: () => void): v
   newGameButton.addEventListener("click", onNewGame);
 
   panel.append(title, subtitle, newGameButton);
+
+  if (onOpenGallery) {
+    const galleryButton = document.createElement("button");
+    galleryButton.type = "button";
+    galleryButton.textContent = "Asset Gallery";
+    galleryButton.className = "secondary-button";
+    galleryButton.addEventListener("click", onOpenGallery);
+    panel.appendChild(galleryButton);
+  }
+
   container.appendChild(panel);
 }
 

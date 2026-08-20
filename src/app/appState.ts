@@ -6,17 +6,20 @@ export enum AppState {
   Deployment = "Deployment",
   Combat = "Combat",
   Results = "Results",
+  /** Developer asset browser. Reachable from the menu; never part of a campaign run. */
+  AssetGallery = "AssetGallery",
   Error = "Error",
 }
 
 const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
   [AppState.Boot]: [AppState.MainMenu, AppState.Error],
-  [AppState.MainMenu]: [AppState.Loading, AppState.Error],
+  [AppState.MainMenu]: [AppState.Loading, AppState.AssetGallery, AppState.Error],
   [AppState.Loading]: [AppState.Shatterdome, AppState.Deployment, AppState.Error],
   [AppState.Shatterdome]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
   [AppState.Deployment]: [AppState.Combat, AppState.Shatterdome, AppState.Error],
   [AppState.Combat]: [AppState.Results, AppState.Error],
   [AppState.Results]: [AppState.Shatterdome, AppState.MainMenu, AppState.Error],
+  [AppState.AssetGallery]: [AppState.MainMenu, AppState.Error],
   [AppState.Error]: [AppState.MainMenu],
 };
 

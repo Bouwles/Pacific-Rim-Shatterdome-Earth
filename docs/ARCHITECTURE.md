@@ -28,18 +28,30 @@ src/
     hash.ts             hashState — deterministic two-lane FNV-1a digest of serializable state
   entities/
     entity.ts           EntityId (branded), EntityRegistry, component definitions/storage, snapshot I/O
+  assets/              ← presentation pipeline; manifest.ts and inspection.ts stay Babylon-free
+    manifest.ts         AssetManifest types, socket ids, validation, presentation-only overrides
+    inspection.ts       AssetInspection type + pure validation of a loaded model against its manifest
+    budgets.ts          per-class triangle/material/texture ceilings
+    generators.ts       parameterised procedural generators + MaterialPalette
+    resolver.ts         manifest -> renderable: model first, generator fallback, one warning, disposal
   data/
     registry.ts         generic ContentRegistry<T> — typed table + validator + duplicate/unknown-id guards
     jaegers.ts           JaegerDefinition type + one placeholder entry proving the registry pattern
+    assets.ts            the shipped asset manifests, one per placeholder
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
     scenarioRunner.ts    headless deterministic scenario runner + `kernel-smoke` fixture
+    gallery.ts           asset inspection scene: layout, framing, measurement, damage preview
   ui/
     screens.ts           DOM overlay renderers for MainMenu, Loading, Shatterdome placeholder, Error
+    galleryScreen.ts     asset gallery panel
 tests/
-  unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers — pure logic
-  integration/         appState, kernel, scenarioRunner — module boundaries and determinism
-  e2e/                 boot.spec.ts, debugOverlay.spec.ts — Playwright: real browser, real transport controls
+  unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers,
+                        assetManifest, assetInspection — pure logic
+  integration/         appState, kernel, scenarioRunner, assetResolver — module boundaries and determinism
+  e2e/                 boot, debugOverlay, assetGallery — Playwright: real browser, real controls
+public/
+  assets/models/       drop point for production GLB files; empty by design, README explains the contract
 ```
 
 Everything else in the target shape (`world/`, `jaegers/`, `kaiju/`, `combat/`, `destruction/`,
@@ -100,9 +112,9 @@ overlay's Step button drives.
 transition graph lives in `appState.ts` as data (`ALLOWED_TRANSITIONS`), not in `if`/`switch` chains
 scattered through the app. `bootstrap.ts` is the single subscriber that maps `(state) -> DOM screen`.
 
-Only `Boot -> MainMenu -> Loading -> Shatterdome -> MainMenu` is reachable today. `Deployment`, `Combat`,
-and `Results` exist as valid graph nodes with legal edges so later milestones can wire real screens into
-them without redesigning the graph, but nothing transitions into them yet — that would be a fake screen
+`Boot -> MainMenu -> Loading -> Shatterdome -> MainMenu` and `MainMenu <-> AssetGallery` are reachable
+today. `Deployment`, `Combat`, and `Results` exist as valid graph nodes with legal edges so later
+milestones can wire real screens into them without redesigning the graph, but nothing transitions into them yet — that would be a fake screen
 implying a system that doesn't exist. `Error` is reachable today only from a fatal boot failure (engine
 init threw); the Error screen's recovery action is a page reload, because a failed boot leaves no working
 engine to hand control back to.
@@ -144,6 +156,60 @@ physics integration.
 Controls (Pause/Resume, Step, time-scale select) drive `SimulationLoop` directly. The dependency runs one
 way: presentation reads and commands the simulation; the simulation never reads the DOM. `F3` toggles
 visibility. Dispose releases the keydown listener, the Babylon observer, the instrumentation, and the DOM node.
+
+## Asset pipeline
+
+Gameplay never names a mesh. It names an asset manifest id and a socket id, which is what makes a model
+swap a data change rather than a code change.
+
+**Manifest.** `AssetManifest` (`src/assets/manifest.ts`) carries the production source, a mandatory
+procedural fallback generator, material slots, animation tags, sockets, a collision proxy, audio and
+portrait slots, a nominal height, a seed, and provenance with an explicit licence. It is plain serializable
+data with no Babylon or DOM types, so it validates headlessly and can move to JSON later untouched.
+
+**Resolution order.** `AssetResolver.resolve()` tries `source.url` first. Any failure falls through to the
+generator and logs exactly one warning per asset id naming the asset, the path, the generator that took
+over, and where to put the file. A missing model is a content gap, not a crash, so the game stays playable
+with `public/assets/models` empty — which is how it ships.
+
+**Generators are parameterised, never per-unit.** Eight generators cover every asset class: `biped`,
+`quadruped`, `serpentine`, `block-building`, `wheeled-vehicle`, `hull-ship`, `prop`, `shatterdome-module`.
+A 75m Jaeger, a 68m heavy frame and an 82m bipedal kaiju are all `biped` with different numbers. Adding a
+unit means adding a manifest, not a mesh factory. Generators draw from a seeded RNG, so geometry is
+reproducible from the manifest's seed.
+
+Each generator reports its true measured height for whatever `heightMeters` it is given, so a manifest
+never needs a hand-tuned nominal height to satisfy scale validation.
+
+**Sockets.** `head`, `chest`, `back`, `reactor`, `hand.L/R`, `forearm.L/R`, `foot.L/R`, `muzzle`. A
+production model binds a socket through its `nodeName`; otherwise the resolver creates the node at the
+manifest position. Either way the socket exists, so attachment code never branches on asset origin.
+
+**Validation.** `validateAssetInspection` compares what was actually loaded against the manifest: height
+within 10 percent, +Z forward, origin within 5cm of the base, every socket node present, every animation
+tag resolvable, no failed textures, and triangle/material/texture counts against the class budget in
+`budgets.ts`. Wrong scale, wrong axis, wrong origin, missing nodes, missing clips and missing textures are
+errors. Budget overruns are warnings, because they cost performance rather than correctness.
+
+**Overrides.** `AssetManifestOverride` can only reach `source`, `fallbackGenerator`, `materials` and
+`portrait`. Collision, sockets, nominal height, animation tags and asset class are structurally
+unreachable, which is how "changing a manifest cannot change gameplay" is enforced rather than merely
+intended.
+
+## Asset gallery
+
+`AssetGallery` (`src/debug/gallery.ts`) loads every registered manifest side by side, frames each from its
+measured size, and reports budget status. Every figure on the panel is measured from the built geometry, so
+it can disagree with the manifest and say so.
+
+The damage slider is a presentation preview: parts tint toward scorch and, past 65 percent, detach outward
+in order of distance from the silhouette's centre. Ranking geometrically keeps it generic, since the
+gallery has no idea what a "torso" or a "tail" is called. This is not the component damage model, which
+does not exist yet.
+
+The gallery owns its fill light, deck, damage materials and every resolved asset, and releases all of them
+in `dispose()`. It borrows the boot scene rather than creating its own, so the debug overlay's scene
+instrumentation stays valid across the transition.
 
 ## Deterministic scenario runner
 
