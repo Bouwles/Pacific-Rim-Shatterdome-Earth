@@ -41,6 +41,28 @@ docs/
 **Decision:** A later prompt asked to read `PROJECT_CONTRACT.md`, `ARCHITECTURE.md`, `CONTENT_SCHEMA.md`, `PERFORMANCE_BUDGETS.md` and described work as "MILESTONE 00." None of those four files existed. Rather than creating a second, competing contract file, `GAME_SPEC.md` (created in an earlier accepted milestone, already binding) is treated as fulfilling the `PROJECT_CONTRACT.md` role. "Milestone 00" was executed as ROADMAP.md's existing Phase 1 ("Core architecture skeleton"), whose scope already matched almost exactly — ROADMAP.md now labels that entry "Phase 1 / Milestone 00" rather than renumbering the whole roadmap. `docs/ARCHITECTURE.md`, `docs/CONTENT_SCHEMA.md`, and `docs/PERFORMANCE_BUDGETS.md` were created for real, since this milestone gives each of them genuine content.
 **Reason:** Avoids two binding-sounding contract documents that could silently drift apart, and avoids discarding the already-accepted Phase 0–9 roadmap structure. Preserves the newest explicit instruction (the four named docs, the milestone framing) while not contradicting the earlier one (root-level GAME_SPEC.md as the single binding contract, phase-numbered roadmap).
 
+## 2026-08-20 — Git repository, publishing cadence, and authorship rules
+
+**Decision (repository).** This directory is now its own git repository with `origin` set to
+`https://github.com/Bouwles/Pacific-Rim-Shatterdome-Earth`, default branch `main`. It was previously an
+untracked folder sitting inside an unrelated repository rooted at `C:\Users\user`; that outer repository is
+left alone and now simply sees this folder as a nested repo.
+
+**Decision (cadence).** Push to `origin/main` at the end of every completed milestone prompt, after the full
+check gate passes. A milestone is not finished until it is pushed.
+
+**Decision (authorship).** Commits are authored and committed solely by the repository owner. Never add a
+`Co-Authored-By` trailer, an AI attribution line, a "generated with" footer, or any other tool credit to a
+commit message, and never add a contributor entry for an assistant anywhere in the repository. This is a
+standing user instruction, not a per-task preference.
+
+**Decision (prose style).** README.md and CHANGELOG.md are the human-facing surfaces of the project. They
+use plain prose: no em dashes, no en dashes used as punctuation, no emoji, and no marketing voice. Keep
+them minimal. The README explains what the finished game is meant to offer while stating plainly which
+parts actually run today, so it never implies working systems that do not exist. Commit messages follow the
+same style. Internal engineering documents under `docs/` and the other root memory files are not bound by
+this and may keep their existing punctuation.
+
 ## 2026-08-20 — Milestone 01: kernel determinism rules, and moving the diagnostics panel into `src/debug/`
 
 **Decision (determinism).** Authoritative code in `src/simulation/**` and `src/entities/**` may not call
