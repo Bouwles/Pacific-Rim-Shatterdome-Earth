@@ -102,6 +102,43 @@ convention alone.
 `AssetManifestOverride` exposes only `source`, `fallbackGenerator`, `materials` and `portrait`. Gameplay
 fields are structurally unreachable from an override.
 
+## Save envelope (Milestone 03)
+
+Defined in `src/saves/schema.ts`. Versioned separately from the simulation
+snapshot; see [SAVE_MIGRATIONS.md](SAVE_MIGRATIONS.md).
+
+`RootSave` at `schemaVersion: 1`:
+
+| Field           | Type           | Constraint                               |
+| --------------- | -------------- | ---------------------------------------- |
+| `schemaVersion` | `number`       | must equal `ROOT_SAVE_VERSION`           |
+| `savedAt`       | `number`       | epoch ms; 0 when unknown after migration |
+| `metadata`      | `SaveMetadata` | see below                                |
+| `sim`           | `SimSnapshot`  | authoritative state only                 |
+
+`SaveMetadata`:
+
+| Field          | Type             | Constraint                      |
+| -------------- | ---------------- | ------------------------------- |
+| `name`         | `string`         | non-empty                       |
+| `worldSeed`    | `number`         | finite                          |
+| `playTimeMs`   | `number`         | finite, not negative            |
+| `lastPlayedAt` | `number`         | finite epoch ms; 0 when unknown |
+| `simTick`      | `number`         | finite                          |
+| `appVersion`   | `string`         | build that wrote it             |
+| `thumbnail`    | `string \| null` | small JPEG data URL, or null    |
+
+`StoredSave` is what the repository persists: `{ slotId, document, checksum }`,
+where `checksum` is `hashState(document)`.
+
+### Slot naming
+
+| Pattern               | Meaning                                |
+| --------------------- | -------------------------------------- |
+| `slot.<id>`           | Manual save                            |
+| `autosave.<n>`        | Autosave ring position                 |
+| `backup.<slotId>.<n>` | Backup ring for that slot, 0 is newest |
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

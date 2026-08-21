@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "seed": 20260819,
+  "tick": 240,
+  "entities": {
+    "schemaVersion": 1,
+    "nextId": 4,
+    "entities": [
+      {
+        "id": 1,
+        "components": {
+          "transform": { "x": 12.5, "y": 0, "z": -4.25 },
+          "velocity": { "x": 0.5, "y": 0, "z": -0.25 }
+        }
+      },
+      {
+        "id": 2,
+        "components": {
+          "transform": { "x": -8, "y": 0, "z": 16 },
+          "velocity": { "x": -0.125, "y": 0, "z": 0.75 }
+        }
+      },
+      {
+        "id": 3,
+        "components": {
+          "transform": { "x": 0, "y": 0, "z": 0 },
+          "velocity": { "x": 0, "y": 0, "z": 0 }
+        }
+      }
+    ]
+  }
+}

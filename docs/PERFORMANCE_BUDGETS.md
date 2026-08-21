@@ -43,6 +43,21 @@ All twelve shipped placeholders sit far below their ceilings, between 12 and 664
 they are box and cylinder primitives. These numbers say nothing about production cost; they only confirm
 the measurement and reporting path works.
 
+## Save cost (Milestone 03)
+
+Saves are written to IndexedDB, off the main render path. Observed in the browser
+with an empty world: four stored records, including backups and thumbnails, came
+to roughly 12 KB against a 10 GB quota.
+
+A save carries authoritative state only, so its size grows with entity count, not
+with scene complexity. Thumbnails are 192px wide JPEGs at quality 0.5, roughly
+1 KB each, and are rendered through a render target rather than copied from the
+canvas.
+
+The storage panel reports live usage and quota, and warns when usage passes 90
+percent of quota, when the browser has not granted persistent storage, or when
+saves have fallen back to memory.
+
 ## Frame pacing guarantees (Milestone 01)
 
 Simulation cost per frame is bounded by construction, independent of how long the tab was suspended:

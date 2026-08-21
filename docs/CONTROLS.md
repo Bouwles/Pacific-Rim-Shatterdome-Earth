@@ -32,6 +32,7 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 | Input             | Action                                                                           |
 | ----------------- | -------------------------------------------------------------------------------- |
 | **New Game**      | MainMenu → Loading → Shatterdome placeholder                                     |
+| **Saves**         | MainMenu → Saves                                                                 |
 | **Asset Gallery** | MainMenu → Asset Gallery                                                         |
 | **Back to Menu**  | Return to MainMenu from the Shatterdome placeholder, gallery, or an error screen |
 
@@ -44,6 +45,21 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 | **Damage preview**  | 0 to 100 percent presentation damage: parts tint, then detach outward                   |
 | **Manifest** select | Default, alternate palette, or an uninstalled production model to exercise the fallback |
 | Left-drag / wheel   | Orbit and zoom, same as the boot scene                                                  |
+
+## Saves panel
+
+| Input             | Action                                                                   |
+| ----------------- | ------------------------------------------------------------------------ |
+| Name field + Save | Write the current simulation to a new slot                               |
+| **Load**          | Restore a slot, recovering from its newest valid backup if it is damaged |
+| **Overwrite**     | Write over a slot, keeping the previous contents as a backup             |
+| **Rename**        | Change a slot's name, leaving its simulation data untouched              |
+| **Export**        | Download the slot as a JSON file                                         |
+| **Delete**        | Remove the slot and its backups                                          |
+| Import            | Pick a JSON file; it is validated and migrated before it becomes a slot  |
+
+A damaged slot stays listed with an amber border and an explanation, so its
+backup can still be loaded.
 
 ## Not yet bound
 

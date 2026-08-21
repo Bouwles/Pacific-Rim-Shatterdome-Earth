@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-21, Milestone 03: local save foundation, slots, autosaves and migrations
+
+Persistence built before there is much to persist, so every later system inherits a settled serialization contract instead of inventing one.
+
+- Saves go to IndexedDB, never localStorage, behind a `SaveRepository` interface. There is an IndexedDB implementation and an in-memory one, used by tests and as the fallback when the database cannot be opened.
+- Named slots with metadata: name, world seed, play time, last played, simulation tick, app version and a thumbnail. Manual save, rename, overwrite and delete, plus a rotating three slot autosave ring.
+- Every write rolls the previous contents into that slot's backup ring first, which doubles as the pre-migration backup: an old file is preserved untouched before anything upgrades it.
+- Loading validates the record, and on any failure walks the backups newest first. Failure covers unreadable bytes, a migration that throws, a document that fails validation, and a checksum that no longer matches.
+- Versioned save envelope with pure migration steps. Version 0 is a bare kernel snapshot, which is genuinely what the simulation has serialized since Milestone 01, so the migration path is exercised by a real artifact rather than an invented one. A fixture of it is loaded in tests and checked field by field for data loss.
+- Export writes a slot to a JSON file. Import parses, migrates and validates before anything touches a slot, so a bad file cannot overwrite good data.
+- Storage health panel reporting backend, record count, usage and quota, with plain warnings for near full storage, storage the browser may evict, and the memory only fallback.
+- Saves contain authoritative simulation state and metadata, nothing else. Validation pushes the document through the state hash, which rejects functions, undefined values and cycles, so an engine object cannot reach a save file.
+
+Two defects were found by manual verification and fixed rather than written around.
+
+A damaged slot was being skipped in the slot list, which meant recovery was unreachable from the UI in exactly the case recovery exists for: with no row there is no Load button, so a perfectly good backup was stranded. Damaged slots are now listed, flagged, and described from the backup that would actually load.
+
+Thumbnails came out solid black under WebGPU, whose swap chain is not a readable 2D source once a frame has ended. Capturing inside the render loop was tried first and measured still blank, so thumbnails now render through a render target, which works on both backends. Verified by decoding the stored image and sampling pixels.
+
+Cycle detection was also added to the state hash, which the save validator relies on. A circular document previously failed only by running out of stack, which is slow and says nothing useful.
+
+Tests went from 120 to 193 unit and integration tests, and from 19 to 32 browser tests. Everything from the previous milestones still passes unchanged.
+
 ## 2026-08-20, Milestone 02: asset manifest and procedural placeholder factory
 
 Built the asset pipeline. The game ships with no model files and is fully renderable anyway, and installing a real model later is a data change with no code change.

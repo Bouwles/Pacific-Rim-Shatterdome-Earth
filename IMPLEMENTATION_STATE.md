@@ -25,7 +25,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - model-first resolution with a procedural fallback and exactly one actionable warning per asset;
   - overrides that structurally cannot reach gameplay fields.
 - Asset gallery (main menu, then Asset Gallery) loading all twelve placeholders side by side with measured dimensions, triangle and material counts against budget, socket lists, validation status, turntable, damage preview and manifest swapping.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (120 unit+integration), `smoke` (19 Playwright), `build` all pass.
+- **Offline persistence** on IndexedDB behind a `SaveRepository` interface:
+  - named slots with metadata (name, world seed, play time, last played, sim tick, app version, thumbnail);
+  - manual save, rename, overwrite, delete, and a rotating three-slot autosave ring;
+  - a backup ring per slot that doubles as the pre-migration backup;
+  - corruption recovery that walks backups newest first, covering unreadable bytes, failed migrations, invalid documents and checksum mismatches;
+  - export to a downloadable JSON file, and import that validates and migrates before touching a slot;
+  - a versioned envelope with pure migration steps and a version 0 fixture proving an old file loads without data loss;
+  - a storage health panel reporting backend, record count, usage and quota, warning about eviction, near-full storage, or a memory-only fallback;
+  - an in-memory fallback so the game still runs when IndexedDB cannot be opened, stating plainly that saves will not survive the tab.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (193 unit+integration), `smoke` (32 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -34,6 +43,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Animation tags, audio slots and portrait slots are declared, validated and carried through the pipeline, but nothing plays animation, audio or portraits. There is no animation system and no audio system.
 - The gallery's damage slider is a presentation preview, not the component damage model. It tints and detaches parts by distance from centre; it does not track armour, subsystems or persistence.
 - Collision proxies are declared in manifests but unused, since no physics backend is wired.
+- Saves persist the simulation kernel only, because that is all the authoritative state that exists. There is no economy, roster, research or Shatterdome state to save yet; those extend `RootSave` as they arrive.
+- Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
+- Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - `Deployment`, `Combat`, `Results` app states are valid graph nodes with no screens; nothing transitions into them yet.
 - The kernel runs with **zero entities in the main app** — entity count honestly reads 0. Spawn commands exist and are exercised by tests and the scenario runner, but no gameplay system issues them yet, and nothing in the 3D scene is bound to entity transforms. That binding arrives with the first real gameplay entity.
 - Motion integration is the only system. It is real and used forever, but it is one system, not a physics step.
@@ -59,6 +71,8 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Content registry: [src/data/registry.ts](src/data/registry.ts), [src/data/jaegers.ts](src/data/jaegers.ts)
 - Asset pipeline: [src/assets/manifest.ts](src/assets/manifest.ts), [inspection.ts](src/assets/inspection.ts), [budgets.ts](src/assets/budgets.ts), [generators.ts](src/assets/generators.ts), [resolver.ts](src/assets/resolver.ts), [src/data/assets.ts](src/data/assets.ts)
 - Asset gallery: [src/debug/gallery.ts](src/debug/gallery.ts), [src/ui/galleryScreen.ts](src/ui/galleryScreen.ts), [src/app/galleryOverrides.ts](src/app/galleryOverrides.ts)
+- Saves: [src/saves/schema.ts](src/saves/schema.ts), [migrations.ts](src/saves/migrations.ts), [repository.ts](src/saves/repository.ts), [indexedDbRepository.ts](src/saves/indexedDbRepository.ts), [saveService.ts](src/saves/saveService.ts), [storageHealth.ts](src/saves/storageHealth.ts)
+- Save UI and browser glue: [src/ui/saveScreen.ts](src/ui/saveScreen.ts), [src/app/saveController.ts](src/app/saveController.ts)
 - Model drop point: [public/assets/models/README.md](public/assets/models/README.md)
 - DOM screens: [src/ui/screens.ts](src/ui/screens.ts)
 - Tests: [tests/unit/](tests/unit/), [tests/integration/](tests/integration/), [tests/e2e/](tests/e2e/)
@@ -73,7 +87,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Entity iteration relies on Map insertion order being deterministic given deterministic commands. True today; if a future system iterates in a data-dependent order, canonical id sorting will be needed in `each()`, not just in `serialize()`.
 - The GLB load path has never run against a real GLB file, because no model exists to test with. Its validation logic is unit tested against synthetic inspection data, and its failure path is exercised constantly, but the success path is unverified. First real model installed will be the real test of it.
 - The gallery borrows the boot scene rather than owning one. Fine for two environments; a real scene lifecycle will be needed once the Shatterdome interior and a combat map both exist.
+- Quota exhaustion and a genuinely blocked IndexedDB (real private window) are implemented and unit tested through the repository interface, but neither has been reproduced in a live browser.
+- Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
 
 ## Exact next task
 
-Start Phase 2 (ROADMAP.md), beginning with `src/saves/`: IndexedDB persistence built on the kernel's existing `serialize()`/`restore()`/`hash()` — multiple slots, autosave, rotating backups, export/import, corruption recovery, and migration scaffolding against `SIM_SCHEMA_VERSION`. Then the on-foot player controller and the first real Shatterdome interior, which is the first consumer of `shatterdome.jaeger-bay` and the point where an entity gets bound to an asset manifest.
+Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub and the boot scene are genuinely different environments. Persistence already exists, so hub state can be saved as soon as there is any; extend `RootSave` rather than adding a parallel store.

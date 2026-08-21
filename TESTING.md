@@ -30,9 +30,12 @@
   - `scenarioRunner` — repeated runs of `kernel-smoke` hash identically; entity count reflects the mid-run despawn; hash changes on seed change and on command change; scenario validation rejects out-of-range scheduling and non-positive tick counts.
 - **Unit, assets** (`tests/unit/assetManifest.test.ts`, `assetInspection.test.ts`): manifest validation (fallback generator required, unknown and duplicate sockets, malformed colours, out of range material values, duplicate animation tags, provenance required, registry rejects rather than stores), override containment, shipped manifests cover every class and ship no third party content; inspection validation (wrong unit, tolerated drift, wrong forward axis, offset origin, missing socket node, missing clip, failed textures, budget overruns warn rather than error, class-specific budgets).
 - **Integration, assets** (`tests/integration/assetResolver.test.ts`): fallback on a missing model with one actionable warning, one warning per asset however many instances, loud failure on an unknown generator or invalid params, every shipped placeholder resolving within 10 percent of its declared height with no errors and inside its triangle budget, every declared socket present, the cannon's muzzle, reproducibility from seed, one generator producing differently proportioned units, scene node and material counts returning to baseline after disposal and after ten resolve/dispose cycles, and the simulation hash staying identical under every manifest override including the failing-model path.
+- **Unit, saves** (`tests/unit/saveSchema.test.ts`, `saveMigrations.test.ts`): envelope validation (wrong version, malformed metadata, unsupported sim version, malformed entity table, non-serializable values, cycles), checksum stability, slot naming, summary projection; version detection, the version 0 fixture migrating with no data loss and metadata derived rather than invented, purity and non-mutation, refusal of newer-than-supported files and of missing steps, registry rejection of malformed steps.
+- **Integration, saves** (`tests/integration/saveService.test.ts`, `indexedDbRepository.test.ts`): the full slot lifecycle, kernel round-trip with identical hash and deterministic continuation, seed mismatch refusal, authoritative-only contents, autosave ring rotation, corruption recovery through several damaged layers, damaged slots staying listed so recovery is reachable, export and import including legacy migration and rejection paths leaving existing slots intact, backup rotation before overwrite and before import, and storage health reporting. The IndexedDB suite runs the same flows against a real IndexedDB implementation, including surviving a close and reopen.
 - **Browser smoke** (`tests/e2e/`, Playwright/Chromium):
   - `boot.spec.ts` (Milestone 00, still passing unchanged): truthful backend label, zero console errors, New Game flow, reload does not duplicate canvas/render loop, resize keeps one canvas.
   - `debugOverlay.spec.ts`: all overlay fields report real values and physics reads "n/a (no backend)"; ticks advance on their own; pause halts ticks, Step advances exactly one and does not resume, Resume continues; slow motion advances more slowly than 1×; F3 toggles visibility; `?seed=` drives the seed.
+  - `saves.spec.ts`: the panel opens on real IndexedDB and reports where saves go; separate slots persist; a save survives a full page reload; slot detail records seed, tick and play time; rename, overwrite, load, delete; export produces a downloadable file; that file imports back as a separate slot; an invalid import is refused with a readable message and leaves existing slots intact; a legacy bare snapshot imports by migrating; leaving the panel keeps the simulation running.
   - `assetGallery.spec.ts`: all twelve assets load with a budget summary and no console errors; measurements come from geometry; selecting another asset reframes and updates every figure; sockets including the cannon's muzzle are exposed; the damage preview is reversible; rotation can be paused; swapping to an uninstalled model falls back visibly and warns once; an alternate palette leaves measurements identical; leaving the gallery returns to the menu with the simulation still running.
 
 Every deterministic system added from here on (attack director seeding, damage math, prestige curves, save migrations) needs its own unit tests per GAME_SPEC's quality contract.
@@ -91,6 +94,21 @@ Every deterministic system added from here on (attack director seeding, damage m
 - Two presentation defects were found by looking at the screen rather than by any test: the placeholders
   rendered nearly black under the boot scene's single directional light, and most of the row floated past
   the 60 m boot ground. The gallery now owns a fill light and a deck sized to the row.
+
+### Phase 1.9 / Milestone 03 (2026-08-21)
+
+- All automated checks green: `typecheck`, `lint`, `format:check`, `test` (193/193), `smoke` (32/32), `build`.
+- Manual browser verification via Chrome DevTools MCP on the WebGPU path:
+  - Save panel opens against real IndexedDB and reports live figures: `indexeddb · 0 stored records · 1.0 KB of 10240.0 MB`.
+  - The storage warning shown is the honest one for this browser: Chrome has not granted persistent storage, so the panel says saves may be evicted and to export anything worth keeping.
+  - Created a save, let the simulation advance, then overwrote it, confirming the backup held the older tick (1732) while the live record held the newer one (1878).
+  - **Corruption recovery, end to end against real storage:** opened the live database from the console and replaced the primary record with a structurally broken one, leaving the backup intact. The slot stayed listed, flagged damaged, described from the backup. Loading it reported `Loaded "Recovery test" (recovered from backup.slot.mt2i5e2x.0)`.
+  - Thumbnails verified by decoding the stored image and sampling pixels: average brightness 155 across 42 distinct colours, against 0 brightness and 1 colour before the render-target fix.
+  - Zero console errors throughout.
+- Two defects were found by manual verification and fixed rather than documented around:
+  - Damaged slots were hidden from the listing, which made recovery unreachable from the UI. They are now listed, flagged, and described from the backup that would load.
+  - Thumbnails were solid black under WebGPU because the swap chain is not a readable 2D source after a frame ends. Capturing inside the render loop was tried first and measured still blank; the fix is a render target.
+- **Not verified by hand:** a genuine quota-exceeded write, and IndexedDB being blocked in a real private window. Both paths are implemented and unit tested through the repository interface, but neither was reproduced in a live browser.
 
 ## Performance budgets
 

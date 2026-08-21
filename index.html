@@ -138,6 +138,126 @@
         border-color: rgba(255, 120, 120, 0.5);
       }
 
+      /* The save panel is a working list, not a dialog. */
+      #uiRoot .screen-saves {
+        max-width: none;
+        width: min(760px, 90vw);
+        max-height: 82vh;
+        overflow-y: auto;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      #uiRoot .save-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .save-header h2 {
+        margin: 0;
+      }
+      #uiRoot .save-storage,
+      #uiRoot .save-warning,
+      #uiRoot .save-notice,
+      #uiRoot .save-empty {
+        margin: 0;
+        font-size: 12px;
+      }
+      #uiRoot .save-warning {
+        color: #ffcf87;
+      }
+      #uiRoot .save-notice[data-kind="error"] {
+        color: #ff9a9a;
+      }
+      #uiRoot .save-notice[data-kind="info"] {
+        color: #9fe6b0;
+      }
+      #uiRoot .save-new {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-new input[type="text"] {
+        flex: 1;
+        min-width: 160px;
+        font: inherit;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .save-import {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #a9c3d6;
+      }
+      #uiRoot .save-import input[type="file"] {
+        max-width: 150px;
+        font-size: 11px;
+        color: #a9c3d6;
+      }
+      #uiRoot .save-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .save-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px solid rgba(127, 214, 255, 0.22);
+        border-radius: 4px;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-thumb {
+        width: 64px;
+        height: 36px;
+        object-fit: cover;
+        border-radius: 3px;
+        order: -1;
+      }
+      #uiRoot .save-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 180px;
+      }
+      #uiRoot .save-name {
+        font-weight: 600;
+      }
+      #uiRoot .save-detail {
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .save-row[data-damaged="true"] {
+        border-color: rgba(255, 190, 120, 0.5);
+      }
+      #uiRoot .save-damaged {
+        font-size: 11px;
+        color: #ffcf87;
+      }
+      #uiRoot .save-actions {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-actions button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+
       /* The gallery is a working panel, not a dialog: it needs room and must not
          cover the asset it is describing. */
       #uiRoot .screen-gallery {

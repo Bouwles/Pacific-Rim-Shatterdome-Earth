@@ -1,4 +1,4 @@
-import { Vector3 } from "@babylonjs/core";
+import { Tools, Vector3, type Scene } from "@babylonjs/core";
 import { createEngineAdapter } from "../engine/engineAdapter";
 import { buildBootScene, type BootScene } from "../engine/scene";
 import { DebugOverlay } from "../debug/overlay";
@@ -19,9 +19,40 @@ import { AssetResolver } from "../assets/resolver";
 import { createGeneratorRegistry } from "../assets/generators";
 import { createDefaultAssetRegistry } from "../data/assets";
 import { GALLERY_OVERRIDES, buildOverrideMap } from "./galleryOverrides";
+import { renderSaveScreen, type SaveScreenHandle } from "../ui/saveScreen";
+import { SaveController, describeSaveError } from "./saveController";
+import { SaveService } from "../saves/saveService";
+import { IndexedDbSaveRepository } from "../saves/indexedDbRepository";
+import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
+import { probeStorageHealth } from "../saves/storageHealth";
 
 export interface AppHandle {
   dispose(): void;
+}
+
+const THUMBNAIL_WIDTH = 192;
+
+/**
+ * Renders a thumbnail through a render target rather than reading the canvas.
+ * A WebGPU swap chain is not a drawable 2D source once its frame has ended, so
+ * copying the canvas returns a blank image; rendering to a texture works on both
+ * backends.
+ */
+async function captureThumbnail(scene: Scene): Promise<string | null> {
+  const camera = scene.activeCamera;
+  if (!camera) return null;
+  try {
+    return await Tools.CreateScreenshotUsingRenderTargetAsync(
+      scene.getEngine(),
+      camera,
+      { width: THUMBNAIL_WIDTH, height: Math.round(THUMBNAIL_WIDTH * 0.5625) },
+      "image/jpeg",
+      1,
+      false,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -166,8 +197,110 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refresh(0);
   };
 
+  // IndexedDB is the durable store. When it cannot be opened, which is common in
+  // private windows, the game keeps running against memory and the storage panel
+  // says plainly that saves will not survive the tab.
+  let repository: SaveRepository;
+  try {
+    repository = await IndexedDbSaveRepository.open();
+  } catch {
+    repository = new MemorySaveRepository();
+  }
+  const saveService = new SaveService({ repository });
+  const saveController = new SaveController(saveService, () => captureThumbnail(bootScene.scene));
+  let saveScreen: SaveScreenHandle | undefined;
+
+  const closeSaves = (): void => {
+    saveScreen?.dispose();
+    saveScreen = undefined;
+  };
+
+  const refreshSaves = async (): Promise<void> => {
+    if (!saveScreen) return;
+    const [slots, health] = await Promise.all([saveService.listSlots(), probeStorageHealth(repository)]);
+    saveScreen.update(slots, health);
+  };
+
+  /** Runs a save action, reporting the outcome either way. */
+  const runSaveAction = (action: () => Promise<string>): void => {
+    void action()
+      .then(async (message) => {
+        await refreshSaves();
+        saveScreen?.notify(message, "info");
+      })
+      .catch(async (error) => {
+        await refreshSaves();
+        saveScreen?.notify(describeSaveError(error), "error");
+      });
+  };
+
+  const openSaves = async (): Promise<void> => {
+    saveScreen = renderSaveScreen(uiRoot, {
+      onSaveNew: (name) =>
+        runSaveAction(async () => {
+          const trimmed = name.trim() || `Save ${new Date().toLocaleTimeString()}`;
+          const slotId = `slot.${Date.now().toString(36)}`;
+          if (!kernel) throw new Error("No simulation is running.");
+          await saveController.save(slotId, kernel, trimmed);
+          return `Saved "${trimmed}".`;
+        }),
+      onOverwrite: (slotId) =>
+        runSaveAction(async () => {
+          if (!kernel) throw new Error("No simulation is running.");
+          const existing = await saveService.listSlots();
+          const name = existing.find((slot) => slot.slotId === slotId)?.metadata.name ?? "Save";
+          await saveController.save(slotId, kernel, name);
+          return `Overwrote "${name}".`;
+        }),
+      onLoad: (slotId) =>
+        runSaveAction(async () => {
+          const result = await saveService.load(slotId);
+          if (!kernel) throw new Error("No simulation is running.");
+          if (result.document.sim.seed !== kernel.seed) {
+            // Restoring needs a kernel built for the save's seed, which means a
+            // full reload. Say so rather than silently loading the wrong world.
+            return (
+              `"${result.document.metadata.name}" uses world seed ${result.document.sim.seed}, ` +
+              `but this session is running seed ${kernel.seed}. Reload with ?seed=${result.document.sim.seed} to load it.`
+            );
+          }
+          saveService.applyToKernel(result.document, kernel);
+          saveController.resetPlayTime(result.document.metadata.playTimeMs);
+          const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
+          const migrated =
+            result.migratedFrom !== null ? ` (migrated from version ${result.migratedFrom})` : "";
+          return `Loaded "${result.document.metadata.name}"${recovered}${migrated}.`;
+        }),
+      onRename: (slotId, name) =>
+        runSaveAction(async () => {
+          await saveService.rename(slotId, name);
+          return `Renamed to "${name.trim()}".`;
+        }),
+      onDelete: (slotId) =>
+        runSaveAction(async () => {
+          await saveService.delete(slotId);
+          return "Deleted save.";
+        }),
+      onExport: (slotId) =>
+        runSaveAction(async () => {
+          await saveController.download(slotId);
+          return "Exported save to a file.";
+        }),
+      onImport: (file) =>
+        runSaveAction(async () => {
+          const slotId = `slot.imported.${Date.now().toString(36)}`;
+          await saveController.importFile(slotId, file);
+          return `Imported "${file.name}".`;
+        }),
+      onExit: () => stateMachine.transition(AppState.MainMenu),
+    });
+
+    await refreshSaves();
+  };
+
   const renderForState = (state: AppState): void => {
     if (state !== AppState.AssetGallery && gallery) closeGallery();
+    if (state !== AppState.Saves && saveScreen) closeSaves();
 
     switch (state) {
       case AppState.MainMenu:
@@ -175,7 +308,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           uiRoot,
           () => stateMachine.transition(AppState.Loading),
           () => stateMachine.transition(AppState.AssetGallery),
+          () => stateMachine.transition(AppState.Saves),
         );
+        break;
+      case AppState.Saves:
+        void openSaves().catch((error) => {
+          renderErrorScreen(uiRoot, `Saves unavailable: ${describeSaveError(error)}`, goToMainMenu);
+        });
         break;
       case AppState.AssetGallery:
         renderLoadingScreen(uiRoot, "Loading assets…");
@@ -209,6 +348,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       unsubscribers.forEach((u) => u());
       gallery?.dispose();
       galleryScreen?.dispose();
+      saveScreen?.dispose();
+      repository.close();
       overlay?.dispose();
       kernel?.dispose();
       adapterDispose?.();

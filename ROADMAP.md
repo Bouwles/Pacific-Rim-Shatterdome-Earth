@@ -78,15 +78,34 @@ model-first resolution with a generator fallback, and an asset gallery for inspe
 - `npm run typecheck`, `lint`, `format:check`, `test` (120), `smoke` (19), `build` all pass.
   **Next action:** none — complete. Proceed to Phase 2.
 
+## Phase 1.9 / Milestone 03 — Local save foundation, slots, autosaves, and migrations
+
+**Depends on:** Milestone 01 (kernel snapshots), Milestone 02 (asset pipeline unaffected).
+**Status:** done.
+**Scope:** IndexedDB persistence behind a `SaveRepository` interface, versioned save envelope, pure
+migration steps with an old-version fixture, manual saves, a rotating autosave ring, backup rotation that
+doubles as the pre-migration backup, corruption recovery, export and import with validation, a storage
+health panel, and user-facing errors. Created `src/saves/`, `src/ui/saveScreen.ts`,
+`src/app/saveController.ts`, `tests/fixtures/saves/`.
+**Acceptance tests:**
+
+- Create, rename, overwrite, export, delete and import separate slots, all verified in tests and in the
+  browser against real IndexedDB.
+- A deliberately corrupted primary recovers from the newest valid backup, verified in unit tests, in
+  integration tests over real IndexedDB, and by hand in the browser by wrecking a live record.
+- Migration tests load the version 0 fixture into the current schema with every simulation field intact.
+- `npm run typecheck`, `lint`, `format:check`, `test` (193), `smoke` (32), `build` all pass.
+  **Next action:** none — complete. Proceed to Phase 2.
+
 ## Phase 2 — Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.
 **Status:** not-started.
 **Scope:** on-foot player controller, one explorable Shatterdome interior area (command + Jaeger bay placeholder rooms), DOM-based management UI shell, save-game create/load against IndexedDB.
 **Acceptance tests:** player can walk the hub, open a management panel, save and reload state, all offline.
-**Next action:** build `src/saves/` on top of the kernel's existing `serialize()`/`restore()`/`hash()` —
-IndexedDB persistence, slots, autosave, rotating backups, and migration scaffolding — then the on-foot
-controller. The snapshot format and schema-version guards already exist; saves add durability around them.
+**Next action:** the on-foot player controller and the first real Shatterdome interior, which is the first
+consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to a manifest.
+Persistence already exists (Milestone 03), so hub state can be saved as soon as there is any.
 
 ## Phase 3 — Single Jaeger + single kaiju combat vertical slice
 

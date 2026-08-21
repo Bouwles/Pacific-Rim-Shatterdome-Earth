@@ -12,6 +12,7 @@ export function renderMainMenu(
   container: HTMLElement,
   onNewGame: () => void,
   onOpenGallery?: () => void,
+  onOpenSaves?: () => void,
 ): void {
   clear(container);
   const panel = document.createElement("div");
@@ -29,6 +30,15 @@ export function renderMainMenu(
   newGameButton.addEventListener("click", onNewGame);
 
   panel.append(title, subtitle, newGameButton);
+
+  if (onOpenSaves) {
+    const savesButton = document.createElement("button");
+    savesButton.type = "button";
+    savesButton.textContent = "Saves";
+    savesButton.className = "secondary-button";
+    savesButton.addEventListener("click", onOpenSaves);
+    panel.appendChild(savesButton);
+  }
 
   if (onOpenGallery) {
     const galleryButton = document.createElement("button");

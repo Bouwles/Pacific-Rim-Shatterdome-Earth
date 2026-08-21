@@ -8,18 +8,21 @@ export enum AppState {
   Results = "Results",
   /** Developer asset browser. Reachable from the menu; never part of a campaign run. */
   AssetGallery = "AssetGallery",
+  /** Save and load management. Reachable from the menu and, later, from in-game. */
+  Saves = "Saves",
   Error = "Error",
 }
 
 const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
   [AppState.Boot]: [AppState.MainMenu, AppState.Error],
-  [AppState.MainMenu]: [AppState.Loading, AppState.AssetGallery, AppState.Error],
+  [AppState.MainMenu]: [AppState.Loading, AppState.AssetGallery, AppState.Saves, AppState.Error],
   [AppState.Loading]: [AppState.Shatterdome, AppState.Deployment, AppState.Error],
   [AppState.Shatterdome]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
   [AppState.Deployment]: [AppState.Combat, AppState.Shatterdome, AppState.Error],
   [AppState.Combat]: [AppState.Results, AppState.Error],
   [AppState.Results]: [AppState.Shatterdome, AppState.MainMenu, AppState.Error],
   [AppState.AssetGallery]: [AppState.MainMenu, AppState.Error],
+  [AppState.Saves]: [AppState.MainMenu, AppState.Loading, AppState.Error],
   [AppState.Error]: [AppState.MainMenu],
 };
 

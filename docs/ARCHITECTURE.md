@@ -34,6 +34,13 @@ src/
     budgets.ts          per-class triangle/material/texture ceilings
     generators.ts       parameterised procedural generators + MaterialPalette
     resolver.ts         manifest -> renderable: model first, generator fallback, one warning, disposal
+  saves/               ← persistence; only indexedDbRepository.ts touches a browser API
+    schema.ts           RootSave envelope, metadata, validation, checksums, slot naming
+    migrations.ts       pure versioned migration steps + the chain runner
+    repository.ts       SaveRepository interface, SaveError, in-memory implementation
+    indexedDbRepository.ts  IndexedDB implementation
+    saveService.ts      save policy: slots, autosave ring, backups, recovery, export/import
+    storageHealth.ts    durability, quota and persistence probing
   data/
     registry.ts         generic ContentRegistry<T> — typed table + validator + duplicate/unknown-id guards
     jaegers.ts           JaegerDefinition type + one placeholder entry proving the registry pattern
@@ -45,6 +52,7 @@ src/
   ui/
     screens.ts           DOM overlay renderers for MainMenu, Loading, Shatterdome placeholder, Error
     galleryScreen.ts     asset gallery panel
+    saveScreen.ts        save/load panel with storage health
 tests/
   unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers,
                         assetManifest, assetInspection — pure logic
@@ -112,8 +120,8 @@ overlay's Step button drives.
 transition graph lives in `appState.ts` as data (`ALLOWED_TRANSITIONS`), not in `if`/`switch` chains
 scattered through the app. `bootstrap.ts` is the single subscriber that maps `(state) -> DOM screen`.
 
-`Boot -> MainMenu -> Loading -> Shatterdome -> MainMenu` and `MainMenu <-> AssetGallery` are reachable
-today. `Deployment`, `Combat`, and `Results` exist as valid graph nodes with legal edges so later
+`Boot -> MainMenu -> Loading -> Shatterdome -> MainMenu`, `MainMenu <-> AssetGallery` and
+`MainMenu <-> Saves` are reachable today. `Deployment`, `Combat`, and `Results` exist as valid graph nodes with legal edges so later
 milestones can wire real screens into them without redesigning the graph, but nothing transitions into them yet — that would be a fake screen
 implying a system that doesn't exist. `Error` is reachable today only from a fatal boot failure (engine
 init threw); the Error screen's recovery action is a page reload, because a failed boot leaves no working
@@ -210,6 +218,35 @@ does not exist yet.
 The gallery owns its fill light, deck, damage materials and every resolved asset, and releases all of them
 in `dispose()`. It borrows the boot scene rather than creating its own, so the debug overlay's scene
 instrumentation stays valid across the transition.
+
+## Persistence
+
+Saves go to IndexedDB, never localStorage: localStorage is synchronous,
+string-only, and capped at a few megabytes, none of which suits a world snapshot.
+
+**Layering.** `SaveService` owns policy and knows nothing about storage or the
+DOM. `SaveRepository` is the storage boundary, with an IndexedDB implementation
+and an in-memory one used by tests and as the fallback when the database cannot
+be opened. `SaveController` (`src/app/`) holds the parts that genuinely need a
+browser: thumbnails, downloads and file reads.
+
+**Fallback.** Private windows expose `indexedDB` and then fail to open it. When
+that happens the game keeps running against the memory repository and the storage
+panel states plainly that saves will not survive the tab, rather than pretending
+they persist or refusing to start.
+
+**What a save contains.** Authoritative simulation state and metadata, nothing
+else. Meshes, materials, physics, asset resolution and UI state are rebuilt on
+load. `validateRootSave` pushes the document through `hashState`, which rejects
+functions, `undefined` and cycles, so an engine object cannot reach a save file.
+
+**Versioning, backups and recovery** are covered in
+[SAVE_MIGRATIONS.md](SAVE_MIGRATIONS.md).
+
+**Thumbnails** are produced with `Tools.CreateScreenshotUsingRenderTargetAsync`
+rather than by copying the canvas. A WebGPU swap chain is not a drawable 2D
+source once its frame has ended, so canvas copies come back blank; rendering
+through a render target works on both backends.
 
 ## Deterministic scenario runner
 

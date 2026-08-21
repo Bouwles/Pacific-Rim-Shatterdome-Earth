@@ -21,6 +21,7 @@ The project is built in numbered milestones. Everything listed here actually run
 - Headless scenario runner that replays a fixed scenario and hashes the result, so any loss of determinism is caught by a test
 - Asset pipeline with typed manifests, eight parameterised procedural generators covering Jaegers, kaiju, buildings, vehicles, ships, props and Shatterdome modules, named attachment sockets, and validation of scale, orientation, origin, skeletons, animation clips, textures and per class budgets
 - Asset gallery reachable from the main menu, where every placeholder can be rotated, measured, damaged and swapped to a different manifest
+- Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
 
 Not built yet: the walkable Shatterdome, Jaeger combat, the world map, kaiju behaviour, the economy, copilots, and everything else in the list below. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
@@ -110,6 +111,7 @@ npm run smoke         Playwright browser tests
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
 src/assets       asset manifests, procedural generators, model validation, resolver
+src/saves        save schema, migrations, IndexedDB storage, backups and recovery
 src/engine       Babylon engine selection and the boot scene
 src/app          bootstrap, application state machine, config
 src/debug        developer overlay, asset gallery, deterministic scenario runner
@@ -117,8 +119,16 @@ src/data         typed content registries and asset manifests
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
-docs             architecture, content schema, controls, performance budgets
+docs             architecture, content schema, controls, save migrations, performance budgets
 ```
+
+### Saves
+
+Saves live in your browser, in IndexedDB, and nothing is uploaded anywhere. Open Saves from the main menu to write a slot, load one, rename, overwrite, delete, or export a slot to a file you can keep or move to another machine. Importing checks and upgrades a file before it becomes a slot, so a broken file can never overwrite a good save.
+
+Each write keeps the previous contents as a backup. If a save is ever damaged, it stays in the list marked as damaged, and loading it falls back to the last good backup rather than failing.
+
+If the browser will not allow storage, which private windows usually will not, the game still runs and the panel says plainly that saves will not survive the tab.
 
 Design and planning documents live at the root: GAME\_SPEC.md is the binding specification, ROADMAP.md is the milestone order, IMPLEMENTATION\_STATE.md is the honest current status, TECH\_DECISIONS.md records why things were done a certain way, CONTENT\_REGISTRY.md tracks content, TESTING.md covers verification, and CHANGELOG.md logs changes.
 

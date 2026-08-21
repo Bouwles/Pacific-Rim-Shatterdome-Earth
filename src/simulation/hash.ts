@@ -43,7 +43,7 @@ class StateHasher {
   }
 }
 
-function encode(hasher: StateHasher, value: unknown, path: string): void {
+function encode(hasher: StateHasher, value: unknown, path: string, ancestors: Set<object>): void {
   if (value === null) {
     hasher.byte(0x6e); // 'n'
     return;
@@ -69,28 +69,39 @@ function encode(hasher: StateHasher, value: unknown, path: string): void {
       );
   }
 
+  // Only ancestors are tracked, not everything seen: two siblings may legitimately
+  // reference the same object, but a reference back into the current path is a
+  // cycle and cannot be serialized.
+  if (ancestors.has(value)) {
+    throw new Error(
+      `hashState: "${path}" refers back into its own ancestry; simulation state must not contain cycles`,
+    );
+  }
+  ancestors.add(value);
+
   if (Array.isArray(value)) {
     hasher.byte(0x61); // 'a'
     hasher.float(value.length);
-    value.forEach((item, index) => encode(hasher, item, `${path}[${index}]`));
-    return;
+    value.forEach((item, index) => encode(hasher, item, `${path}[${index}]`, ancestors));
+  } else {
+    hasher.byte(0x6f); // 'o'
+    // Key order must not depend on insertion order, or an unrelated refactor
+    // would change the digest without changing the state.
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    hasher.float(keys.length);
+    for (const key of keys) {
+      const child = (value as Record<string, unknown>)[key];
+      if (child === undefined) {
+        throw new Error(
+          `hashState: "${path}.${key}" is undefined; simulation state must be fully serializable`,
+        );
+      }
+      hasher.text(key);
+      encode(hasher, child, `${path}.${key}`, ancestors);
+    }
   }
 
-  hasher.byte(0x6f); // 'o'
-  // Key order must not depend on insertion order, or an unrelated refactor
-  // would change the digest without changing the state.
-  const keys = Object.keys(value as Record<string, unknown>).sort();
-  hasher.float(keys.length);
-  for (const key of keys) {
-    const child = (value as Record<string, unknown>)[key];
-    if (child === undefined) {
-      throw new Error(
-        `hashState: "${path}.${key}" is undefined; simulation state must be fully serializable`,
-      );
-    }
-    hasher.text(key);
-    encode(hasher, child, `${path}.${key}`);
-  }
+  ancestors.delete(value);
 }
 
 /**
@@ -99,6 +110,6 @@ function encode(hasher: StateHasher, value: unknown, path: string): void {
  */
 export function hashState(value: unknown): string {
   const hasher = new StateHasher();
-  encode(hasher, value, "$");
+  encode(hasher, value, "$", new Set<object>());
   return hasher.digest();
 }

@@ -63,6 +63,46 @@ parts actually run today, so it never implies working systems that do not exist.
 same style. Internal engineering documents under `docs/` and the other root memory files are not bound by
 this and may keep their existing punctuation.
 
+## 2026-08-21 — Milestone 03: persistence shape
+
+**Decision (version 0 is the bare kernel snapshot).** Rather than inventing a legacy format so the
+migration system would have something to migrate, version 0 is defined as a bare `SimSnapshot` with no
+envelope. That is genuinely what `SimulationKernel.serialize()` has returned since Milestone 01, and is the
+only save-like artifact that existed before this milestone.
+**Reason:** The acceptance criteria require a fixture of an old version. Fabricating a v1 that never
+shipped would make the migration test theatre. A raw snapshot is a real artifact a developer could have on
+disk today, and accepting it is genuinely useful. No released build ever wrote a version 0 _file_, and
+SAVE_MIGRATIONS.md says so explicitly.
+
+**Decision (checksum enforced only pre-migration).** A stored `checksum` is compared against the document
+only when no migration ran.
+**Reason:** A migrated document legitimately differs from the bytes that were hashed at write time.
+Enforcing it after migration would reject every old save as corrupt.
+
+**Decision (damaged slots stay listed).** `listSlots` includes a slot whose live record is unreadable,
+described from the backup that would be loaded and flagged `damaged`.
+**Reason:** The first implementation skipped damaged slots, which was discovered in the browser to make
+recovery unreachable: with no row there is no Load button, so the working backup was stranded. A hidden
+recovery path is the same failure as a fake button, in reverse.
+
+**Decision (thumbnails via render target, not canvas copy).** `Tools.CreateScreenshotUsingRenderTargetAsync`
+rather than `drawImage` from the canvas.
+**Reason:** Verified in the browser that canvas copies return solid black under WebGPU, whose swap chain is
+not a drawable 2D source once the frame has ended. Two attempts at canvas copying were measured as blank
+(brightness 0, one distinct colour) before switching; the render target path measures as a real image.
+
+**Decision (memory fallback rather than refusing to start).** When IndexedDB cannot be opened, the game
+runs against an in-memory repository and the storage panel says saves will not survive the tab.
+**Reason:** Private windows expose `indexedDB` then fail to open it. Refusing to start would be worse than
+playing without persistence, and silently pretending to save would be worse still.
+
+**Decision (cycle detection added to `hashState`).** The Milestone 01 hash now tracks ancestors and rejects
+cycles by name.
+**Reason:** `validateRootSave` uses `hashState` as the guard against non-serializable data reaching a save.
+A circular document previously only failed via stack overflow, which is slow and gives an unhelpful
+message. Only the current path is tracked, not everything seen, so sibling references to the same object
+stay legal.
+
 ## 2026-08-20 — Milestone 02: asset pipeline shape
 
 **Decision (parameterised generators, not per-unit factories).** Eight generators cover all seven asset
