@@ -21,9 +21,11 @@ The project is built in numbered milestones. Everything listed here actually run
 - Headless scenario runner that replays a fixed scenario and hashes the result, so any loss of determinism is caught by a test
 - Asset pipeline with typed manifests, eight parameterised procedural generators covering Jaegers, kaiju, buildings, vehicles, ships, props and Shatterdome modules, named attachment sockets, and validation of scale, orientation, origin, skeletons, animation clips, textures and per class budgets
 - Asset gallery reachable from the main menu, where every placeholder can be rotated, measured, damaged and swapped to a different manifest
+- A scaled cube sphere Earth with real latitude and longitude, 1,536 sectors, and a floating origin that keeps the numbers small however far you travel, so nothing jitters
+- A globe map you can deploy from, showing where you are, which sector you are in, and which regions are being simulated in detail rather than tracked as records
 - Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
 
-Not built yet: the walkable Shatterdome, Jaeger combat, the world map, kaiju behaviour, the economy, copilots, and everything else in the list below. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: the walkable Shatterdome, Jaeger combat, terrain and cities on the globe, kaiju behaviour, the economy, copilots, and everything else in the list below. The world today is coordinates, sectors and region records rather than ground you can stand on. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
 ### Using your own models
 
@@ -111,6 +113,7 @@ npm run smoke         Playwright browser tests
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
 src/assets       asset manifests, procedural generators, model validation, resolver
+src/world        globe coordinates, cube sphere sectors, floating origin, strategic regions
 src/saves        save schema, migrations, IndexedDB storage, backups and recovery
 src/engine       Babylon engine selection and the boot scene
 src/app          bootstrap, application state machine, config
@@ -119,7 +122,7 @@ src/data         typed content registries and asset manifests
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
-docs             architecture, content schema, controls, save migrations, performance budgets
+docs             architecture, content schema, controls, world coordinates, save migrations, performance budgets
 ```
 
 ### Saves

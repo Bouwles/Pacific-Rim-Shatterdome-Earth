@@ -1,11 +1,12 @@
 import { SIM_SCHEMA_VERSION, type SimSnapshot } from "../simulation/kernel";
 import { hashState } from "../simulation/hash";
+import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 1;
+export const ROOT_SAVE_VERSION = 2;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -31,6 +32,8 @@ export interface RootSave {
   readonly metadata: SaveMetadata;
   /** Authoritative simulation state only. Meshes, materials, physics and UI are rebuilt on load. */
   readonly sim: SimSnapshot;
+  /** Where the player is on the globe and the strategic record for every region. */
+  readonly world: WorldSnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -118,6 +121,24 @@ function validateSim(sim: unknown): string[] {
   return errors;
 }
 
+function validateWorldSection(world: unknown): string[] {
+  if (!isRecord(world)) return ["world must be an object"];
+  const errors: string[] = [];
+  if (world["schemaVersion"] !== WORLD_SCHEMA_VERSION) {
+    errors.push(`world.schemaVersion must be ${WORLD_SCHEMA_VERSION}, got ${String(world["schemaVersion"])}`);
+  }
+  if (!isRecord(world["playerPosition"])) errors.push("world.playerPosition must be an object");
+  if (typeof world["activeSectorId"] !== "string" || world["activeSectorId"].length === 0) {
+    errors.push("world.activeSectorId must be a non-empty string");
+  }
+  const activeRegionId = world["activeRegionId"];
+  if (activeRegionId !== null && typeof activeRegionId !== "string") {
+    errors.push("world.activeRegionId must be a string or null");
+  }
+  if (!Array.isArray(world["regions"])) errors.push("world.regions must be an array");
+  return errors;
+}
+
 /** Full structural validation of a current-version save. */
 export function validateRootSave(document: unknown): string[] {
   if (!isRecord(document)) return ["save document must be an object"];
@@ -134,6 +155,7 @@ export function validateRootSave(document: unknown): string[] {
   }
   errors.push(...validateMetadata(document["metadata"]));
   errors.push(...validateSim(document["sim"]));
+  errors.push(...validateWorldSection(document["world"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

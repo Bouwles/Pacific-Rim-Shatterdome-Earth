@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 01. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 04. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -34,6 +34,13 @@ src/
     budgets.ts          per-class triangle/material/texture ceilings
     generators.ts       parameterised procedural generators + MaterialPalette
     resolver.ts         manifest -> renderable: model first, generator fallback, one warning, disposal
+  world/               ← globe coordinates and strategic layer; no Babylon, no DOM
+    coordinates.ts      geodetic/ECEF/tangent conversions, distances, validation
+    cubeSphere.ts       sector ids, addressing, tangent-adjusted projection, neighbours
+    floatingOrigin.ts   anchor, rebase policy, exact rebaseLocal
+    regions.ts          region and record types, climates, simulation tiers
+    worldState.ts       authoritative world state, tiering, snapshots
+    start.ts            default start position, shared by saves and migrations
   saves/               ← persistence; only indexedDbRepository.ts touches a browser API
     schema.ts           RootSave envelope, metadata, validation, checksums, slot naming
     migrations.ts       pure versioned migration steps + the chain runner
@@ -45,25 +52,30 @@ src/
     registry.ts         generic ContentRegistry<T> — typed table + validator + duplicate/unknown-id guards
     jaegers.ts           JaegerDefinition type + one placeholder entry proving the registry pattern
     assets.ts            the shipped asset manifests, one per placeholder
+    regions.ts           the shipped strategic regions
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
     scenarioRunner.ts    headless deterministic scenario runner + `kernel-smoke` fixture
     gallery.ts           asset inspection scene: layout, framing, measurement, damage preview
+    globeView.ts         low-detail globe, region markers, active sector tiles
   ui/
     screens.ts           DOM overlay renderers for MainMenu, Loading, Shatterdome placeholder, Error
     galleryScreen.ts     asset gallery panel
     saveScreen.ts        save/load panel with storage health
+    worldScreen.ts       globe readouts, teleport and walk controls
 tests/
   unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers,
-                        assetManifest, assetInspection — pure logic
-  integration/         appState, kernel, scenarioRunner, assetResolver — module boundaries and determinism
-  e2e/                 boot, debugOverlay, assetGallery — Playwright: real browser, real controls
+                        assetManifest, assetInspection, saveSchema, saveMigrations,
+                        coordinates, cubeSphere, floatingOrigin — pure logic
+  integration/         appState, kernel, scenarioRunner, assetResolver, saveService,
+                        indexedDbRepository, worldState — module boundaries and determinism
+  e2e/                 boot, debugOverlay, assetGallery, saves, worldMap — Playwright
 public/
   assets/models/       drop point for production GLB files; empty by design, README explains the contract
 ```
 
-Everything else in the target shape (`world/`, `jaegers/`, `kaiju/`, `combat/`, `destruction/`,
-`shatterdome/`, `missions/`, `progression/`, `copilots/`, `audio/`, `assets/`, `saves/`, `network/`,
+Everything else in the target shape (`jaegers/`, `kaiju/`, `combat/`, `destruction/`,
+`shatterdome/`, `missions/`, `progression/`, `copilots/`, `audio/`, `network/`,
 `sandbox/`, `workers/`) does not exist yet — see [ROADMAP.md](../ROADMAP.md) for which phase
 introduces each one. See TECH_DECISIONS.md's "grow-into, not scaffold-ahead" entry for why.
 
@@ -121,7 +133,7 @@ transition graph lives in `appState.ts` as data (`ALLOWED_TRANSITIONS`), not in 
 scattered through the app. `bootstrap.ts` is the single subscriber that maps `(state) -> DOM screen`.
 
 `Boot -> MainMenu -> Loading -> Shatterdome -> MainMenu`, `MainMenu <-> AssetGallery` and
-`MainMenu <-> Saves` are reachable today. `Deployment`, `Combat`, and `Results` exist as valid graph nodes with legal edges so later
+`MainMenu <-> Saves` and `MainMenu <-> WorldMap` are reachable today. `Deployment`, `Combat`, and `Results` exist as valid graph nodes with legal edges so later
 milestones can wire real screens into them without redesigning the graph, but nothing transitions into them yet — that would be a fake screen
 implying a system that doesn't exist. `Error` is reachable today only from a fatal boot failure (engine
 init threw); the Error screen's recovery action is a page reload, because a failed boot leaves no working
@@ -218,6 +230,20 @@ does not exist yet.
 The gallery owns its fill light, deck, damage materials and every resolved asset, and releases all of them
 in `dispose()`. It borrows the boot scene rather than creating its own, so the debug overlay's scene
 instrumentation stays valid across the transition.
+
+## The world
+
+Earth is a scaled cube-sphere, not a flat plane. Authoritative positions are
+geodetic, sectors are cube-sphere cells with reprojection-based neighbour lookup,
+and a floating origin keeps local coordinates small. Exactly one region receives
+combat-grade simulation while every other is a cheap strategic record.
+
+Full detail, including the measured numbers behind each choice, is in
+[WORLD_COORDINATES.md](WORLD_COORDINATES.md).
+
+One deliberate boundary: `src/world/**` uses trigonometry, which `src/simulation/**`
+is forbidden from doing. There is no way to place points on a sphere without it,
+so world coordinates sit outside the bit-exact kernel. See TECH_DECISIONS.md.
 
 ## Persistence
 

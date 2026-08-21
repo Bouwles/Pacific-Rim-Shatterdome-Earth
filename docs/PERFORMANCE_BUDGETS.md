@@ -58,6 +58,25 @@ The storage panel reports live usage and quota, and warns when usage passes 90
 percent of quota, when the browser has not granted persistent storage, or when
 saves have fallen back to memory.
 
+## World streaming budget (Milestone 04)
+
+The globe is partitioned into 1,536 cube-sphere sectors, measured at 9.3 to
+12.5 km across with a 1.35x spread between largest and smallest. Uniform sector
+size is the point of the tangent adjustment: streaming cost should not depend on
+where on the planet you are.
+
+| Quantity                        | Value       | Note                                           |
+| ------------------------------- | ----------- | ---------------------------------------------- |
+| Sectors on the globe            | 1,536       | 6 faces of 16 by 16                            |
+| Sector span                     | 9.3–12.5 km | Tangent-adjusted; 2.31x spread without it      |
+| Active bubble radius            | 4,000 m     | Floor for a region receiving combat simulation |
+| Rebase threshold                | 2,000 m     | Local coordinates never exceed this            |
+| Regions under combat simulation | 1           | Enforced by the snapshot validator             |
+
+Measured in the browser: the globe view costs 15 draw calls, holding steady
+across a 25 km walk with 28 rebases, so neither sector tiles nor their materials
+accumulate.
+
 ## Frame pacing guarantees (Milestone 01)
 
 Simulation cost per frame is bounded by construction, independent of how long the tab was suspended:

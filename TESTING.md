@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-84 unit/integration tests across 12 files, plus 10 Playwright browser tests.
+253 unit and integration tests across 23 files, plus 40 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -32,10 +32,13 @@
 - **Integration, assets** (`tests/integration/assetResolver.test.ts`): fallback on a missing model with one actionable warning, one warning per asset however many instances, loud failure on an unknown generator or invalid params, every shipped placeholder resolving within 10 percent of its declared height with no errors and inside its triangle budget, every declared socket present, the cannon's muzzle, reproducibility from seed, one generator producing differently proportioned units, scene node and material counts returning to baseline after disposal and after ten resolve/dispose cycles, and the simulation hash staying identical under every manifest override including the failing-model path.
 - **Unit, saves** (`tests/unit/saveSchema.test.ts`, `saveMigrations.test.ts`): envelope validation (wrong version, malformed metadata, unsupported sim version, malformed entity table, non-serializable values, cycles), checksum stability, slot naming, summary projection; version detection, the version 0 fixture migrating with no data loss and metadata derived rather than invented, purity and non-mutation, refusal of newer-than-supported files and of missing steps, registry rejection of malformed steps.
 - **Integration, saves** (`tests/integration/saveService.test.ts`, `indexedDbRepository.test.ts`): the full slot lifecycle, kernel round-trip with identical hash and deterministic continuation, seed mismatch refusal, authoritative-only contents, autosave ring rotation, corruption recovery through several damaged layers, damaged slots staying listed so recovery is reachable, export and import including legacy migration and rejection paths leaving existing slots intact, backup rotation before overwrite and before import, and storage health reporting. The IndexedDB suite runs the same flows against a real IndexedDB implementation, including surviving a close and reopen.
+- **Unit, world** (`tests/unit/coordinates.test.ts`, `cubeSphere.test.ts`, `floatingOrigin.test.ts`): geodetic/ECEF and tangent round trips bounded under a micrometre across the active bubble and under 0.1 mm at 70 km, axis orientation, date line and pole handling, scaled distances, longitude wrapping and latitude clamping, validation; sector id round trips and malformed id rejection, sector centres landing back in their own sector, four distinct neighbours for all 1,536 sectors, symmetry everywhere including cube corners, spatial adjacency, full globe reachability by walking neighbours, and sector size uniformity within 1.5x; floating origin threshold behaviour, exact rebasing of a bystander, local coordinates staying bounded across a 60 km walk, and forced rebase on teleport.
+- **Integration, world** (`tests/integration/worldState.test.ts`): teleporting to all five named locations recovering region and climate, distinct sectors, sector change detection, unknown region rejection, exactly one active region at a time, no active region in open ocean, regions dropping back to strategic on leaving, non-overlapping region footprints, strategic damage without activation, snapshot round trips, gaining regions added since a save was written, snapshot validation rejecting unknown regions, malformed sectors and two active regions, plus a full save and load cycle and a version 1 save migrating to the documented start.
 - **Browser smoke** (`tests/e2e/`, Playwright/Chromium):
   - `boot.spec.ts` (Milestone 00, still passing unchanged): truthful backend label, zero console errors, New Game flow, reload does not duplicate canvas/render loop, resize keeps one canvas.
   - `debugOverlay.spec.ts`: all overlay fields report real values and physics reads "n/a (no backend)"; ticks advance on their own; pause halts ticks, Step advances exactly one and does not resume, Resume continues; slow motion advances more slowly than 1×; F3 toggles visibility; `?seed=` drives the seed.
   - `saves.spec.ts`: the panel opens on real IndexedDB and reports where saves go; separate slots persist; a save survives a full page reload; slot detail records seed, tick and play time; rename, overwrite, load, delete; export produces a downloadable file; that file imports back as a separate slot; an invalid import is refused with a readable message and leaves existing slots intact; a legacy bare snapshot imports by migrating; leaving the panel keeps the simulation running.
+  - `worldMap.spec.ts`: globe and full coordinate readout with no console errors; exactly one active region; teleports to all five named locations recovering each climate and landing in five distinct sectors; walking crossing a sector boundary; the floating origin rebasing during a long walk while keeping local coordinates under 2,600 m; a teleport rebasing immediately so the player sits at the local origin; leaving the map with the simulation still running; and world position surviving a save and load round trip.
   - `assetGallery.spec.ts`: all twelve assets load with a budget summary and no console errors; measurements come from geometry; selecting another asset reframes and updates every figure; sockets including the cannon's muzzle are exposed; the damage preview is reversible; rotation can be paused; swapping to an uninstalled model falls back visibly and warns once; an alternate palette leaves measurements identical; leaving the gallery returns to the menu with the simulation still running.
 
 Every deterministic system added from here on (attack director seeding, damage math, prestige curves, save migrations) needs its own unit tests per GAME_SPEC's quality contract.
@@ -109,6 +112,23 @@ Every deterministic system added from here on (attack director seeding, damage m
   - Damaged slots were hidden from the listing, which made recovery unreachable from the UI. They are now listed, flagged, and described from the backup that would load.
   - Thumbnails were solid black under WebGPU because the swap chain is not a readable 2D source after a frame ends. Capturing inside the render loop was tried first and measured still blank; the fix is a render target.
 - **Not verified by hand:** a genuine quota-exceeded write, and IndexedDB being blocked in a real private window. Both paths are implemented and unit tested through the repository interface, but neither was reproduced in a live browser.
+
+### Phase 1.95 / Milestone 04 (2026-08-21)
+
+- All automated checks green: `typecheck`, `lint`, `format:check`, `test` (253/253), `smoke` (40/40), `build`.
+- Manual browser verification via Chrome DevTools MCP on the WebGPU path:
+  - Globe renders with region markers, a player marker, and the active sector plus its four neighbours drawn as a cross, which is the 4-neighbour adjacency visible on screen.
+  - Teleported to all five named locations. Each recovered exact coordinates (Anchorage correctly reads 149.9003 W), the right climate, and a distinct sector. The five land across three different cube faces (+Z, -X, +Y), so cross-face addressing is exercised rather than assumed.
+  - Every teleport reported "1 active, 7 strategic" and left local coordinates at 0.0 m / 0.0 m, confirming the origin rebases on a deliberate jump.
+  - Walked 25 km north in 1 km steps: crossed three sequential sectors (+Z/3/12 to 13 to 14), latitude strictly monotonic with no discontinuity at any boundary, local coordinates capped at exactly 2,000 m rather than climbing to 25,000, 28 rebases, and the region correctly fell to "0 active, 8 strategic" on leaving Hong Kong for open water.
+  - Draw calls held at 15 across the whole walk, confirming sector tiles and their materials do not accumulate.
+  - Zero console errors and warnings throughout.
+- Four defects were found by tests or by looking at the screen, and fixed rather than documented around:
+  - Rebasing by subtracting the anchor shift drifted 2.9 m over a 4 km rebase, because two tangent planes on a sphere differ by a rotation. Caught by a unit test; `rebaseLocal` now goes through the global position and is exact.
+  - A plain cube-sphere left corner sectors 2.31x larger than face-centre ones. A tangent adjustment brought the spread to 1.35x.
+  - Region radii sized like real metropolitan areas overlapped once the globe was scaled to 1/50, leaving the active region ambiguous for four city pairs. Radii now mean the dense combat core.
+  - Walking in a flat tangent plane lifted the player 239 m off a curved globe over 25 km. Movement now carries geodetic altitude.
+- **Not verified:** shadow stability under a moving Jaeger, because no Jaeger exists in the world view yet; only the mechanism that prevents jitter (local coordinates bounded at 2,000 m) is confirmed. Physics behaviour across a rebase is likewise unverified, since no physics backend is wired.
 
 ## Performance budgets
 

@@ -139,6 +139,38 @@ where `checksum` is `hashState(document)`.
 | `autosave.<n>`        | Autosave ring position                 |
 | `backup.<slotId>.<n>` | Backup ring for that slot, 0 is newest |
 
+## World schemas (Milestone 04)
+
+### `RegionDefinition` (src/data/regions.ts)
+
+| Field                 | Type          | Constraint                                                        |
+| --------------------- | ------------- | ----------------------------------------------------------------- |
+| `id`                  | `string`      | required, unique                                                  |
+| `displayName`         | `string`      | required                                                          |
+| `kind`                | enum          | coastal-city, inland-city, shatterdome, ocean, wilderness         |
+| `climate`             | enum          | polar, subarctic, temperate, subtropical, tropical, arid, oceanic |
+| `centre`              | `GeoPosition` | valid latitude, longitude and altitude                            |
+| `radiusMeters`        | `number`      | positive; the dense combat core, not metropolitan sprawl          |
+| `populationThousands` | `number`      | not negative                                                      |
+| `deploymentPoint`     | `boolean`     | whether the region can be deployed to directly                    |
+
+### `RegionRecord` (strategic state, one per region)
+
+| Field             | Type     | Constraint             |
+| ----------------- | -------- | ---------------------- |
+| `regionId`        | `string` | must be a known region |
+| `integrity`       | `number` | 0 to 1                 |
+| `safetyRating`    | `number` | 0 to 1                 |
+| `lastVisitedTick` | `number` | non-negative integer   |
+| `tier`            | enum     | active or strategic    |
+
+### `WorldSnapshot` (`WORLD_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, playerPosition, activeRegionId, activeSectorId, regions }`,
+regions sorted by id so the form is canonical. Validation rejects an unknown
+region, a malformed sector id, and any snapshot claiming more than one active
+region.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

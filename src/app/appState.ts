@@ -10,12 +10,20 @@ export enum AppState {
   AssetGallery = "AssetGallery",
   /** Save and load management. Reachable from the menu and, later, from in-game. */
   Saves = "Saves",
+  /** Globe map: coordinates, sectors, and deployment between regions. */
+  WorldMap = "WorldMap",
   Error = "Error",
 }
 
 const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
   [AppState.Boot]: [AppState.MainMenu, AppState.Error],
-  [AppState.MainMenu]: [AppState.Loading, AppState.AssetGallery, AppState.Saves, AppState.Error],
+  [AppState.MainMenu]: [
+    AppState.Loading,
+    AppState.AssetGallery,
+    AppState.Saves,
+    AppState.WorldMap,
+    AppState.Error,
+  ],
   [AppState.Loading]: [AppState.Shatterdome, AppState.Deployment, AppState.Error],
   [AppState.Shatterdome]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
   [AppState.Deployment]: [AppState.Combat, AppState.Shatterdome, AppState.Error],
@@ -23,6 +31,7 @@ const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
   [AppState.Results]: [AppState.Shatterdome, AppState.MainMenu, AppState.Error],
   [AppState.AssetGallery]: [AppState.MainMenu, AppState.Error],
   [AppState.Saves]: [AppState.MainMenu, AppState.Loading, AppState.Error],
+  [AppState.WorldMap]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
   [AppState.Error]: [AppState.MainMenu],
 };
 

@@ -33,6 +33,7 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 | ----------------- | -------------------------------------------------------------------------------- |
 | **New Game**      | MainMenu → Loading → Shatterdome placeholder                                     |
 | **Saves**         | MainMenu → Saves                                                                 |
+| **World Map**     | MainMenu → World Map                                                             |
 | **Asset Gallery** | MainMenu → Asset Gallery                                                         |
 | **Back to Menu**  | Return to MainMenu from the Shatterdome placeholder, gallery, or an error screen |
 
@@ -60,6 +61,18 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 
 A damaged slot stays listed with an amber border and an explanation, so its
 backup can still be loaded.
+
+## World map
+
+| Input                | Action                                                           |
+| -------------------- | ---------------------------------------------------------------- |
+| Deploy to + Teleport | Jump to a region centre; the floating origin rebases immediately |
+| **N / S / E / W**    | Walk 1 km in the tangent plane, following the surface            |
+| Left-drag / wheel    | Orbit and zoom the globe                                         |
+
+The readout shows latitude, longitude, altitude, local east/north, the current
+sector and its four neighbours, the active region and its climate, how many
+regions are active versus strategic, the origin anchor, and the rebase count.
 
 ## Not yet bound
 

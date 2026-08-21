@@ -34,7 +34,13 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a versioned envelope with pure migration steps and a version 0 fixture proving an old file loads without data loss;
   - a storage health panel reporting backend, record count, usage and quota, warning about eviction, near-full storage, or a memory-only fallback;
   - an in-memory fallback so the game still runs when IndexedDB cannot be opened, stating plainly that saves will not survive the tab.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (193 unit+integration), `smoke` (32 Playwright), `build` all pass.
+- **Seamless miniature Earth**: a scaled cube-sphere globe (1/50, 127 km radius) with authoritative geodetic positions and local tangent frames:
+  - 1,536 stable sectors across six cube faces, 9.3 to 12.5 km across, with neighbour lookup by reprojection that is symmetric everywhere including cube corners;
+  - a floating origin that keeps local coordinates under 2,000 m however far you travel, rebasing exactly rather than by shift subtraction;
+  - a low-detail globe map with region markers, the active sector and its neighbours, and a full coordinate readout;
+  - eight strategic regions including all five named test locations, with exactly one ever receiving combat-grade simulation;
+  - teleport and walk controls, with world position carried through save and load.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (253 unit+integration), `smoke` (40 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -46,11 +52,14 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Saves persist the simulation kernel only, because that is all the authoritative state that exists. There is no economy, roster, research or Shatterdome state to save yet; those extend `RootSave` as they arrive.
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
+- The world exists as coordinates, sectors and strategic records only. No terrain, no ocean surface, no cities, no streaming of actual geometry: the globe view draws a sphere with markers, and the "active sector" is a highlighted tile rather than loaded ground. Promoting a sector to combat-grade geometry is Phase 2 and beyond.
+- Walking is a debug control that steps 1 km per click, not a player controller. There is no on-foot movement, no physics, and no Jaeger in the world view.
+- Region climate is a static label. Nothing yet varies weather, time of day, or gameplay by climate.
 - `Deployment`, `Combat`, `Results` app states are valid graph nodes with no screens; nothing transitions into them yet.
 - The kernel runs with **zero entities in the main app** — entity count honestly reads 0. Spawn commands exist and are exercised by tests and the scenario runner, but no gameplay system issues them yet, and nothing in the 3D scene is bound to entity transforms. That binding arrives with the first real gameplay entity.
 - Motion integration is the only system. It is real and used forever, but it is one system, not a physics step.
 - No physics backend (Havok installed, not initialized) — the overlay reports "n/a (no backend)".
-- No player controller, world map, combat, economy, copilots, save persistence, networking adapter, or sandbox mode. None of it is faked; it does not exist yet.
+- No player controller, combat, kaiju behaviour, economy, research, copilots, networking adapter, or sandbox mode. None of it is faked; it does not exist yet.
 
 ## Known issues
 
@@ -71,6 +80,8 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Content registry: [src/data/registry.ts](src/data/registry.ts), [src/data/jaegers.ts](src/data/jaegers.ts)
 - Asset pipeline: [src/assets/manifest.ts](src/assets/manifest.ts), [inspection.ts](src/assets/inspection.ts), [budgets.ts](src/assets/budgets.ts), [generators.ts](src/assets/generators.ts), [resolver.ts](src/assets/resolver.ts), [src/data/assets.ts](src/data/assets.ts)
 - Asset gallery: [src/debug/gallery.ts](src/debug/gallery.ts), [src/ui/galleryScreen.ts](src/ui/galleryScreen.ts), [src/app/galleryOverrides.ts](src/app/galleryOverrides.ts)
+- World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
+- World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
 - Saves: [src/saves/schema.ts](src/saves/schema.ts), [migrations.ts](src/saves/migrations.ts), [repository.ts](src/saves/repository.ts), [indexedDbRepository.ts](src/saves/indexedDbRepository.ts), [saveService.ts](src/saves/saveService.ts), [storageHealth.ts](src/saves/storageHealth.ts)
 - Save UI and browser glue: [src/ui/saveScreen.ts](src/ui/saveScreen.ts), [src/app/saveController.ts](src/app/saveController.ts)
 - Model drop point: [public/assets/models/README.md](public/assets/models/README.md)
@@ -88,8 +99,12 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - The GLB load path has never run against a real GLB file, because no model exists to test with. Its validation logic is unit tested against synthetic inspection data, and its failure path is exercised constantly, but the success path is unverified. First real model installed will be the real test of it.
 - The gallery borrows the boot scene rather than owning one. Fine for two environments; a real scene lifecycle will be needed once the Shatterdome interior and a combat map both exist.
 - Quota exhaustion and a genuinely blocked IndexedDB (real private window) are implemented and unit tested through the repository interface, but neither has been reproduced in a live browser.
+- Shadow stability under a moving Jaeger is unverified, because no Jaeger exists in the world view. Only the mechanism that prevents jitter, local coordinates bounded at 2,000 m, is confirmed. Physics behaviour across a rebase is likewise unverified with no physics backend wired.
+- `src/world/**` uses trigonometry, which the kernel is forbidden from doing. Cross-engine bit-identical replay would not survive world movement becoming authoritative; see TECH_DECISIONS.md for the mitigation path.
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
 
 ## Exact next task
 
-Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub and the boot scene are genuinely different environments. Persistence already exists, so hub state can be saved as soon as there is any; extend `RootSave` rather than adding a parallel store.
+Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
+
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, and `RootSave` version 2 already carries world state. Extend `RootSave` for hub state rather than adding a parallel store, and put the player controller behind the same tangent-frame conversion the world screen already uses.

@@ -138,6 +138,79 @@
         border-color: rgba(255, 120, 120, 0.5);
       }
 
+      /* World map panel: a readout column, not a dialog. */
+      #uiRoot .screen-world {
+        max-width: none;
+        width: min(420px, 36vw);
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: 13px;
+      }
+      #uiRoot .world-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .world-header h2 {
+        margin: 0;
+      }
+      #uiRoot .world-readout {
+        font-family: "Consolas", monospace;
+        font-size: 12px;
+      }
+      #uiRoot .world-row {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      #uiRoot .world-key {
+        color: #6f97b0;
+        flex: 0 0 104px;
+      }
+      #uiRoot .world-value {
+        color: #e8f4ff;
+        word-break: break-word;
+      }
+      #uiRoot .world-teleport {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .world-teleport label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      #uiRoot .world-teleport select {
+        font: inherit;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .world-walk {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #uiRoot .world-walk-label {
+        font-size: 12px;
+        color: #a9c3d6;
+        margin-right: 4px;
+      }
+      #uiRoot .world-walk button {
+        padding: 4px 12px;
+        font-size: 12px;
+      }
       /* The save panel is a working list, not a dialog. */
       #uiRoot .screen-saves {
         max-width: none;

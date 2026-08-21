@@ -1,6 +1,9 @@
 import { ContentRegistry, type RegistryEntry } from "../data/registry";
 import { FIXED_STEP_MS } from "../simulation/clock";
 import { LEGACY_UNWRAPPED_VERSION, ROOT_SAVE_VERSION, detectSaveVersion, type RootSave } from "./schema";
+import { sectorIdAt } from "../world/cubeSphere";
+import { WORLD_SCHEMA_VERSION } from "../world/worldState";
+import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -57,6 +60,35 @@ const wrapBareSnapshot: MigrationStep = {
   },
 };
 
+/**
+ * Adds the world section introduced by Milestone 04.
+ *
+ * A version 1 save predates global coordinates entirely, so there is no player
+ * position recorded anywhere in it. Rather than invent one, the migration seeds
+ * the documented default start and leaves every region untouched at full
+ * integrity, which is exactly the state a fresh world begins in.
+ */
+const addWorldSection: MigrationStep = {
+  id: "1",
+  fromVersion: 1,
+  toVersion: 2,
+  description: "Add the world section: player position, active sector, and strategic region records.",
+  apply: (document) => ({
+    ...document,
+    schemaVersion: 2,
+    world: {
+      schemaVersion: WORLD_SCHEMA_VERSION,
+      playerPosition: DEFAULT_START_POSITION,
+      activeRegionId: DEFAULT_START_REGION_ID,
+      activeSectorId: sectorIdAt(DEFAULT_START_POSITION),
+      // Left empty on purpose: WorldState.restore seeds a fresh record for every
+      // region the current build knows about, so an old save gains new regions
+      // rather than carrying a stale list.
+      regions: [],
+    },
+  }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -72,6 +104,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
     return errors;
   });
   registry.register(wrapBareSnapshot);
+  registry.register(addWorldSection);
   return registry;
 }
 

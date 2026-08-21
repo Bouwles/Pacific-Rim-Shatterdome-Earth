@@ -63,6 +63,62 @@ parts actually run today, so it never implies working systems that do not exist.
 same style. Internal engineering documents under `docs/` and the other root memory files are not bound by
 this and may keep their existing punctuation.
 
+## 2026-08-21 — Milestone 04: world coordinates
+
+**Decision (miniature Earth is a shrunken globe with full-size occupants).** `EARTH_SCALE` is 1/50, giving a
+127 km radius, while Jaegers and cities keep their real dimensions.
+**Reason:** GAME_SPEC calls for a seamless miniature Earth that can be crossed, and for combat that reads at
+Jaeger scale. Those pull in opposite directions, and shrinking the planet while leaving its occupants alone
+is the resolution. It is geometrically inconsistent on purpose. The consequence surfaced immediately in
+testing: region radii sized like real metropolitan areas overlapped once the globe shrank, so region radii
+now mean the dense combat core and are capped by the tightest pair on the map.
+
+**Decision (geodetic authoritative, tangent local).** Positions are stored as latitude, longitude and
+altitude, converted to a local east/north/up frame near the player.
+**Reason:** A single world-space Cartesian frame loses precision with distance from its origin, which is
+exactly the failure a seamless planet provokes. Degrees in a double resolve far below a millimetre here, and
+the representation serializes directly, so a save stores what the simulation holds. Round-trip error is
+measured under a micrometre across the active bubble.
+
+**Decision (cube-sphere with a tangent adjustment).** Six faces of 16 by 16 cells, warped through `tan`
+before projection.
+**Reason:** A lat/lon grid has a polar singularity and cells that vanish near the poles. A plain cube-sphere
+avoids that but still leaves corner cells 2.31x larger than face-centre cells, measured. The tangent
+adjustment brings the spread to 1.35x, so streaming cost barely depends on location.
+
+**Decision (neighbours by reprojection, not an adjacency table).** Stepping off a face edge is resolved by
+projecting the stepped point back onto the sphere and asking which face it lands on.
+**Reason:** The alternative is 24 hand-written edge adjacency rules, which is both the name-keyed branching
+the contract forbids and a thing that silently falls out of sync with the face bases. One rule covers every
+face, edge and corner. Tests assert four distinct neighbours for all 1,536 sectors, symmetry everywhere
+including the eight cube corners, and full reachability by walking neighbours.
+
+**Decision (rebasing goes through global position, not a shift subtraction).** `rebaseLocal` converts old
+local to geodetic to new local.
+**Reason:** Written first as a subtraction of the anchor shift, which a test caught as wrong: two tangent
+planes on a sphere differ by a rotation as well as a translation, so subtraction drifted 2.9 m across a 4 km
+rebase. That is a visible pop on a 75 m Jaeger, and precisely what this milestone forbids. The event still
+reports `shift` for camera and audio continuity, with a comment saying not to use it as a rebase operator.
+
+**Decision (trigonometry allowed in `src/world/**`).** The determinism rule banning `sin`/`cos`/`pow`
+applies to `src/simulation/**` and `src/entities/**` only.
+**Reason:** There is no way to place points on a sphere without trigonometry. World coordinates therefore
+sit outside the bit-exact kernel. The practical cost is that cross-engine bit-identical replay would not
+survive world movement becoming authoritative; if that is ever needed, the fix is fixed-point or tabulated
+trigonometry at the boundary, not moving the maths back into the kernel.
+
+**Decision (movement carries geodetic altitude).** Walking preserves the previous altitude rather than the
+local `up` component.
+**Reason:** A tangent plane is flat and the globe is not, so a straight line in local space lifts off the
+surface: measured at 239 m of false altitude over a 25 km walk in the browser. Carrying altitude across
+keeps movement on the ground until real terrain heights exist.
+
+**Decision (exactly one active region, enforced by the format).** `validateWorldSnapshot` rejects any
+snapshot claiming two active regions.
+**Reason:** "Do not keep distant cities as active physics scenes" is a rule that decays if it lives only in
+whichever code path last touched tiering. Putting it in the validator means a save cannot even represent the
+broken state.
+
 ## 2026-08-21 — Milestone 03: persistence shape
 
 **Decision (version 0 is the bare kernel snapshot).** Rather than inventing a legacy format so the

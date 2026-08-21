@@ -1,5 +1,8 @@
 import type { ContentRegistry } from "../data/registry";
 import type { SimulationKernel } from "../simulation/kernel";
+import { sectorIdAt } from "../world/cubeSphere";
+import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
+import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -35,6 +38,24 @@ export interface SaveRequest {
   readonly name?: string;
   readonly playTimeMs?: number;
   readonly thumbnail?: string | null;
+  /** Authoritative world state. Omitted only by callers that have no world yet. */
+  readonly world?: WorldSnapshot;
+}
+
+/**
+ * A world section for a save written before a world exists. It records the
+ * documented start rather than a fabricated position, and carries no region
+ * records, so `WorldState.restore` seeds fresh ones for whatever regions the
+ * build knows about.
+ */
+function emptyWorldSnapshot(): WorldSnapshot {
+  return {
+    schemaVersion: WORLD_SCHEMA_VERSION,
+    playerPosition: DEFAULT_START_POSITION,
+    activeRegionId: DEFAULT_START_REGION_ID,
+    activeSectorId: sectorIdAt(DEFAULT_START_POSITION),
+    regions: [],
+  };
 }
 
 export interface LoadResult {
@@ -70,6 +91,7 @@ export class SaveService {
   /** Builds the save document from authoritative state only. */
   buildDocument(kernel: SimulationKernel, request: SaveRequest = {}): RootSave {
     const sim = kernel.serialize();
+    const world = request.world ?? emptyWorldSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -79,7 +101,7 @@ export class SaveService {
       appVersion: this.appVersion,
       thumbnail: request.thumbnail ?? null,
     };
-    return { schemaVersion: ROOT_SAVE_VERSION, savedAt: this.now(), metadata, sim };
+    return { schemaVersion: ROOT_SAVE_VERSION, savedAt: this.now(), metadata, sim, world };
   }
 
   async save(slotId: string, kernel: SimulationKernel, request: SaveRequest = {}): Promise<RootSave> {

@@ -31,6 +31,13 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
       tick: 7500,
       entities: { schemaVersion: 1, nextId: 1, entities: [] },
     },
+    world: {
+      schemaVersion: 1,
+      playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },
+      activeRegionId: "hong-kong",
+      activeSectorId: "+X/8/9",
+      regions: [],
+    },
     ...overrides,
   };
 }
@@ -47,7 +54,7 @@ describe("validateRootSave", () => {
 
   it("rejects the wrong envelope version and says to migrate", () => {
     const errors = validateRootSave(goodSave({ schemaVersion: 99 })).join(" ");
-    expect(errors).toMatch(/schemaVersion must be 1/);
+    expect(errors).toMatch(new RegExp(`schemaVersion must be ${ROOT_SAVE_VERSION}`));
     expect(errors).toMatch(/run migrations/);
   });
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-08-21, Milestone 04: seamless miniature Earth coordinate system
+
+Established the planet everything later stands on: how a position is expressed, how the globe is divided, and where the line falls between the part of the world being simulated in detail and the part that is only a record.
+
+- Earth is a cube sphere, not a flat plane. Six cube faces divided into a 16 by 16 grid each, projected onto a sphere, giving 1,536 sectors of 9 to 12 km. A latitude and longitude grid was rejected because it has a singularity at each pole and cells that shrink to nothing near them.
+- The globe is scaled to a fiftieth of real Earth, a radius of 127 km, while Jaegers and cities keep their real size. That is what miniature Earth means here. Hong Kong to Tokyo is 2,890 km in reality and about 58 km here.
+- Positions are stored as latitude, longitude and altitude, and converted into a local east, north and up frame near the player. A single flat world space loses precision the further you get from its origin, which is exactly what a seamless planet provokes. Round trip error between the two is measured under a micrometre across the active bubble.
+- Sector neighbours are found by stepping off the edge, projecting back onto the sphere, and asking which face the point landed on. The alternative, a hand written table of 24 edge adjacencies, is both the kind of name keyed branching the project bans and something that silently falls out of step with the face definitions. Tests check all 1,536 sectors have four distinct neighbours, that the relation is symmetric everywhere including the eight cube corners, and that walking neighbours from one sector reaches the whole globe.
+- A floating origin keeps local coordinates small however far you travel. Walking 25 km keeps them capped at 2,000 m instead of climbing to 25,000. Rebasing changes no authoritative state at all: global positions stay geodetic and only the local projection moves, so a rebase cannot make anything teleport or explode.
+- A globe map showing region markers, the player, the active sector and its four neighbours, with a full coordinate readout, plus teleport and walk controls.
+- Eight strategic regions including Hong Kong, Tokyo, Sydney, Manila and Anchorage. Exactly one region is ever simulated in detail. Every other is a small record with integrity, safety and a last visited tick. The save format rejects any snapshot claiming two active regions, so the rule cannot be broken by a future code path.
+- Saves moved to version 2 to carry world state, with a migration that places an older save at the documented start rather than inventing a position for it.
+
+Four defects were found and fixed rather than written around.
+
+Rebasing was first written as subtracting the anchor shift, which a test caught as wrong. Two tangent planes on a sphere differ by a rotation as well as a translation, so subtraction drifted 2.9 m across a 4 km rebase, which is a visible pop on a 75 m Jaeger and the exact thing this milestone forbids. Rebasing now goes back through the global position and is exact at any distance.
+
+A plain cube sphere left corner sectors 2.31 times larger than face centre ones. Warping the grid before projection brought that to 1.35, so streaming cost barely depends on where you are.
+
+Region radii sized like real metropolitan areas overlapped once the globe shrank, leaving four city pairs ambiguous about which region you were in. Radii now mean the dense combat core, capped by the tightest pair on the map.
+
+Walking in a flat local frame lifted the player 239 m off the curved globe over 25 km. Movement now carries altitude across, keeping you on the ground.
+
+Tests went from 193 to 253 unit and integration tests, and from 32 to 40 browser tests. Everything from the previous milestones still passes unchanged.
+
 ## 2026-08-21, Milestone 03: local save foundation, slots, autosaves and migrations
 
 Persistence built before there is much to persist, so every later system inherits a settled serialization contract instead of inventing one.

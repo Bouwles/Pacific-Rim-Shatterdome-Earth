@@ -13,6 +13,7 @@ export function renderMainMenu(
   onNewGame: () => void,
   onOpenGallery?: () => void,
   onOpenSaves?: () => void,
+  onOpenWorld?: () => void,
 ): void {
   clear(container);
   const panel = document.createElement("div");
@@ -21,7 +22,7 @@ export function renderMainMenu(
   const title = document.createElement("h1");
   title.textContent = "Pacific Rim: Shatterdome Earth";
   const subtitle = document.createElement("p");
-  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 02.";
+  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 04.";
 
   const newGameButton = document.createElement("button");
   newGameButton.type = "button";
@@ -38,6 +39,15 @@ export function renderMainMenu(
     savesButton.className = "secondary-button";
     savesButton.addEventListener("click", onOpenSaves);
     panel.appendChild(savesButton);
+  }
+
+  if (onOpenWorld) {
+    const worldButton = document.createElement("button");
+    worldButton.type = "button";
+    worldButton.textContent = "World Map";
+    worldButton.className = "secondary-button";
+    worldButton.addEventListener("click", onOpenWorld);
+    panel.appendChild(worldButton);
   }
 
   if (onOpenGallery) {

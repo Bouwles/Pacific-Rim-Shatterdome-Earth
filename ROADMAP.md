@@ -97,6 +97,26 @@ health panel, and user-facing errors. Created `src/saves/`, `src/ui/saveScreen.t
 - `npm run typecheck`, `lint`, `format:check`, `test` (193), `smoke` (32), `build` all pass.
   **Next action:** none — complete. Proceed to Phase 2.
 
+## Phase 1.95 / Milestone 04 — Seamless miniature Earth coordinate system
+
+**Depends on:** Milestone 01 (kernel), Milestone 03 (saves).
+**Status:** done.
+**Scope:** scaled cube-sphere globe with stable sector ids and reprojection-based neighbour lookup,
+geodetic global coordinates with local tangent frames, floating origin with exact rebasing, a low-detail
+globe map with an active sector and full coordinate readouts, and a strategic-versus-active simulation
+boundary. Created `src/world/`, `src/data/regions.ts`, `src/debug/globeView.ts`, `src/ui/worldScreen.ts`.
+Raised the save envelope to version 2 with a real migration for the new world section.
+**Acceptance tests:**
+
+- Travel across several sector boundaries with the player stable: a 25 km walk crossed three sequential
+  sectors, kept latitude strictly monotonic, and capped local coordinates at the 2,000 m rebase threshold
+  instead of reaching 25,000 m.
+- Teleport among Hong Kong, Sydney, Tokyo, Anchorage and Manila and recover the correct region and climate,
+  verified in tests and by hand. The five land in five distinct sectors across three cube faces.
+- Round-trip conversion error between global and local bounded under a micrometre across the active bubble.
+- `npm run typecheck`, `lint`, `format:check`, `test` (253), `smoke` (40), `build` all pass.
+  **Next action:** none — complete. Proceed to Phase 2.
+
 ## Phase 2 — Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.

@@ -25,6 +25,12 @@ import { SaveService } from "../saves/saveService";
 import { IndexedDbSaveRepository } from "../saves/indexedDbRepository";
 import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
 import { probeStorageHealth } from "../saves/storageHealth";
+import { renderWorldScreen, type WorldScreenHandle } from "../ui/worldScreen";
+import { GlobeView } from "../debug/globeView";
+import { WorldState } from "../world/worldState";
+import { FloatingOrigin } from "../world/floatingOrigin";
+import { neighborIds } from "../world/cubeSphere";
+import { createDefaultRegionRegistry } from "../data/regions";
 
 export interface AppHandle {
   dispose(): void;
@@ -241,7 +247,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           const trimmed = name.trim() || `Save ${new Date().toLocaleTimeString()}`;
           const slotId = `slot.${Date.now().toString(36)}`;
           if (!kernel) throw new Error("No simulation is running.");
-          await saveController.save(slotId, kernel, trimmed);
+          await saveController.save(slotId, kernel, trimmed, worldState.serialize());
           return `Saved "${trimmed}".`;
         }),
       onOverwrite: (slotId) =>
@@ -249,7 +255,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           if (!kernel) throw new Error("No simulation is running.");
           const existing = await saveService.listSlots();
           const name = existing.find((slot) => slot.slotId === slotId)?.metadata.name ?? "Save";
-          await saveController.save(slotId, kernel, name);
+          await saveController.save(slotId, kernel, name, worldState.serialize());
           return `Overwrote "${name}".`;
         }),
       onLoad: (slotId) =>
@@ -265,6 +271,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             );
           }
           saveService.applyToKernel(result.document, kernel);
+          worldState.restore(result.document.world);
+          floatingOrigin.forceRebase(worldState.playerPosition);
           saveController.resetPlayTime(result.document.metadata.playTimeMs);
           const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
           const migrated =
@@ -298,9 +306,101 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     await refreshSaves();
   };
 
+  // World state is authoritative and lives for the whole session; the globe view
+  // is presentation and is built and torn down with the screen.
+  const regionRegistry = createDefaultRegionRegistry();
+  const worldState = new WorldState({ regions: regionRegistry });
+  const floatingOrigin = new FloatingOrigin({ anchor: worldState.playerPosition });
+  let globeView: GlobeView | undefined;
+  let worldScreen: WorldScreenHandle | undefined;
+
+  const closeWorld = (): void => {
+    globeView?.dispose();
+    globeView = undefined;
+    worldScreen?.dispose();
+    worldScreen = undefined;
+    bootScene.jaegerPlaceholder.setEnabled(true);
+    bootScene.ground.setEnabled(true);
+    bootScene.camera.setTarget(new Vector3(0, 25, 0));
+    bootScene.camera.radius = 110;
+    bootScene.camera.lowerRadiusLimit = 10;
+    bootScene.camera.upperRadiusLimit = 300;
+  };
+
+  const refreshWorld = (): void => {
+    if (!worldScreen) return;
+    const local = floatingOrigin.toLocal(worldState.playerPosition);
+    const activeRegion = worldState.activeRegionId;
+    const records = worldState.records();
+
+    worldScreen.update({
+      position: worldState.playerPosition,
+      localEast: local.east,
+      localNorth: local.north,
+      sectorId: worldState.activeSectorId,
+      neighborIds: neighborIds(worldState.activeSectorId),
+      activeRegionId: activeRegion,
+      activeClimate: activeRegion ? (worldState.definitionFor(activeRegion)?.climate ?? null) : null,
+      activeRegions: records.filter((record) => record.tier === "active").length,
+      strategicRegions: records.filter((record) => record.tier === "strategic").length,
+      rebases: floatingOrigin.rebases,
+      anchor: floatingOrigin.anchor,
+    });
+    globeView?.refresh();
+  };
+
+  const openWorld = (): void => {
+    // The globe replaces the boot stage rather than sharing it.
+    bootScene.jaegerPlaceholder.setEnabled(false);
+    bootScene.ground.setEnabled(false);
+
+    globeView = new GlobeView({
+      scene: bootScene.scene,
+      camera: bootScene.camera,
+      world: worldState,
+      regions: regionRegistry,
+    });
+    globeView.frameGlobe();
+
+    worldScreen = renderWorldScreen(uiRoot, regionRegistry.all(), {
+      onTeleport: (regionId) => {
+        worldState.teleportTo(regionId, kernel?.tick ?? 0);
+        // A teleport is an intentional jump, so the origin follows immediately
+        // rather than waiting for the drift threshold.
+        floatingOrigin.forceRebase(worldState.playerPosition);
+        refreshWorld();
+        // A teleport is a deliberate jump, so bring the camera with it. Walking
+        // deliberately does not, or it would fight the player orbiting.
+        globeView?.lookAtPlayer();
+      },
+      onWalk: (eastMeters, northMeters) => {
+        const from = floatingOrigin.toLocal(worldState.playerPosition);
+        const next = floatingOrigin.toGeo({
+          east: from.east + eastMeters,
+          north: from.north + northMeters,
+          up: from.up,
+        });
+        // A tangent plane is flat and the globe is not, so walking a straight
+        // line in local space lifts you off the surface: measured at 239 m of
+        // false altitude over a 25 km walk. Carrying the altitude across keeps
+        // movement on the ground until real terrain heights exist.
+        worldState.moveTo(
+          { ...next, altitudeMeters: worldState.playerPosition.altitudeMeters },
+          kernel?.tick ?? 0,
+        );
+        floatingOrigin.update(worldState.playerPosition);
+        refreshWorld();
+      },
+      onExit: () => stateMachine.transition(AppState.MainMenu),
+    });
+
+    refreshWorld();
+  };
+
   const renderForState = (state: AppState): void => {
     if (state !== AppState.AssetGallery && gallery) closeGallery();
     if (state !== AppState.Saves && saveScreen) closeSaves();
+    if (state !== AppState.WorldMap && worldScreen) closeWorld();
 
     switch (state) {
       case AppState.MainMenu:
@@ -309,7 +409,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           () => stateMachine.transition(AppState.Loading),
           () => stateMachine.transition(AppState.AssetGallery),
           () => stateMachine.transition(AppState.Saves),
+          () => stateMachine.transition(AppState.WorldMap),
         );
+        break;
+      case AppState.WorldMap:
+        openWorld();
         break;
       case AppState.Saves:
         void openSaves().catch((error) => {
@@ -349,6 +453,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       gallery?.dispose();
       galleryScreen?.dispose();
       saveScreen?.dispose();
+      globeView?.dispose();
+      worldScreen?.dispose();
       repository.close();
       overlay?.dispose();
       kernel?.dispose();

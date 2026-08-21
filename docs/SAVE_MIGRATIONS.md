@@ -5,18 +5,20 @@ How save files are versioned, upgraded, and protected. Read with
 
 ## Two independent versions
 
-| Constant             | Where                      | Covers                                  |
-| -------------------- | -------------------------- | --------------------------------------- |
-| `ROOT_SAVE_VERSION`  | `src/saves/schema.ts`      | The save envelope: metadata and wrapper |
-| `SIM_SCHEMA_VERSION` | `src/simulation/kernel.ts` | The simulation snapshot inside it       |
+| Constant               | Where                      | Covers                                  |
+| ---------------------- | -------------------------- | --------------------------------------- |
+| `ROOT_SAVE_VERSION`    | `src/saves/schema.ts`      | The save envelope: metadata and wrapper |
+| `SIM_SCHEMA_VERSION`   | `src/simulation/kernel.ts` | The simulation snapshot inside it       |
+| `WORLD_SCHEMA_VERSION` | `src/world/worldState.ts`  | The world section inside it             |
 
 They move independently so a metadata change does not force a simulation
 migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 1`
+- `ROOT_SAVE_VERSION = 2`
 - `SIM_SCHEMA_VERSION = 1`
+- `WORLD_SCHEMA_VERSION = 1`
 
 ## Version history
 
@@ -24,6 +26,7 @@ migration, or the reverse.
 | ------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0       | A bare `SimSnapshot`: `{ schemaVersion, seed, tick, entities }` | Not a format any released build wrote. It is what `SimulationKernel.serialize()` returns on its own, which was the only save-like artifact that existed before Milestone 03. Treated as version 0 so a raw snapshot can be imported instead of rejected. |
 | 1       | `{ schemaVersion, savedAt, metadata, sim }`                     | Adds the envelope: name, world seed, play time, last played, sim tick, app version, thumbnail.                                                                                                                                                           |
+| 2       | `{ schemaVersion, savedAt, metadata, sim, world }`              | Adds the world section from Milestone 04: player position on the globe, active sector, active region, and a strategic record per region.                                                                                                                 |
 
 ## Detection
 
@@ -66,6 +69,15 @@ ambiguity.
   unknown. Version 0 has no wall clock time, so `savedAt` and `lastPlayedAt`
   become `0`, and play time is derived from the tick count, which the snapshot
   really does carry.
+
+### Version 1 to 2
+
+A version 1 save predates global coordinates entirely, so no player position is
+recorded anywhere in it. The migration seeds the documented default start
+(`src/world/start.ts`, the Hong Kong Shatterdome) rather than inventing a
+position, and writes an empty region list. `WorldState.restore` then seeds a
+fresh record for every region the current build knows about, so an old save gains
+newly added regions instead of carrying a stale list.
 
 ## Backups and recovery
 
