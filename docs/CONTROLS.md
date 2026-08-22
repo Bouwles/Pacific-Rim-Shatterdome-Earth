@@ -66,15 +66,47 @@ backup can still be loaded.
 
 | Input                | Action                                                           |
 | -------------------- | ---------------------------------------------------------------- |
+| **Globe / Ground**   | Switch between the map and the streamed ground                   |
 | Deploy to + Teleport | Jump to a region centre; the floating origin rebases immediately |
-| **N / S / E / W**    | Walk 1 km in the tangent plane, following the surface            |
-| Left-drag / wheel    | Orbit and zoom the globe                                         |
+| **N / S / E / W**    | Walk 1 km, settling onto the streamed ground where it is loaded  |
+| **Fly route**        | Run the deterministic stress route; press again to stop          |
+| Left-drag / wheel    | Orbit and zoom                                                   |
 
 The readout shows latitude, longitude, altitude, local east/north, the current
 sector and its four neighbours, the active region and its climate, how many
 regions are active versus strategic, the origin anchor, and the rebase count.
 
+Controls sit above the readouts on purpose. The readouts grow as more of the
+world reports itself, and when they were on top the walk and route buttons were
+pushed off the bottom of the screen and under the debug overlay, where they could
+not be clicked at all.
+
+### Ground view
+
+Only the ground view streams sectors, so its instrumentation block appears only
+there. Showing zeroes on the globe would imply a system was running when it was
+not.
+
+| Readout             | Meaning                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| Generator           | `worker` normally, `inline` if the worker could not be constructed |
+| Sector states       | Live count in each of the eight streaming states                   |
+| Resident            | Sectors holding GPU resources now, and the highest seen            |
+| Generated           | Sectors built so far, and how many failed                          |
+| Cache               | Data-cache hits against misses                                     |
+| Cancelled / evicted | Requests dropped in flight, meshes released, boundary rescues      |
+| Generation          | Last and average generation time, measured in the worker           |
+| Upload              | Last and average time to turn terrain into meshes                  |
+| Sector memory       | Resident and cached terrain bytes, with peaks                      |
+| Scene               | Meshes, pooled meshes, thin instances and estimated GPU bytes      |
+| Ground height       | Sampled from the streamed collision field, or `not loaded`         |
+| Stress route        | Progress along the route in seconds                                |
+
+The stress route flies Hong Kong, Manila, Tokyo, Vladivostok and back at 4,000
+metres per second. It is a fixed set of waypoints at a fixed speed and step, so
+two runs are comparable, and it is the same route the headless test drives.
+
 ## Not yet bound
 
-No on-foot movement, Jaeger piloting, camera-mode switch, weapon, squad-command, or menu-navigation keys
+No on-foot player controller, Jaeger piloting, camera-mode switch, weapon, squad-command, or menu-navigation keys
 exist yet. See [../ROADMAP.md](../ROADMAP.md).

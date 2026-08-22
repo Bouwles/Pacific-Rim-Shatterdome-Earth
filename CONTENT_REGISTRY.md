@@ -64,3 +64,45 @@ generator. See `src/data/assets.ts` and `docs/CONTENT_SCHEMA.md`.
 | Name                         | Source | Normalization notes | Status      |
 | ---------------------------- | ------ | ------------------- | ----------- |
 | _(none yet — Phase 8 scope)_ |        |                     | not-started |
+
+## Biomes (Milestone 05)
+
+Seven entries in `src/data/biomes.ts`, one per climate zone, registered through
+`ContentRegistry<BiomeDefinition>` and keyed by the same `ClimateZone` union the
+region table uses, so a region and the terrain under it cannot disagree.
+
+| id          | Display name | Scatter density | Notes                                          |
+| ----------- | ------------ | --------------- | ---------------------------------------------- |
+| polar       | Polar        | 0.05            | Ice shelf and exposed rock                     |
+| subarctic   | Subarctic    | 0.35            | Cold coast and conifer; Anchorage, Vladivostok |
+| temperate   | Temperate    | 0.55            | Mixed farmland and forest                      |
+| subtropical | Subtropical  | 0.60            | Humid coastal hills; Hong Kong                 |
+| tropical    | Tropical     | 0.75            | Dense low canopy, shallow reef water           |
+| arid        | Arid         | 0.12            | Dry coast and bare rock; Lima                  |
+| oceanic     | Open ocean   | 0.00            | Deep water with no land identity               |
+
+Two supporting tables, both data rather than control flow: `SURFACE_CLASSES`
+bands elevation into seabed, shallows, shore, lowland, hills, highland and peak
+with a shade multiplier and a walkable flag; `CLIMATE_BANDS` maps absolute
+latitude to a climate zone.
+
+Biome affects colour and scatter only. It deliberately does not affect elevation.
+
+## Terrain anchors (Milestone 05)
+
+Derived from the eight regions rather than authored separately, by
+`toTerrainAnchors` in `src/data/regions.ts`. `KIND_TERRAIN_SHAPE` maps region kind
+to a land mask target and whether the region is populated, so the generator never
+learns what a Shatterdome is. The seven land regions pull terrain to a coastal
+shelf and carry city cells; the Breach pulls it to deep water and carries none.
+
+Measured at seed 20260822: every land region has ground between 153 m and 403 m
+with between 6 and 33 city cells, six of the eight keep a coastline, and the
+Breach is 100 percent water with nothing built on it.
+
+## Generated content is not registered content
+
+City cells, traffic lanes and landmarks are generated per sector from the world
+seed. They are not registry entries, carry no manifest, and are not tracked here.
+When buildings become real assets they will move to the asset registry and be
+listed with the rest.

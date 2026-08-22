@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-253 unit and integration tests across 23 files, plus 40 Playwright browser tests.
+332 unit and integration tests across 29 files, plus 49 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -24,8 +24,14 @@
   - `events` — buffered emit/drain, per-type delivery, unsubscribe, handler re-entrancy deferred to the next drain (drain terminates), dispose clears queue and subscriptions.
   - `loop` — pause/resume, single-step is exactly one tick and not sticky, slow motion and fast forward, time-scale validation, and four catch-up-safety tests (huge delta capped, no backlog on the next frame, bounded across repeated suspensions, negative deltas ignored).
   - `registry`, `jaegers` — unchanged from Milestone 00.
+  - `terrainNoise` — same seed and point gives the same value regardless of how many samples came before it, seeds separate, negative lattice coordinates behave, value noise stays inside 0 to 1, the field is continuous across integer lattice boundaries, fBm normalises for any octave count, a zero octave count is rejected.
+  - `terrain` — cache key covers every input that changes the bytes; identical content for the same key whatever is generated in between; a different seed differs; **shared edges between neighbouring sectors match exactly, not approximately**; grid resolution and collision presence follow level of detail; cost falls at every coarser level; every populated region is above water and on its authored climate; the ocean region is fully water with nothing built on it; city cells appear only near a populated anchor; detail thins with level of detail and stops at the far ring; collision sampling interpolates and clamps at the edges; malformed requests and a non-finite anchor mask target are rejected by name.
+  - `terrainProtocol` — worker messages validate in both directions, a version mismatch is rejected with the expected version named, unknown types and non-integer ids are refused; the inline service generates, honours a cancel issued in the same turn, rejects work issued after disposal, and distinguishes a cancellation from a real failure.
+  - `sectorStreaming` — the eight states are named and ordered; a sector walks queued to generating to cpu-ready to active; the whole ring set loads with the right level of detail per ring and the outer ring asleep; sectors out of range are released while their data stays cached; turning around reuses the cache with identical digests; an in-flight request for a sector the player has left is cancelled and cannot resurrect it; a generation failure is counted and leaves nothing stuck; travel direction and a declared deployment target reorder the queue; concurrency and upload caps hold; the memory budget evicts without ever dropping the ground underfoot; a boundary wobble is rescued rather than rebuilt; ground height is only reported where collision data is resident; dispose releases everything and is safe twice. Plus the data cache: LRU eviction by bytes, promotion on read, and a rejected nonsensical budget.
 - **Integration** (`tests/integration/`):
   - `appState` — unchanged from Milestone 00.
+  - `sectorStreaming` (Milestone 05) — route samples follow great circles at constant speed and report turns; a route it cannot fly is rejected; the full stress route runs with a leak-checking sink that asserts every upload is released exactly once; memory holds steady across three laps; the second lap of a route regenerates nothing; two streamers on the same seed produce identical digests and different seeds differ; ground height stays available underfoot for a whole route; a deliberately tiny memory budget evicts rather than refusing to load.
+  - `sectorRenderer` (Milestone 05) — geometry carries a skirt and per-vertex colour; a sector root lands at the sector centre in the current anchor frame; a rebase moves roots and leaves vertex buffers untouched, matching `rebaseLocal` exactly; city cells are thin instances; an empty ocean sector builds no city, traffic or landmark meshes; meshes are recycled instead of reallocated across load cycles; sleeping disables rather than destroys; unknown sector ids are tolerated; **disposal returns the scene to its exact original mesh, material, node and light counts**; re-uploading replaces rather than orphans; a disposed renderer accepts nothing.
   - `kernel` — command boundary (queued not immediate, unknown type, schema-version mismatch, field-level payload errors, idempotent despawn, spawn/despawn events), determinism (same seed+commands ⇒ same hash; different seed ⇒ different hash; different commands ⇒ different hash; hash advances with motion; step grouping does not affect result), and snapshot round-trip (identical hash, deterministic continuation after restore, seed/schema mismatch rejected).
   - `scenarioRunner` — repeated runs of `kernel-smoke` hash identically; entity count reflects the mid-run despawn; hash changes on seed change and on command change; scenario validation rejects out-of-range scheduling and non-positive tick counts.
 - **Unit, assets** (`tests/unit/assetManifest.test.ts`, `assetInspection.test.ts`): manifest validation (fallback generator required, unknown and duplicate sockets, malformed colours, out of range material values, duplicate animation tags, provenance required, registry rejects rather than stores), override containment, shipped manifests cover every class and ship no third party content; inspection validation (wrong unit, tolerated drift, wrong forward axis, offset origin, missing socket node, missing clip, failed textures, budget overruns warn rather than error, class-specific budgets).
@@ -141,3 +147,17 @@ Manually verified in one Chromium-based browser via Chrome DevTools MCP (WebGPU 
 ## Known failures
 
 None currently open.
+
+## Milestone 05 acceptance evidence
+
+Measured on WebGPU at seed 20260822, not inferred.
+
+| Acceptance item                                    | Evidence                                                                                                                                             |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flying rapidly does not freeze the main thread     | 24.0 s of the stress route advanced 1,443 simulation ticks, exactly 60 per second, at 144 fps with a worst frame of 0.3 ms                           |
+| Flying rapidly does not leak sectors               | Resident peaked at 49 and never higher; the leak-checking sink asserts every uploaded sector is released exactly once, and disposal leaves zero live |
+| Turning around reuses cache data                   | Laps two and three of the full route generated zero new sectors; cache hits went 253, 709, 1,165                                                     |
+| Identical sectors are not regenerated differently  | Content digests are asserted equal for the same key, across streamers, and after a return trip                                                       |
+| Stable memory after repeated load and evict cycles | Resident 0.16 MB, cached 1.26 MB in 252 entries, scene 108 meshes and 0.50 MB GPU, byte identical across three laps                                  |
+| Terrain generation is off the render loop          | The panel reports `worker`; the browser test asserts it rather than accepting the inline fallback                                                    |
+| Meshes are not kept alive for cached data          | Evicting frees meshes and keeps data; asserted in both unit and integration tests                                                                    |

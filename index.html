@@ -150,6 +150,18 @@
         flex-direction: column;
         gap: 10px;
         font-size: 13px;
+        /* The streaming readout doubled this panel's height, pushing the walk and
+           route buttons off screen and then under the debug overlay, where they
+           could not be clicked at all. Stop short of the overlay and scroll the
+           readouts inside the panel instead. */
+        max-height: calc(100vh - 240px);
+        overflow-y: auto;
+      }
+      /* An author `display` rule outranks the user agent's `[hidden]` rule, so a
+         hidden flex row stayed on screen. Important is the right tool here: the
+         attribute has to win over every layout rule below, present and future. */
+      #uiRoot [hidden] {
+        display: none !important;
       }
       #uiRoot .world-header {
         display: flex;
@@ -210,6 +222,27 @@
       #uiRoot .world-walk button {
         padding: 4px 12px;
         font-size: 12px;
+      }
+      #uiRoot .world-view {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #uiRoot .world-view button {
+        padding: 4px 14px;
+        font-size: 12px;
+      }
+      #uiRoot .world-view button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
+      }
+      /* Streaming instrumentation reads as a second block, not as more coordinates. */
+      #uiRoot .world-streaming {
+        border-top: 1px solid #1d3244;
+        padding-top: 8px;
+      }
+      #uiRoot .world-streaming .world-key {
+        color: #86a7bd;
       }
       /* The save panel is a working list, not a dialog. */
       #uiRoot .screen-saves {

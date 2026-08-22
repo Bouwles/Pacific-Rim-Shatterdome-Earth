@@ -23,9 +23,12 @@ The project is built in numbered milestones. Everything listed here actually run
 - Asset gallery reachable from the main menu, where every placeholder can be rotated, measured, damaged and swapped to a different manifest
 - A scaled cube sphere Earth with real latitude and longitude, 1,536 sectors, and a floating origin that keeps the numbers small however far you travel, so nothing jitters
 - A globe map you can deploy from, showing where you are, which sector you are in, and which regions are being simulated in detail rather than tracked as records
+- A ground view that streams the world in as you move: generated terrain with coastlines, hills and seabed, water, city blocks, roadside traffic markers and landmarks, all built from the world seed so the same seed always gives the same planet
+- Sector streaming with levels of detail, mesh reuse, memory budgets and a cache, so flying across the world never stutters and never grows: terrain is generated on a background thread, and what you have already seen is remembered rather than rebuilt
+- A stress route you can fly from the panel, and a live readout of everything streaming is doing, from generation time to memory to how many sectors are loaded
 - Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
 
-Not built yet: the walkable Shatterdome, Jaeger combat, terrain and cities on the globe, kaiju behaviour, the economy, copilots, and everything else in the list below. The world today is coordinates, sectors and region records rather than ground you can stand on. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: the walkable Shatterdome, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
 ### Using your own models
 
@@ -94,7 +97,7 @@ npm run dev
 
 Then open the address it prints, usually http://localhost:5173.
 
-Add `?seed=12345` to the URL to run the simulation on a specific seed. Press F3 to toggle the debug overlay.
+Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines and cities. Press F3 to toggle the debug overlay.
 
 ### Other commands
 
@@ -113,7 +116,8 @@ npm run smoke         Playwright browser tests
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
 src/assets       asset manifests, procedural generators, model validation, resolver
-src/world        globe coordinates, cube sphere sectors, floating origin, strategic regions
+src/world        globe coordinates, cube sphere sectors, floating origin, regions, terrain, sector streaming
+src/workers      terrain generation off the main thread
 src/saves        save schema, migrations, IndexedDB storage, backups and recovery
 src/engine       Babylon engine selection and the boot scene
 src/app          bootstrap, application state machine, config

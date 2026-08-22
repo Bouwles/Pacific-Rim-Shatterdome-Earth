@@ -2,7 +2,7 @@
 
 Documents the typed shapes registered content must satisfy. Extend this file every time a new
 `ContentRegistry<T>` consumer is added (see [ARCHITECTURE.md](ARCHITECTURE.md) → "Data-registry pattern").
-Only one schema exists as of Milestone 00.
+Schemas are added as the milestones that need them land; the terrain and biome schemas below are the newest.
 
 ## `JaegerDefinition` (src/data/jaegers.ts)
 
@@ -170,6 +170,104 @@ where `checksum` is `hashState(document)`.
 regions sorted by id so the form is canonical. Validation rejects an unknown
 region, a malformed sector id, and any snapshot claiming more than one active
 region.
+
+## Terrain and biome schemas (Milestone 05)
+
+Terrain is generated, not authored, so these schemas describe what the generator
+is given and what it returns. Nothing here is a claim about real geography: the
+generator knows a sample's latitude, a seeded moisture field, and the authored
+anchors below, and nothing else. Real coastlines, mountain ranges, rivers and
+city footprints are not reproduced and are not attempted.
+
+### `BiomeDefinition` (src/data/biomes.ts)
+
+One row per climate zone, keyed by the same `ClimateZone` union the region schema
+uses, so a region and the terrain under it cannot disagree about what a climate is.
+
+| Field            | Type                     | Constraint                             |
+| ---------------- | ------------------------ | -------------------------------------- |
+| `id`             | `ClimateZone`            | must be one of the seven climate zones |
+| `displayName`    | `string`                 | required                               |
+| `colour`         | `[number,number,number]` | three channels within 0 to 1           |
+| `waterColour`    | `[number,number,number]` | three channels within 0 to 1           |
+| `scatterDensity` | `number`                 | 0 to 1                                 |
+| `notes`          | `string`                 | free text                              |
+
+Biome affects colour and scatter only. It deliberately does not affect elevation:
+climate is resolved per sector, so letting it touch height made two adjacent
+sectors in different climate bands disagree along their shared edge by a measured
+25.6 m, which reads on screen as a wall running down a sector boundary.
+
+`SURFACE_CLASSES` layers a second table over the biome, banded by elevation
+(seabed, shallows, shore, lowland, hills, highland, peak), each with a shade
+multiplier and a `walkable` flag. Seven biomes times seven surfaces beats a
+forty-nine row table nobody would keep consistent.
+
+`CLIMATE_BANDS` maps absolute latitude to a climate zone as data rather than as a
+chain of comparisons.
+
+### `TerrainAnchor` (src/world/terrain.ts, built in src/data/regions.ts)
+
+The narrow, structured-cloneable view of a region that terrain generation is
+allowed to see. It crosses the worker boundary, so it carries no gameplay fields.
+
+| Field                 | Type          | Constraint                              |
+| --------------------- | ------------- | --------------------------------------- |
+| `regionId`            | `string`      | required                                |
+| `latitudeDeg`         | `number`      | finite                                  |
+| `longitudeDeg`        | `number`      | finite                                  |
+| `radiusMeters`        | `number`      | finite, positive                        |
+| `populationThousands` | `number`      | non-negative                            |
+| `maskTarget`          | `number`      | finite; above 0.5 is land, below is sea |
+| `climate`             | `ClimateZone` | must have a registered biome            |
+| `populated`           | `boolean`     | false suppresses city cells and lanes   |
+
+Anchors exist because pure noise does not respect authored content. Without them
+a Shatterdome lands at the bottom of the sea, and an open-ocean region comes out
+as a 640 m mountain; both were measured on this seed. `KIND_TERRAIN_SHAPE` in
+`src/data/regions.ts` maps region kind to `maskTarget` and `populated` as a
+table, so the generator never learns what a Shatterdome is.
+
+`validateTerrainRequest` rejects a non-finite `maskTarget` by name. Left
+unchecked it poisons every sample it touches and returns a sector of NaN heights,
+which renders as nothing at all rather than as an error.
+
+### `TerrainRequestParams` and the cache key
+
+`{ sectorId, lod, seed, anchors }`. The cache key is
+`t<schema>|s<seed>|<sectorId>|lod<level>` and carries everything that can change
+the resulting bytes, which is what makes a cache hit safe to substitute for
+generation.
+
+### `SectorTerrain` (`TERRAIN_SCHEMA_VERSION = 1`)
+
+Returned by the generator and transferred out of the worker. Positions are ECEF
+so they do not depend on where the floating origin happens to be.
+
+| Field                                    | Type                | Note                                           |
+| ---------------------------------------- | ------------------- | ---------------------------------------------- |
+| `positions`                              | `Float64Array`      | ECEF metres, three per vertex                  |
+| `heights`                                | `Float32Array`      | metres above sea level, one per vertex         |
+| `surfaces`                               | `Uint8Array`        | index into `SURFACE_CLASSES`                   |
+| `biomeId`, `climate`                     | `ClimateZone`       | resolved per sector                            |
+| `coastline`, `waterFraction`             | `boolean`, `number` | coast means both land and water present        |
+| `cityCells`, `landmarks`, `trafficLanes` | arrays              | empty where the sector has no populated anchor |
+| `collision`                              | field or `null`     | present only at level of detail 0 and 1        |
+| `estimatedBytes`, `digest`               | `number`            | budget accounting and content identity         |
+
+`digest` is a quantised FNV-1a hash of the content. Two generations of the same
+cache key must produce the same digest; that is the property the streaming tests
+assert when the player turns around.
+
+Traffic lanes carry a polyline and a marker count. The markers are a static
+representation of traffic density. Nothing moves, routes, or reacts.
+
+### Terrain worker protocol (`TERRAIN_PROTOCOL_VERSION = 1`)
+
+Requests are `generate` or `cancel`; responses are `generated`, `cancelled` or
+`failed`. Both directions validate the version and the message type and reject a
+mismatch loudly, because a worker built from a stale bundle otherwise shows up as
+terrain that quietly never arrives.
 
 ## Not yet defined
 

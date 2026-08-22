@@ -109,7 +109,7 @@ export function ecefToGeo(point: EcefPosition): GeoPosition {
   };
 }
 
-interface TangentBasis {
+export interface TangentBasis {
   readonly east: EcefPosition;
   readonly north: EcefPosition;
   readonly up: EcefPosition;
@@ -172,6 +172,51 @@ export function surfaceDistanceMeters(a: GeoPosition, b: GeoPosition): number {
   // the active bubble actually deals with.
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * WORLD_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Point `t` of the way along the great circle from `a` to `b`, altitude blended
+ * linearly. Straight-line interpolation of latitude and longitude bends the path
+ * and moves at the wrong speed near the poles; slerping the direction vectors
+ * does not.
+ */
+export function interpolateGeo(a: GeoPosition, b: GeoPosition, t: number): GeoPosition {
+  const pa = geoToEcef({ ...a, altitudeMeters: 0 });
+  const pb = geoToEcef({ ...b, altitudeMeters: 0 });
+  const inverseRadius = 1 / WORLD_RADIUS_METERS;
+  const ua = { x: pa.x * inverseRadius, y: pa.y * inverseRadius, z: pa.z * inverseRadius };
+  const ub = { x: pb.x * inverseRadius, y: pb.y * inverseRadius, z: pb.z * inverseRadius };
+
+  const cosAngle = Math.min(1, Math.max(-1, ua.x * ub.x + ua.y * ub.y + ua.z * ub.z));
+  const angle = Math.acos(cosAngle);
+  const altitude = a.altitudeMeters + (b.altitudeMeters - a.altitudeMeters) * t;
+
+  // Coincident or antipodal endpoints make the slerp weights degenerate; a plain
+  // lerp of the directions is correct in the first case and arbitrary but stable
+  // in the second, which is all an antipodal midpoint can be.
+  if (angle < 1e-9 || Math.abs(Math.PI - angle) < 1e-9) {
+    const blended = {
+      x: ua.x + (ub.x - ua.x) * t,
+      y: ua.y + (ub.y - ua.y) * t,
+      z: ua.z + (ub.z - ua.z) * t,
+    };
+    const length = Math.sqrt(blended.x ** 2 + blended.y ** 2 + blended.z ** 2) || 1;
+    const radius = WORLD_RADIUS_METERS / length;
+    return {
+      ...ecefToGeo({ x: blended.x * radius, y: blended.y * radius, z: blended.z * radius }),
+      altitudeMeters: altitude,
+    };
+  }
+
+  const sinAngle = Math.sin(angle);
+  const wa = Math.sin((1 - t) * angle) / sinAngle;
+  const wb = Math.sin(t * angle) / sinAngle;
+  const point = ecefToGeo({
+    x: (ua.x * wa + ub.x * wb) * WORLD_RADIUS_METERS,
+    y: (ua.y * wa + ub.y * wb) * WORLD_RADIUS_METERS,
+    z: (ua.z * wa + ub.z * wb) * WORLD_RADIUS_METERS,
+  });
+  return { ...point, altitudeMeters: altitude };
 }
 
 /** Straight-line distance through the globe, in metres. */

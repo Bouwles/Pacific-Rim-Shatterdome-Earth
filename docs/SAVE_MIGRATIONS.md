@@ -108,3 +108,19 @@ Authoritative simulation state only. Meshes, materials, cameras, physics bodies,
 asset resolution results and UI state are all rebuilt on load. `validateRootSave`
 runs the document through `hashState`, which throws on functions, `undefined` and
 cycles, so a non-serializable value cannot reach storage.
+
+## Milestone 05: no migration, deliberately
+
+Sector streaming added no authoritative state, so the save format did not change
+and `ROOT_SAVE_VERSION` stays at 2.
+
+Terrain is a pure function of `(world seed, sector id, level of detail)`. The seed
+is already stored in `sim.seed`, so a loaded save regenerates byte-identical
+terrain without any of it being written to disk. Two streamers built from the
+same seed are asserted to produce the same content digest for every sector, and
+different seeds are asserted to differ.
+
+Writing generated terrain into a save would have made saves grow without bound
+with distance travelled, and would have frozen worlds against future changes to
+the generator. Recording the seed and regenerating is both smaller and more
+durable.

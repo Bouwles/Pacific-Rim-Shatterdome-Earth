@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 04. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 05. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -16,6 +16,8 @@ src/
                         hooks, disposal. Nothing outside this file is allowed to branch on backend.
     scene.ts           builds the boot scene: ground, reference-size Jaeger placeholder, sun light + shadow,
                         sky color, orbit/debug camera
+    sectorRenderer.ts  Babylon presentation for streamed sectors: pooled meshes, thin instances, skirts,
+                        rebase by root transform. The only Babylon-aware part of streaming.
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
     clock.ts           FixedStepClock — accumulator-pattern fixed timestep, epsilon-guarded, substep-capped
     loop.ts             SimulationLoop — render-delta → ticks, pause/resume/single-step/time scale,
@@ -34,13 +36,21 @@ src/
     budgets.ts          per-class triangle/material/texture ceilings
     generators.ts       parameterised procedural generators + MaterialPalette
     resolver.ts         manifest -> renderable: model first, generator fallback, one warning, disposal
-  world/               ← globe coordinates and strategic layer; no Babylon, no DOM
-    coordinates.ts      geodetic/ECEF/tangent conversions, distances, validation
-    cubeSphere.ts       sector ids, addressing, tangent-adjusted projection, neighbours
+  world/               ← globe coordinates, terrain and streaming; no Babylon, no DOM
+    coordinates.ts      geodetic/ECEF/tangent conversions, distances, great-circle interpolation
+    cubeSphere.ts       sector ids, addressing, tangent-adjusted projection, neighbours, ring expansion
     floatingOrigin.ts   anchor, rebase policy, exact rebaseLocal
     regions.ts          region and record types, climates, simulation tiers
     worldState.ts       authoritative world state, tiering, snapshots
     start.ts            default start position, shared by saves and migrations
+    terrainNoise.ts     position-hashed 3D value noise, fBm and ridged variants
+    terrain.ts          sector terrain generation, cache keys, collision sampling
+    terrainService.ts   the generation boundary plus the inline (main-thread) implementation
+    sectorStreaming.ts  sector state machine, LOD rings, priorities, budgets, LRU data cache
+  workers/             ← the only code that runs off the main thread
+    protocol.ts         versioned, validated terrain request/response messages
+    terrainWorker.ts    worker entry: queued generation, cancellation, buffer transfer
+    terrainWorkerClient.ts  main-thread half; falls back to inline when workers are unavailable
   saves/               ← persistence; only indexedDbRepository.ts touches a browser API
     schema.ts           RootSave envelope, metadata, validation, checksums, slot naming
     migrations.ts       pure versioned migration steps + the chain runner
@@ -52,7 +62,8 @@ src/
     registry.ts         generic ContentRegistry<T> — typed table + validator + duplicate/unknown-id guards
     jaegers.ts           JaegerDefinition type + one placeholder entry proving the registry pattern
     assets.ts            the shipped asset manifests, one per placeholder
-    regions.ts           the shipped strategic regions
+    regions.ts           the shipped strategic regions and the terrain anchors they produce
+    biomes.ts            biome table, surface classes, climate bands
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
     scenarioRunner.ts    headless deterministic scenario runner + `kernel-smoke` fixture
@@ -76,7 +87,7 @@ public/
 
 Everything else in the target shape (`jaegers/`, `kaiju/`, `combat/`, `destruction/`,
 `shatterdome/`, `missions/`, `progression/`, `copilots/`, `audio/`, `network/`,
-`sandbox/`, `workers/`) does not exist yet — see [ROADMAP.md](../ROADMAP.md) for which phase
+`sandbox/`) does not exist yet — see [ROADMAP.md](../ROADMAP.md) for which phase
 introduces each one. See TECH_DECISIONS.md's "grow-into, not scaffold-ahead" entry for why.
 
 ## Simulation kernel
@@ -244,6 +255,61 @@ Full detail, including the measured numbers behind each choice, is in
 One deliberate boundary: `src/world/**` uses trigonometry, which `src/simulation/**`
 is forbidden from doing. There is no way to place points on a sphere without it,
 so world coordinates sit outside the bit-exact kernel. See TECH_DECISIONS.md.
+
+## Sector streaming
+
+Three modules with one seam between each pair, so each can be tested without the others.
+
+**Generation** (`world/terrain.ts`) is a pure function of `(seed, sectorId, lod, anchors)`.
+It draws from noise hashed on the sample position rather than from an RNG stream,
+because two sectors sharing an edge have to agree on that edge no matter which was
+generated first, or whether the other was generated at all. Shared edges match
+exactly, not approximately: the test asserts a difference of zero.
+
+**Scheduling** (`world/sectorStreaming.ts`) owns the state machine: `absent`,
+`queued`, `generating`, `cpu-ready`, `gpu-uploading`, `active`, `sleeping`,
+`evicting`. It knows nothing about Babylon and hands finished terrain to a
+`SectorSink`. Two rules shape it:
+
+1. Terrain data and GPU meshes have separate lifetimes. Evicting a sector frees its
+   meshes and keeps its data in a byte-bounded LRU cache, so turning around is
+   cheap without a single mesh being kept alive for the sake of cached data.
+2. Nothing blocks. Generation and upload are both promises, and both are rate
+   limited per update, so a burst of forty nine sectors cannot land in one frame.
+
+Rings are square, expanded breadth-first through the eight surrounding sectors.
+Edge-only expansion makes diamond rings, which leave the four corners of the
+loaded area empty; on screen that is a black notch in the middle distance where
+the ground stops. Depth 0 to 2 is visible at levels of detail 0 to 2, depth 3 is
+uploaded and slept as a preload ring. Priority is ring depth first, then a
+velocity bias within a ring, then a deployment target worth a ring and a half.
+
+Eviction is deferred by one update. A sector that leaves and returns within a
+frame, which is what happens when the player wobbles across a boundary, is
+rescued instead of rebuilt.
+
+**Presentation** (`engine/sectorRenderer.ts`) builds vertices in each sector's own
+tangent frame rather than the player's. A floating origin rebase then costs one
+transform per sector root instead of rebuilding every vertex buffer, and stays
+exact, because the rotation between the two frames is carried by the root rather
+than approximated away. Meshes are pooled by level of detail, city cells and
+traffic markers are thin instances, and every mesh carries a skirt sized from the
+sector's own relief to cover the gap where a coarser neighbour samples the shared
+edge at half the resolution.
+
+**Off the main thread.** `workers/terrainWorker.ts` is the only code in the project
+that runs off the main thread. It drains one job at a time with a macrotask
+between them, so a cancel for a sector the player has already flown past lands
+before that sector is generated rather than after. Buffers are transferred, not
+copied. `WorkerTerrainService.create()` falls back to inline generation with one
+warning if a worker cannot be constructed; the streamer cannot tell the
+difference, and the panel reports which path is live rather than leaving it to
+be guessed.
+
+**No new authoritative state.** Terrain is derived from the world seed, which the
+save already stores, so nothing about streaming is written to a save and no
+migration was needed. Two streamers built from the same seed produce identical
+digests for every sector; that is asserted rather than assumed.
 
 ## Persistence
 

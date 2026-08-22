@@ -117,7 +117,29 @@ Raised the save envelope to version 2 with a real migration for the new world se
 - `npm run typecheck`, `lint`, `format:check`, `test` (253), `smoke` (40), `build` all pass.
   **Next action:** none — complete. Proceed to Phase 2.
 
-## Phase 2 — Shatterdome walkable hub (vertical slice)
+## Phase 1.97 / Milestone 05 - Sector streaming, procedural terrain, and world partition
+
+**Depends on:** Milestone 04 (coordinates, sectors, floating origin).
+**Status:** done.
+**Scope:** asynchronous sector lifecycle across eight states, seeded procedural terrain with coast and
+biome identity, LOD rings with thin instances and mesh pooling, cancellation tokens, memory budgets,
+velocity and deployment-target priorities, generation moved into a typed worker, deterministic cache
+keys, and full instrumentation. Created `src/workers/`, `src/world/terrain*.ts`,
+`src/world/sectorStreaming.ts`, `src/engine/sectorRenderer.ts`, `src/data/biomes.ts`,
+`src/debug/streamRoute.ts`. Added a ground view to the world screen.
+**Acceptance tests:**
+
+- Flying rapidly does not freeze the main thread or leak sectors: 24 s of the stress route advanced
+  1,443 simulation ticks, that is a full 60 per second, at 144 fps with a worst frame of 0.3 ms.
+  A leak-checking sink asserts every uploaded sector is released exactly once.
+- Turning around reuses cache data and regenerates nothing: laps two and three of the route generated
+  zero new sectors, with cache hits climbing 253, 709, 1,165 and identical content digests.
+- Stable memory across repeated load and evict cycles: resident, cached and scene figures were byte
+  identical across three laps, at 0.16 MB resident and 1.26 MB cached in 252 entries.
+- `npm run typecheck`, `lint`, `format:check`, `test` (332), `smoke` (49), `build` all pass.
+  **Next action:** none - complete. Proceed to Phase 2.
+
+## Phase 2 - Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.
 **Status:** not-started.
@@ -125,7 +147,8 @@ Raised the save envelope to version 2 with a real migration for the new world se
 **Acceptance tests:** player can walk the hub, open a management panel, save and reload state, all offline.
 **Next action:** the on-foot player controller and the first real Shatterdome interior, which is the first
 consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to a manifest.
-Persistence already exists (Milestone 03), so hub state can be saved as soon as there is any.
+Persistence already exists (Milestone 03), and the streamed ground now gives a controller real terrain and
+a real height field to walk on (Milestone 05), so the controller has somewhere to stand from day one.
 
 ## Phase 3 — Single Jaeger + single kaiju combat vertical slice
 

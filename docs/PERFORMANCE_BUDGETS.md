@@ -12,7 +12,11 @@ exactly one rendering configuration today (whatever `EngineAdapter`/`buildBootSc
 active physics bodies, seed, and run state, backed by Babylon's `SceneInstrumentation`. Physics reads
 "n/a (no backend)" until a physics engine is wired — see ARCHITECTURE.md.
 
-Not tracked yet: AI agents, debris, particles, shadow map count, texture memory, streamed sectors, audio
+Streamed sectors are tracked as of Milestone 05, in the ground view's own
+instrumentation block: sector counts by state, generation and upload time, data
+and GPU bytes, cache hits, evictions and cancellations.
+
+Not tracked yet: AI agents, debris, particles, shadow map count, texture memory, audio
 voices. Those budgets are meaningless before the systems that would consume them exist.
 
 ## Per-asset budgets (Milestone 02)
@@ -76,6 +80,64 @@ where on the planet you are.
 Measured in the browser: the globe view costs 15 draw calls, holding steady
 across a 25 km walk with 28 rebases, so neither sector tiles nor their materials
 accumulate.
+
+## Sector streaming budget (Milestone 05)
+
+Configured ceilings, all injectable per streamer:
+
+| Quantity               | Value      | Note                                                     |
+| ---------------------- | ---------- | -------------------------------------------------------- |
+| Ring depth             | 3          | Square rings; 49 sectors resident, 25 of them visible    |
+| Levels of detail       | 0 to 3     | 33, 17, 9 and 5 vertices per sector edge                 |
+| Collision detail       | lod 0 to 1 | A 17 by 17 height field; coarser rings carry none        |
+| Concurrent generations | 2          | Above the ring count so a burst cannot land in one frame |
+| Uploads per update     | 1          | Mesh building is main-thread work and is paced           |
+| Sector memory budget   | 96 MB      | Resident terrain data                                    |
+| Data cache budget      | 48 MB      | Byte-bounded LRU, holds data only, never meshes          |
+
+Measured in the browser on WebGPU at seed 20260822, standing in Hong Kong with
+all 49 sectors resident:
+
+| Measurement           | Value                                       |
+| --------------------- | ------------------------------------------- |
+| Generation            | 0.4 ms average, in the worker               |
+| Upload                | 0.2 ms average, on the main thread          |
+| Resident terrain data | 0.17 MB                                     |
+| Scene                 | 108 meshes, 137 thin instances, 0.50 MB GPU |
+| Draw calls            | 38                                          |
+| Frame time            | 0.1 to 0.2 ms, 144 fps                      |
+
+The 96 MB budget does not bind at these sizes; ring distance is what bounds
+residency today. The budget is kept because it will bind once sectors carry
+textures and props, and its eviction path is tested directly by running a route
+with the budget set to 60 KB.
+
+### Stress route
+
+The deterministic route flies Hong Kong, Manila, Tokyo, Vladivostok and back at
+4,000 m/s in 0.25 s steps, 41 seconds end to end. Measured over 24 seconds of it:
+
+| Measurement               | Value                                       |
+| ------------------------- | ------------------------------------------- |
+| Simulation ticks advanced | 1,443 in 24.0 s, that is 60 per second      |
+| Frame rate                | 144 fps throughout, worst frame time 0.3 ms |
+| Sectors crossed           | 9, with 32 floating origin rebases          |
+| Evictions                 | 70                                          |
+| Resident sectors          | 49 peak, never higher                       |
+| Resident terrain data     | 0.15 to 0.17 MB                             |
+| Pooled meshes             | 20 held for reuse at the end of the run     |
+
+Three consecutive laps of the full route:
+
+| Lap | Sectors generated | Cache hits | Resident | Cached         | Scene                   |
+| --- | ----------------- | ---------- | -------- | -------------- | ----------------------- |
+| 1   | 252               | 253        | 0.16 MB  | 1.26 MB in 252 | 108 meshes, 0.50 MB GPU |
+| 2   | 252               | 709        | 0.16 MB  | 1.26 MB in 252 | 108 meshes, 0.50 MB GPU |
+| 3   | 252               | 1,165      | 0.16 MB  | 1.26 MB in 252 | 108 meshes, 0.50 MB GPU |
+
+Laps two and three generated nothing at all: every sector came from the cache,
+and resident, cached and scene figures were identical to the byte. That is the
+evidence behind the stable-memory and no-regeneration acceptance items.
 
 ## Frame pacing guarantees (Milestone 01)
 

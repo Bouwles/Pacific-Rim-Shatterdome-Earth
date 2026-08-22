@@ -97,8 +97,13 @@ monotonic across every sector boundary.
 
 Walking a straight line in a flat tangent plane lifts you off a curved globe:
 measured at 239 m of false altitude over a 25 km walk. Movement carries the
-previous geodetic altitude across, keeping the player on the surface until real
-terrain heights exist.
+previous geodetic altitude across, and then settles onto the streamed ground
+wherever a sector with collision detail is resident.
+
+Settling happens every frame rather than once on arrival, because terrain streams
+in after the player is already standing there. Without it the player kept the
+altitude they had when they arrived: measured at 0 m while the ground underneath
+read 169.8 m.
 
 ## Active bubble versus strategic records
 
@@ -112,3 +117,38 @@ active regions, so the rule is enforced by the format rather than by convention.
 
 Region footprints are asserted not to overlap, which keeps the active region
 unambiguous.
+
+## Sampling inside a sector
+
+`sectorSurfacePoint(address, s01, t01, altitude)` returns a real position on the
+globe for cell-relative coordinates in 0 to 1, and `sectorGridCoordinates` is its
+inverse. Both live in `cubeSphere.ts` alongside the face bases and the tangent
+adjustment. A second implementation elsewhere would drift out of sync and seam
+sectors against each other, which is exactly the failure the partition exists to
+avoid.
+
+Terrain generation samples a grid through the first; ground collision reads a
+height field through the second.
+
+## Ring expansion
+
+`sectorsWithinDepth(address, maxDepth)` returns every sector within `maxDepth`
+steps, mapped to the number of steps taken. Expansion goes through the eight
+surrounding sectors rather than the four edge-adjacent ones.
+
+Edge-only expansion produces diamond-shaped rings. On screen that leaves the four
+corners of the loaded area empty, which reads as a black notch in the middle
+distance where the ground simply stops. Including the diagonals makes each ring a
+square, so the loaded area looks like what a viewer expects a loaded area to look
+like. Depth 3 therefore covers a seven by seven block: 49 sectors.
+
+Rings are counted in steps rather than metres because steps are what the
+partition guarantees, and stepping through the shared projection means a ring
+crosses face boundaries correctly without any special case.
+
+## Great-circle interpolation
+
+`interpolateGeo(a, b, t)` slerps the direction vectors rather than interpolating
+latitude and longitude separately, which would bend the path and move at the
+wrong speed near the poles. Coincident and antipodal endpoints fall back to a
+normalised linear blend, since the slerp weights are degenerate there.

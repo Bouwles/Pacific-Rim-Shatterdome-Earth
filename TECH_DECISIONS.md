@@ -242,3 +242,92 @@ kernel. Per-campaign seed generation is a save-system concern and belongs with P
 
 **Decision:** Accept a single >5MB unminified JS chunk (Babylon core) in the Phase 0 production build rather than configuring `manualChunks`/dynamic imports now.
 **Reason:** Premature optimization — there is exactly one entry point and no code-split boundary to speak of yet (no separate Shatterdome/combat/world-map modules exist). Revisit when Phase 2+ introduces distinct feature modules that are natural split points.
+
+## 2026-08-22, Milestone 05
+
+**Terrain noise is hashed on position, not drawn from an RNG stream.** `RngStreams`
+produces a sequence, which is the wrong shape entirely: two sectors sharing an
+edge must agree on that edge regardless of which was generated first, or whether
+the other was generated at all. Hashing the sample position makes generation
+order irrelevant, which is what lets a sector be evicted and rebuilt later
+without the world changing. Measured result: shared edges match to exactly zero.
+
+**Noise is sampled in three dimensions on the sphere, not in two per cube face.**
+A per-face 2D field seams along the twelve cube edges, and no blending hides a
+coastline that stops dead at a face boundary. The cost is eight lattice lookups
+per sample instead of four, which measurement showed to be irrelevant: a full
+level-of-detail-0 sector generates in about 0.5 ms.
+
+**Elevation is independent of biome.** Climate is resolved per sector, so letting
+it touch height made adjacent sectors in different climate bands disagree by a
+measured 25.6 m along their shared edge. Height is one continuous global field;
+biome decides only colour and scatter. Two `BiomeDefinition` fields that existed
+only to feed elevation were deleted rather than left in place looking implemented.
+
+**Region content dictates terrain, through data.** Pure noise put a Shatterdome
+underwater and made the open-ocean Breach a 640 m mountain, both measured on this
+seed. Regions now supply a `TerrainAnchor` carrying a land-mask target, an
+authored climate and whether they are populated. `KIND_TERRAIN_SHAPE` maps region
+kind to those values as a table in the content layer, so the generator never
+branches on what a Shatterdome is.
+
+**The region-to-terrain mapping lives in `src/data/`, not `src/world/`.** Putting it
+in `world/regions.ts` made `world/regions` import `world/terrain`, which imports
+`data/biomes`, which imports `world/regions`. The cycle left both mask constants
+undefined at module-init time and every generated height came out NaN, which
+renders as nothing at all rather than as an error. Content may depend on the
+world layer; the world layer must not depend on content. A validator now rejects
+a non-finite mask target by name so the same class of bug cannot be silent again.
+
+**Streaming rings expand through eight neighbours, not four.** Edge-only
+breadth-first expansion produces diamond rings, which leave the four corners of
+the loaded area empty; on screen that is a black notch in the middle distance
+where the ground stops. Square rings cost more sectors (49 instead of 25 at depth
+three) and are what a viewer expects a loaded area to look like.
+
+**Terrain data and GPU meshes have separate lifetimes.** Evicting a sector frees
+its meshes and keeps its data in a byte-bounded LRU cache. The milestone's
+explicit failure mode, keeping meshes alive because their data remains cached, is
+prevented structurally rather than by discipline: the cache holds `SectorTerrain`
+and has no reference to a mesh.
+
+**Sector vertices are built in each sector's own tangent frame.** A floating origin
+rebase then costs one transform per sector root rather than rebuilding every
+vertex buffer, and stays exact, because the rotation between frames is carried by
+the root. This is the same fact that made `rebaseLocal` necessary in Milestone 04,
+applied to presentation.
+
+**Skirts are sized from each sector's relief.** A coarser neighbour samples the
+shared edge at half the resolution, so the two edges differ by a fraction of the
+sector's height range. A fixed 260 m apron was shallower than that in hilly
+sectors and the gap showed as a black crack running down the seam.
+
+**Nothing about streaming is saved, and the save format did not change.** Terrain
+is a pure function of `(seed, sector, level of detail)` and the seed is already
+stored. Writing generated terrain into a save would make saves grow with distance
+travelled and freeze worlds against future generator changes. `ROOT_SAVE_VERSION`
+stays at 2 and no migration was written, which is the honest outcome rather than
+a version bump for appearance.
+
+**The worker is real, and the fallback is reported.** `WorkerTerrainService.create()`
+falls back to inline generation with one warning when a worker cannot be
+constructed. The streamer cannot tell the difference, and the panel names which
+path is live, because a silent fallback to main-thread generation is exactly the
+kind of hidden performance cliff this project's quality contract forbids.
+
+**Streaming instrumentation appears only in the ground view.** The globe does not
+stream sectors, so showing it a streaming panel full of zeroes would imply a
+system was running when it was not.
+
+**Controls sit above readouts in the world panel.** Readouts grow as more of the
+world reports itself; buttons must stay reachable. When the streaming block was
+added above them, the walk and route buttons went off the bottom of the screen
+and then under the debug overlay, where they could not be clicked at all.
+
+**Terrain constants were chosen by measurement, not taste.** The land-mask target
+was swept across a range and judged on city ground elevation and water fraction
+across all eight regions; 0.56 keeps every region on dry land between 153 m and
+403 m with six of eight retaining a coastline, where 0.62 pushed the same figures
+to 305 m and 810 m for no gain. This is tuning against evidence, not art
+direction, and it will want a proper pass once someone judges how the world
+should look.

@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-08-22, Milestone 05: sector streaming, procedural terrain, and world partition
+
+The globe stopped being coordinates and became ground you can look at. Sectors now load, build, sleep and get thrown away as you move, and the terrain under them is generated rather than authored.
+
+- Terrain is generated from noise hashed on the position of each sample rather than drawn from a random sequence. That sounds like an implementation detail and is the whole design: two sectors that share an edge have to agree on that edge no matter which one was built first, or whether the other was ever built at all. Shared edges match exactly, to zero, not merely closely.
+- Noise is sampled in three dimensions on the sphere rather than in two per cube face. A per face field would seam along the twelve cube edges, and nothing hides a coastline that stops dead at a face boundary.
+- Each sector carries a coast, a biome, city footprints, traffic lane markers, landmarks and a coarse height field the player stands on. None of it claims to be geography. The generator knows the latitude of a sample, a seeded moisture field and the authored regions, and nothing else.
+- Sectors move through eight states: absent, queued, generating, cpu ready, gpu uploading, active, sleeping and evicting. Terrain data and meshes have separate lifetimes throughout. Dropping a sector frees its meshes and keeps its data in a size bounded cache, so turning around costs nothing and no mesh is ever kept alive merely because its data is cached.
+- Heavy generation runs in a real worker behind a versioned, validated message protocol, with buffer handover instead of copying, a job queue, and cancellation that actually lands before a sector the player has flown past gets built. If a worker cannot be created the game generates on the main thread instead and says so on the panel rather than hiding it.
+- Rings are square, three deep, 49 sectors resident and 25 of them drawn. Load order is ring distance first, then which way you are travelling, then anywhere you have said you are deploying to.
+- Meshes are pooled by level of detail, buildings and traffic markers are thin instances, and the whole streaming system reports itself: every state count, generation and upload time, memory, cache hits, cancellations and evictions.
+- Nothing about any of this is saved. Terrain is a pure function of the world seed, which saves already store, so a save regenerates the same world byte for byte without carrying a single vertex. Two streamers on one seed are asserted to agree; on different seeds, to differ.
+- A deterministic stress route flies Hong Kong, Manila, Tokyo, Vladivostok and back, and runs identically headless in a test and live in the browser.
+
+Nine defects were found and fixed rather than documented around. Six of them only showed up once there was something on screen to look at.
+
+Two came from circular reasoning about content. Terrain that ignored authored regions put a Shatterdome underwater and turned the open ocean Breach into a 640 m mountain. Regions now tell the generator what they are, and the generator honours it without ever learning what a Shatterdome is.
+
+One was a genuine module cycle. Moving the region to terrain mapping into the world layer made three files import each other in a ring, which left two constants undefined at startup and produced entire sectors of NaN heights, rendering as nothing at all. The mapping moved to the content layer, and a validator now names a bad anchor instead of quietly producing a sector of nothing.
+
+Letting biome affect elevation made two adjacent sectors in different climate bands disagree by 25.6 m along their shared edge, which reads as a wall running down a sector boundary. Height is now one continuous global field and biome only decides how it is coloured.
+
+Expanding rings through edge neighbours only produced diamonds, which left the four corners of the loaded area empty: a black notch in the middle distance where the ground stopped. Rings now include the diagonals and are square.
+
+A fixed depth apron around each sector was shallower than the height difference between a sector and a coarser neighbour, so seams showed as black cracks. The apron is now sized from the relief of each sector.
+
+Anchorage came out as a 500 m island inside a 3.5 km city, and every candidate building site was rejected as sea. The shaped ground now covers the whole radius of a region. The shelf height was then picked by measuring all eight regions across a range of values rather than by guessing.
+
+The world panel grew tall enough that its buttons went off the bottom of the screen and then under the debug overlay, where they could not be clicked at all. Controls moved above the readouts, on the reasoning that readouts grow forever and buttons must stay reachable.
+
+The panel refreshes four times a second in the ground view, and each refresh reset the destination dropdown to wherever the player already was. Choosing somewhere and pressing Teleport went nowhere. It now follows the world only when the world itself moves.
+
+Terrain streams in after the player is already standing there, so the player kept the altitude they arrived with: zero, while the ground underneath read 169.8 m. The player now settles onto the ground as it arrives.
+
 ## 2026-08-21, Milestone 04: seamless miniature Earth coordinate system
 
 Established the planet everything later stands on: how a position is expressed, how the globe is divided, and where the line falls between the part of the world being simulated in detail and the part that is only a record.

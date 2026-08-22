@@ -1,5 +1,6 @@
 import { geo } from "../world/coordinates";
-import { createRegionRegistry, type RegionDefinition } from "../world/regions";
+import { createRegionRegistry, type RegionDefinition, type RegionKind } from "../world/regions";
+import { LAND_MASK_TARGET, OCEAN_MASK_TARGET, type TerrainAnchor } from "../world/terrain";
 
 /**
  * Strategic regions.
@@ -105,6 +106,54 @@ const REGIONS: readonly RegionDefinition[] = [
     notes: "Open ocean over the deepest part of the trench. No civilians, no cover.",
   },
 ];
+
+/**
+ * How each kind of region shapes the terrain generated around it.
+ *
+ * A table rather than a branch, so adding a region kind is a row here instead of
+ * an edit inside the generator, which must not know what a Shatterdome is.
+ *
+ * This mapping lives in the content layer, not in `world/regions.ts`. Putting it
+ * there made `world/regions` import `world/terrain`, which imports `data/biomes`,
+ * which imports `world/regions` again. The cycle left both mask constants
+ * undefined at module-init time and every height came out NaN. Content depending
+ * on the world layer is fine; the world layer depending on content is not.
+ */
+const KIND_TERRAIN_SHAPE: Readonly<Record<RegionKind, { maskTarget: number; populated: boolean }>> = {
+  "coastal-city": { maskTarget: LAND_MASK_TARGET, populated: true },
+  "inland-city": { maskTarget: LAND_MASK_TARGET, populated: true },
+  shatterdome: { maskTarget: LAND_MASK_TARGET, populated: true },
+  ocean: { maskTarget: OCEAN_MASK_TARGET, populated: false },
+  wilderness: { maskTarget: LAND_MASK_TARGET, populated: false },
+};
+
+/**
+ * The plain-data view of regions that terrain generation needs.
+ *
+ * Deliberately narrower than `RegionDefinition`: a place, a size, a population,
+ * and what the terrain there should be. No gameplay fields. It also crosses a
+ * worker boundary, so it must stay structured-cloneable.
+ */
+export function toTerrainAnchors(regions: readonly RegionDefinition[]): readonly TerrainAnchor[] {
+  return regions.map((region) => {
+    const shape = KIND_TERRAIN_SHAPE[region.kind];
+    return {
+      regionId: region.id,
+      latitudeDeg: region.centre.latitudeDeg,
+      longitudeDeg: region.centre.longitudeDeg,
+      radiusMeters: region.radiusMeters,
+      populationThousands: region.populationThousands,
+      maskTarget: shape.maskTarget,
+      climate: region.climate,
+      populated: shape.populated,
+    };
+  });
+}
+
+/** The anchors the shipped regions produce. */
+export function createDefaultTerrainAnchors(): readonly TerrainAnchor[] {
+  return toTerrainAnchors(REGIONS);
+}
 
 export function createDefaultRegionRegistry() {
   const registry = createRegionRegistry();

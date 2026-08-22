@@ -165,42 +165,116 @@ export function sectorCentre(address: SectorAddress): GeoPosition {
   });
 }
 
-const STEPS: readonly (readonly [number, number])[] = [
+/**
+ * A point inside a sector, given cell-relative coordinates in [0, 1].
+ *
+ * Terrain generation samples a grid across a sector and needs every sample as a
+ * real position on the globe. Doing that here keeps face bases and the tangent
+ * adjustment in one module: a second implementation would drift out of sync and
+ * seam sectors against each other.
+ */
+export function sectorSurfacePoint(
+  address: SectorAddress,
+  s01: number,
+  t01: number,
+  altitudeMeters = 0,
+): EcefPosition {
+  const s = ((address.u + s01) / SECTOR_GRID_RESOLUTION) * 2 - 1;
+  const t = ((address.v + t01) / SECTOR_GRID_RESOLUTION) * 2 - 1;
+  const direction = faceToDirection(address.face, s, t);
+  const radius = WORLD_RADIUS_METERS + altitudeMeters;
+  return { x: direction.x * radius, y: direction.y * radius, z: direction.z * radius };
+}
+
+export interface SectorGridCoordinates {
+  readonly address: SectorAddress;
+  /** Position within the sector cell, both in [0, 1]. */
+  readonly s01: number;
+  readonly t01: number;
+}
+
+/**
+ * Inverse of {@link sectorSurfacePoint}: which sector a position falls in, and
+ * where inside that cell. Used to sample a sector's height field at an arbitrary
+ * point, which is how ground collision is read.
+ */
+export function sectorGridCoordinates(position: GeoPosition): SectorGridCoordinates {
+  const { face, s, t } = directionToFace(normalize(geoToEcef({ ...position, altitudeMeters: 0 })));
+  const u = cellIndex(s);
+  const v = cellIndex(t);
+  const cellSpan = 2 / SECTOR_GRID_RESOLUTION;
+  const cellOrigin = (index: number): number => (index / SECTOR_GRID_RESOLUTION) * 2 - 1;
+  return {
+    address: { face, u, v },
+    s01: clamp01((s - cellOrigin(u)) / cellSpan),
+    t01: clamp01((t - cellOrigin(v)) / cellSpan),
+  };
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+const EDGE_STEPS: readonly (readonly [number, number])[] = [
   [1, 0],
   [-1, 0],
   [0, 1],
   [0, -1],
 ];
 
-/**
- * The four edge-adjacent sectors.
- *
- * Stepping off a face is resolved by projecting the stepped point back onto the
- * sphere and asking which face it lands on, rather than by a hand-written table
- * of 24 edge adjacencies. One rule covers every face, edge and rotation, and it
- * cannot fall out of sync with the face bases above.
- */
-export function sectorNeighbors(address: SectorAddress): readonly SectorAddress[] {
-  const step = 2 / SECTOR_GRID_RESOLUTION;
-  const s = cellCentreCoordinate(address.u);
-  const t = cellCentreCoordinate(address.v);
+/** Edge steps plus the four diagonals, for filling a square neighbourhood. */
+const SURROUNDING_STEPS: readonly (readonly [number, number])[] = [
+  ...EDGE_STEPS,
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
 
+/**
+ * Steps one cell from `address` by (du, dv), following the surface across face
+ * boundaries. Off-face steps are resolved by projecting the stepped point back
+ * onto the sphere and asking which face it lands on, rather than by a
+ * hand-written table of 24 edge adjacencies. One rule covers every face, edge
+ * and rotation, and it cannot fall out of sync with the face bases above.
+ */
+function stepSector(address: SectorAddress, du: number, dv: number): SectorAddress {
+  const u = address.u + du;
+  const v = address.v + dv;
+  if (inRange(u) && inRange(v)) return { face: address.face, u, v };
+
+  const step = 2 / SECTOR_GRID_RESOLUTION;
+  const stepped = faceToDirection(
+    address.face,
+    cellCentreCoordinate(address.u) + du * step,
+    cellCentreCoordinate(address.v) + dv * step,
+  );
+  const projected = directionToFace(stepped);
+  return { face: projected.face, u: cellIndex(projected.s), v: cellIndex(projected.t) };
+}
+
+/** The four edge-adjacent sectors. */
+export function sectorNeighbors(address: SectorAddress): readonly SectorAddress[] {
+  return steppedNeighbors(address, EDGE_STEPS);
+}
+
+/** The eight surrounding sectors, edges and corners. */
+export function sectorSurroundings(address: SectorAddress): readonly SectorAddress[] {
+  return steppedNeighbors(address, SURROUNDING_STEPS);
+}
+
+function steppedNeighbors(
+  address: SectorAddress,
+  steps: readonly (readonly [number, number])[],
+): readonly SectorAddress[] {
   const neighbors: SectorAddress[] = [];
   const seen = new Set<SectorId>([sectorId(address)]);
 
-  for (const [du, dv] of STEPS) {
-    const u = address.u + du;
-    const v = address.v + dv;
-    const stayedOnFace = inRange(u) && inRange(v);
-    const neighbor = stayedOnFace
-      ? { face: address.face, u, v }
-      : (() => {
-          const stepped = faceToDirection(address.face, s + du * step, t + dv * step);
-          const projected = directionToFace(stepped);
-          return { face: projected.face, u: cellIndex(projected.s), v: cellIndex(projected.t) };
-        })();
-
+  for (const [du, dv] of steps) {
+    const neighbor = stepSector(address, du, dv);
     const id = sectorId(neighbor);
+    // Near a cube corner two different steps can land on the same cell, and the
+    // caller must not be handed a duplicate.
     if (!seen.has(id)) {
       seen.add(id);
       neighbors.push(neighbor);
@@ -211,6 +285,44 @@ export function sectorNeighbors(address: SectorAddress): readonly SectorAddress[
 
 export function neighborIds(id: SectorId): readonly SectorId[] {
   return sectorNeighbors(parseSectorId(id)).map(sectorId);
+}
+
+/**
+ * Breadth-first ring expansion from a sector: every sector within `maxDepth`
+ * steps, mapped to the number of steps it took to reach it.
+ *
+ * Expansion goes through the eight surrounding sectors, not the four
+ * edge-adjacent ones. Edge-only expansion produces diamond-shaped rings, which
+ * leave the four corners of the loaded area empty: on screen that is a black
+ * notch in the middle distance where the ground simply stops. Including the
+ * diagonals makes each ring a square, which is what a viewer expects a loaded
+ * area to look like.
+ *
+ * Streaming rings are defined in steps rather than in metres because steps are
+ * what the partition actually guarantees, and stepping through the shared
+ * projection means rings cross face boundaries correctly for free.
+ */
+export function sectorsWithinDepth(address: SectorAddress, maxDepth: number): Map<SectorId, number> {
+  if (!Number.isInteger(maxDepth) || maxDepth < 0) {
+    throw new Error(`sectorsWithinDepth needs a non-negative integer depth, got ${maxDepth}`);
+  }
+  const depths = new Map<SectorId, number>([[sectorId(address), 0]]);
+  let frontier: SectorAddress[] = [address];
+
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    const next: SectorAddress[] = [];
+    for (const current of frontier) {
+      for (const neighbor of sectorSurroundings(current)) {
+        const id = sectorId(neighbor);
+        if (depths.has(id)) continue;
+        depths.set(id, depth);
+        next.push(neighbor);
+      }
+    }
+    if (next.length === 0) break;
+    frontier = next;
+  }
+  return depths;
 }
 
 /** Every sector on the globe, in a stable order. */

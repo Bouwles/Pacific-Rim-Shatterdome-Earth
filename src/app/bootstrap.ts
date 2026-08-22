@@ -25,18 +25,37 @@ import { SaveService } from "../saves/saveService";
 import { IndexedDbSaveRepository } from "../saves/indexedDbRepository";
 import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
 import { probeStorageHealth } from "../saves/storageHealth";
-import { renderWorldScreen, type WorldScreenHandle } from "../ui/worldScreen";
+import {
+  renderWorldScreen,
+  type StreamingReadout,
+  type WorldScreenHandle,
+  type WorldViewMode,
+} from "../ui/worldScreen";
 import { GlobeView } from "../debug/globeView";
 import { WorldState } from "../world/worldState";
 import { FloatingOrigin } from "../world/floatingOrigin";
 import { neighborIds } from "../world/cubeSphere";
-import { createDefaultRegionRegistry } from "../data/regions";
+import type { GeoPosition, LocalPosition } from "../world/coordinates";
+import { createDefaultRegionRegistry, createDefaultTerrainAnchors } from "../data/regions";
+import { SECTOR_STATES, SectorStreamer } from "../world/sectorStreaming";
+import { SectorRenderer } from "../engine/sectorRenderer";
+import { WorkerTerrainService } from "../workers/terrainWorkerClient";
+import { buildRouteSamples, STRESS_ROUTE_REGION_IDS, type RouteSample } from "../debug/streamRoute";
 
 export interface AppHandle {
   dispose(): void;
 }
 
 const THUMBNAIL_WIDTH = 192;
+
+/** Stress route pacing. Fast enough to cross a sector every few seconds. */
+const ROUTE_SPEED_MPS = 4_000;
+const ROUTE_STEP_SECONDS = 0.25;
+/** DOM writes are throttled; the streamer itself still updates every frame. */
+const READOUT_INTERVAL_MS = 250;
+/** Babylon ArcRotateCamera defaults, restored when the ground view closes. */
+const DEFAULT_CAMERA_MIN_Z = 1;
+const DEFAULT_CAMERA_MAX_Z = 10_000;
 
 /**
  * Renders a thumbnail through a render target rather than reading the canvas.
@@ -80,6 +99,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let kernel: SimulationKernel | undefined;
   let adapterDispose: (() => void) | undefined;
   let bootScene: BootScene;
+  /**
+   * Per-frame work owned by whichever screen is open. Sector streaming has to run
+   * on the render loop rather than on a timer, because it is paced against frame
+   * budget: one upload per frame is the whole point.
+   */
+  let frameHook: ((deltaMs: number) => void) | null = null;
 
   try {
     const adapter = await createEngineAdapter(canvas);
@@ -103,9 +128,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     const simKernel = kernel;
     adapter.engine.runRenderLoop(() => {
-      loop.advance(adapter.engine.getDeltaTime());
+      const deltaMs = adapter.engine.getDeltaTime();
+      loop.advance(deltaMs);
       // Drain outside the tick so subscribers never mutate state mid-step.
       simKernel.events.drain();
+      frameHook?.(deltaMs);
       scene.render();
     });
 
@@ -309,22 +336,114 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // World state is authoritative and lives for the whole session; the globe view
   // is presentation and is built and torn down with the screen.
   const regionRegistry = createDefaultRegionRegistry();
+  const terrainAnchors = createDefaultTerrainAnchors();
   const worldState = new WorldState({ regions: regionRegistry });
   const floatingOrigin = new FloatingOrigin({ anchor: worldState.playerPosition });
   let globeView: GlobeView | undefined;
   let worldScreen: WorldScreenHandle | undefined;
+  let sectorRenderer: SectorRenderer | undefined;
+  let streamer: SectorStreamer | undefined;
+  let viewMode: WorldViewMode = "globe";
+  let routeSamples: readonly RouteSample[] = [];
+  let routeRunning = false;
+  let routeSeconds = 0;
+  let lastReadoutMs = 0;
+  let lastVelocity: LocalPosition = { east: 0, north: 0, up: 0 };
 
-  const closeWorld = (): void => {
-    globeView?.dispose();
-    globeView = undefined;
-    worldScreen?.dispose();
-    worldScreen = undefined;
+  /**
+   * Puts a position on the streamed ground when the sector under it is loaded.
+   *
+   * Returns the position unchanged when nothing is resident, rather than
+   * assuming sea level: dropping the player to zero over unloaded terrain would
+   * be a worse lie than leaving them where they were.
+   */
+  const groundedPosition = (position: GeoPosition): GeoPosition => {
+    const height = streamer?.sampleGroundHeight(position);
+    if (height === undefined || height === null) return position;
+    return { ...position, altitudeMeters: Math.max(height, 0) };
+  };
+
+  /** Moves the player and keeps the origin, renderer and streamer in step. */
+  const movePlayerTo = (position: GeoPosition): void => {
+    worldState.moveTo(groundedPosition(position), kernel?.tick ?? 0);
+    if (floatingOrigin.update(worldState.playerPosition)) sectorRenderer?.rebase();
+    streamer?.update({ position: worldState.playerPosition, velocity: lastVelocity });
+  };
+
+  const restoreBootStage = (): void => {
     bootScene.jaegerPlaceholder.setEnabled(true);
     bootScene.ground.setEnabled(true);
     bootScene.camera.setTarget(new Vector3(0, 25, 0));
     bootScene.camera.radius = 110;
     bootScene.camera.lowerRadiusLimit = 10;
     bootScene.camera.upperRadiusLimit = 300;
+    bootScene.camera.minZ = DEFAULT_CAMERA_MIN_Z;
+    bootScene.camera.maxZ = DEFAULT_CAMERA_MAX_Z;
+  };
+
+  const closeGlobeView = (): void => {
+    globeView?.dispose();
+    globeView = undefined;
+  };
+
+  const openGlobeView = (): void => {
+    globeView = new GlobeView({
+      scene: bootScene.scene,
+      camera: bootScene.camera,
+      world: worldState,
+      regions: regionRegistry,
+    });
+    globeView.frameGlobe();
+  };
+
+  /**
+   * Tears down streaming. The streamer goes first: disposing it releases every
+   * resident sector through the sink, which has to still exist to free them.
+   */
+  const closeGroundView = (): void => {
+    routeRunning = false;
+    routeSeconds = 0;
+    streamer?.dispose();
+    streamer = undefined;
+    sectorRenderer?.dispose();
+    sectorRenderer = undefined;
+  };
+
+  const openGroundView = (): void => {
+    sectorRenderer = new SectorRenderer({
+      scene: bootScene.scene,
+      anchor: () => floatingOrigin.anchor,
+    });
+    streamer = new SectorStreamer({
+      service: WorkerTerrainService.create(),
+      sink: sectorRenderer,
+      // Terrain is a pure function of the world seed, so it reproduces exactly
+      // from a save without being stored in one.
+      seed: kernel?.seed ?? 0,
+      anchors: terrainAnchors,
+    });
+
+    // A sector is 11 km across and rings reach four of them out, so the boot
+    // scene's 10 km far plane would clip the world away.
+    bootScene.camera.minZ = 5;
+    bootScene.camera.maxZ = 400_000;
+    bootScene.camera.lowerRadiusLimit = 200;
+    bootScene.camera.upperRadiusLimit = 60_000;
+    bootScene.camera.radius = 7_000;
+    bootScene.camera.beta = 1.05;
+    bootScene.camera.setTarget(Vector3.Zero());
+
+    streamer.update({ position: worldState.playerPosition, velocity: lastVelocity });
+  };
+
+  const closeWorld = (): void => {
+    frameHook = null;
+    closeGroundView();
+    closeGlobeView();
+    worldScreen?.dispose();
+    worldScreen = undefined;
+    viewMode = "globe";
+    restoreBootStage();
   };
 
   const refreshWorld = (): void => {
@@ -334,6 +453,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const records = worldState.records();
 
     worldScreen.update({
+      viewMode,
+      streaming: streamer && sectorRenderer ? streamingReadout(streamer, sectorRenderer) : null,
       position: worldState.playerPosition,
       localEast: local.east,
       localNorth: local.north,
@@ -349,25 +470,117 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     globeView?.refresh();
   };
 
+  /** Flattens live streaming instrumentation for the panel. Nothing here is estimated. */
+  const streamingReadout = (active: SectorStreamer, renderer: SectorRenderer): StreamingReadout => {
+    const stats = active.stats();
+    const scene = renderer.stats();
+    const summary = SECTOR_STATES.filter((state) => stats.counts[state] > 0)
+      .map((state) => `${stats.counts[state]} ${state}`)
+      .join(", ");
+
+    const totalRouteSeconds = routeSamples.length * ROUTE_STEP_SECONDS;
+    return {
+      serviceKind: stats.serviceKind,
+      stateSummary: summary || "idle",
+      resident: stats.resident,
+      peakResident: stats.peakResident,
+      generated: stats.generated,
+      cacheHits: stats.cacheHits,
+      cacheMisses: stats.cacheMisses,
+      cancelled: stats.cancelled,
+      evicted: stats.evicted,
+      rescued: stats.rescued,
+      failed: stats.failed,
+      lastGenerationMs: stats.lastGenerationMs,
+      averageGenerationMs: stats.averageGenerationMs,
+      lastUploadMs: stats.lastUploadMs,
+      averageUploadMs: stats.averageUploadMs,
+      residentBytes: stats.residentBytes,
+      peakResidentBytes: stats.peakResidentBytes,
+      cachedBytes: stats.cachedBytes,
+      cachedEntries: stats.cachedEntries,
+      meshes: scene.meshes,
+      pooledMeshes: scene.pooledMeshes,
+      thinInstances: scene.thinInstances,
+      gpuBytes: scene.estimatedGpuBytes,
+      groundHeightMeters: active.sampleGroundHeight(worldState.playerPosition),
+      routeRunning,
+      routeProgress:
+        routeSamples.length === 0
+          ? "not started"
+          : `${Math.min(routeSeconds, totalRouteSeconds).toFixed(1)} of ${totalRouteSeconds.toFixed(0)} s`,
+    };
+  };
+
+  /** Advances the deterministic stress route by one frame's worth of travel. */
+  const advanceRoute = (seconds: number): void => {
+    routeSeconds += seconds;
+    const index = Math.floor(routeSeconds / ROUTE_STEP_SECONDS);
+    if (index >= routeSamples.length) {
+      routeRunning = false;
+      return;
+    }
+    const sample = routeSamples[index];
+    if (!sample) return;
+    lastVelocity = sample.velocity;
+    movePlayerTo(sample.position);
+  };
+
+  const toggleRoute = (): void => {
+    if (routeRunning) {
+      routeRunning = false;
+      lastVelocity = { east: 0, north: 0, up: 0 };
+      refreshWorld();
+      return;
+    }
+    if (routeSamples.length === 0) {
+      routeSamples = buildRouteSamples({
+        waypoints: STRESS_ROUTE_REGION_IDS.map((id) => ({
+          label: id,
+          position: regionRegistry.getOrThrow(id).centre,
+        })),
+        speedMetersPerSecond: ROUTE_SPEED_MPS,
+        stepSeconds: ROUTE_STEP_SECONDS,
+      });
+    }
+    routeSeconds = 0;
+    routeRunning = true;
+    refreshWorld();
+  };
+
+  const switchViewMode = (mode: WorldViewMode): void => {
+    if (mode === viewMode) return;
+    viewMode = mode;
+    if (mode === "ground") {
+      closeGlobeView();
+      openGroundView();
+    } else {
+      closeGroundView();
+      restoreBootStage();
+      bootScene.jaegerPlaceholder.setEnabled(false);
+      bootScene.ground.setEnabled(false);
+      openGlobeView();
+    }
+    refreshWorld();
+  };
+
   const openWorld = (): void => {
-    // The globe replaces the boot stage rather than sharing it.
+    // The world view replaces the boot stage rather than sharing it.
     bootScene.jaegerPlaceholder.setEnabled(false);
     bootScene.ground.setEnabled(false);
-
-    globeView = new GlobeView({
-      scene: bootScene.scene,
-      camera: bootScene.camera,
-      world: worldState,
-      regions: regionRegistry,
-    });
-    globeView.frameGlobe();
+    openGlobeView();
 
     worldScreen = renderWorldScreen(uiRoot, regionRegistry.all(), {
       onTeleport: (regionId) => {
+        routeRunning = false;
         worldState.teleportTo(regionId, kernel?.tick ?? 0);
         // A teleport is an intentional jump, so the origin follows immediately
         // rather than waiting for the drift threshold.
         floatingOrigin.forceRebase(worldState.playerPosition);
+        sectorRenderer?.rebase();
+        // Land on the terrain rather than at the region's nominal sea level, now
+        // that there is terrain to land on.
+        movePlayerTo(worldState.playerPosition);
         refreshWorld();
         // A teleport is a deliberate jump, so bring the camera with it. Walking
         // deliberately does not, or it would fight the player orbiting.
@@ -382,17 +595,47 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         });
         // A tangent plane is flat and the globe is not, so walking a straight
         // line in local space lifts you off the surface: measured at 239 m of
-        // false altitude over a 25 km walk. Carrying the altitude across keeps
-        // movement on the ground until real terrain heights exist.
-        worldState.moveTo(
-          { ...next, altitudeMeters: worldState.playerPosition.altitudeMeters },
-          kernel?.tick ?? 0,
-        );
-        floatingOrigin.update(worldState.playerPosition);
+        // false altitude over a 25 km walk. Carrying the previous altitude keeps
+        // movement level; `movePlayerTo` then snaps it to the streamed ground
+        // wherever that ground is actually loaded.
+        movePlayerTo({ ...next, altitudeMeters: worldState.playerPosition.altitudeMeters });
         refreshWorld();
       },
+      onViewMode: switchViewMode,
+      onRouteToggle: toggleRoute,
       onExit: () => stateMachine.transition(AppState.MainMenu),
     });
+
+    frameHook = (deltaMs) => {
+      if (viewMode !== "ground" || !streamer || !sectorRenderer) return;
+      if (routeRunning) advanceRoute(deltaMs / 1000);
+
+      // Settle onto the ground as it arrives. Terrain streams in after the player
+      // is already standing there, so a position set before the sector loaded
+      // would otherwise stay at its old altitude: measured at 0 m while the
+      // ground under it read 169.8 m.
+      const ground = streamer.sampleGroundHeight(worldState.playerPosition);
+      if (ground !== null) {
+        const target = Math.max(ground, 0);
+        if (Math.abs(worldState.playerPosition.altitudeMeters - target) > 0.05) {
+          worldState.moveTo({ ...worldState.playerPosition, altitudeMeters: target }, kernel?.tick ?? 0);
+        }
+      }
+
+      streamer.update({ position: worldState.playerPosition, velocity: lastVelocity });
+
+      const local = floatingOrigin.toLocal(worldState.playerPosition);
+      sectorRenderer.setPlayerLocal(local.east, local.up, local.north);
+      bootScene.camera.setTarget(new Vector3(local.east, local.up, local.north));
+
+      // The streamer runs every frame; the panel does not. A 144 Hz DOM write is
+      // both wasteful and unreadable.
+      const nowMs = performance.now();
+      if (nowMs - lastReadoutMs >= READOUT_INTERVAL_MS) {
+        lastReadoutMs = nowMs;
+        refreshWorld();
+      }
+    };
 
     refreshWorld();
   };
@@ -453,6 +696,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       gallery?.dispose();
       galleryScreen?.dispose();
       saveScreen?.dispose();
+      streamer?.dispose();
+      sectorRenderer?.dispose();
       globeView?.dispose();
       worldScreen?.dispose();
       repository.close();
