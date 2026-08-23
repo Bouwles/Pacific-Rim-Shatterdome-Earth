@@ -22,7 +22,7 @@ export function renderMainMenu(
   const title = document.createElement("h1");
   title.textContent = "Pacific Rim: Shatterdome Earth";
   const subtitle = document.createElement("p");
-  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 07.";
+  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 08.";
 
   const newGameButton = document.createElement("button");
   newGameButton.type = "button";
@@ -67,26 +67,6 @@ export function renderLoadingScreen(container: HTMLElement, label = "Loading…"
   const panel = document.createElement("div");
   panel.className = "screen screen-loading";
   panel.textContent = label;
-  container.appendChild(panel);
-}
-
-export function renderShatterdomePlaceholder(container: HTMLElement, onBackToMenu: () => void): void {
-  clear(container);
-  const panel = document.createElement("div");
-  panel.className = "screen screen-shatterdome";
-
-  const title = document.createElement("h2");
-  title.textContent = "Shatterdome";
-  const notice = document.createElement("p");
-  notice.textContent = "Not yet implemented — this milestone only proves the state transition into it.";
-
-  const backButton = document.createElement("button");
-  backButton.type = "button";
-  backButton.textContent = "Back to Menu";
-  backButton.className = "secondary-button";
-  backButton.addEventListener("click", onBackToMenu);
-
-  panel.append(title, notice, backButton);
   container.appendChild(panel);
 }
 

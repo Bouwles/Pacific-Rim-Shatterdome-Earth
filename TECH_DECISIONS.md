@@ -514,3 +514,69 @@ button.
 **Lower quality draws a smaller city, not a blurrier one.** Groups are taken
 nearest-first from the region centre and capped, so what survives on Low is the
 centre, which is the part that carries the silhouette.
+
+## 2026-08-24, Milestone 08
+
+**A facility is a grammar row, not a room.** Thirteen definitions carry footprint,
+deck, stations and a ladder of tiers; `generateInteriorLayout` makes the rooms.
+Adding a facility is a row plus a connection, and the registry refuses a tier that
+adds no fixtures over the one below it, because an upgrade the player cannot see
+is not an upgrade.
+
+**The complex is a graph of rooms, not one interior scene.** Only the active room
+is built in Babylon. This is the structural answer to the "one giant interior"
+problem rather than a budget: the bay cannot cost anything while the player is in
+the archive, because it does not exist. A facility that has not been built has no
+room at all.
+
+**A sealed bulkhead rather than a missing wall.** A doorway to an unbuilt facility
+says which facility and why. That turns the construction system into something the
+player discovers by walking around rather than by reading a list.
+
+**Power and crews, and no invented currency.** Construction is constrained by
+reactor output and by logistics crews, both of which are facilities the player can
+upgrade. An economy would have to be fabricated to add money now, and a fabricated
+economy is the fake-system failure mode wearing a different hat.
+
+**Movement is a pure function.** `stepOnFoot(pose, input, dt, room, effects)`
+returns the next pose. The camera is placed from the pose rather than the pose
+read back from the camera, and Babylon's own camera input is never attached, so
+the renderer cannot move a player the simulation believes is standing still.
+
+**On-foot constants live in one object and are asserted against Jaeger scale.**
+The failure this prevents is silent: a controller that inherits a 75 m machine's
+speed or a 400 km far plane still runs, it just feels wrong. A test that names both
+numbers catches it the moment someone reuses the wrong constant.
+
+**Two ways to focus something, deliberately.** Looking at it is the one most
+players use; cycling with Tab is what makes the interior playable with no mouse at
+all. That is the difference between an accessible prompt and a decorative one.
+
+**A room is rebuilt when it changes shape, not every frame.** The session carries a
+revision that moves when an order lands or a build completes, and the view rebuilds
+on that. Scaffolds appearing the moment an order is placed is the same mechanism.
+
+**Staff are a number outside the room and positions inside it.** There is no
+per-person state anywhere, which is the structural answer to "do not simulate every
+staff member at full fidelity outside the active room": there is nowhere to put
+them. Named characters are the exception, and their lines are templates filled from
+live state so they cannot claim a tier the complex is not at.
+
+**Pausing pauses the simulation.** Construction, the clock and the weather all
+advance on ticks, so stopping the transport stops all three. A pause that only hid
+the view would let the complex build itself behind a menu.
+
+**Only history is saved.** Facilities, progress, position and the selected machine.
+Rooms are derived from those and the seed, so saving them would freeze old files
+against future changes to the facility grammar.
+
+**Frame rate is still not asserted in browser tests**, and the interior tests
+assert draw calls, mesh counts and simulation liveness instead. The measured
+figures in PERFORMANCE_BUDGETS.md are taken by hand on the real renderer.
+
+**A thin-instance pool that starts empty needs its buffer set again, not marked
+updated.** On WebGPU, growing `thinInstanceCount` from zero after the buffer was
+registered draws nothing; the room reported six people on shift and rendered an
+empty floor. The pool also has to be excluded from bounding-box culling, because
+it is allocated with every instance parked below the deck. Both are handled where
+the count changes rather than per frame.

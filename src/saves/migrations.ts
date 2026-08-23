@@ -6,6 +6,8 @@ import { WORLD_SCHEMA_VERSION } from "../world/worldState";
 import { emptyEnvironmentSnapshot } from "../world/environment";
 import { initialAlertState } from "../world/cityActivity";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
+import { createFacilityRegistry } from "../data/facilities";
+import { emptyShatterdomeSnapshot } from "../shatterdome/facilityState";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -160,6 +162,30 @@ const addRegionAlerts: MigrationStep = {
   },
 };
 
+/**
+ * Adds the Shatterdome section introduced by Milestone 08.
+ *
+ * A version 4 save has no facilities recorded, because there was no interior to
+ * record: the Shatterdome was a screen that said it was not implemented. Every
+ * such file therefore comes back with the same complex a new campaign starts
+ * with, standing on the command floor, which is the only honest reading of a
+ * file that never captured one.
+ *
+ * Nothing else in the document is touched: the world, the environment and every
+ * region alert survive exactly as written.
+ */
+const addShatterdomeSection: MigrationStep = {
+  id: "4",
+  fromVersion: 4,
+  toVersion: 5,
+  description: "Add the Shatterdome section: facilities, construction progress and interior position.",
+  apply: (document) => ({
+    ...document,
+    schemaVersion: 5,
+    shatterdome: emptyShatterdomeSnapshot(createFacilityRegistry()),
+  }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -178,6 +204,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addWorldSection);
   registry.register(addEnvironmentSection);
   registry.register(addRegionAlerts);
+  registry.register(addShatterdomeSection);
   return registry;
 }
 

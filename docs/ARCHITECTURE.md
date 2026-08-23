@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 07. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 08. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -22,6 +22,8 @@ src/
     weatherView.ts     rain, snow, spray, lightning and cloud, capacity-capped by quality preset
     ambientAudio.ts    synthesised ambience filtered by the world layer's audio environment
     cityView.ts        the city drawn: one mesh per destruction group, pooled agents on lanes
+    interiorView.ts    one Shatterdome room at a time: shell, fixtures, pooled staff, its own camera
+    onFootInput.ts     the only file that touches a key or a mouse event, turned into an input snapshot
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
     clock.ts           FixedStepClock — accumulator-pattern fixed timestep, epsilon-guarded, substep-capped
     loop.ts             SimulationLoop — render-delta → ticks, pause/resume/single-step/time scale,
@@ -57,6 +59,13 @@ src/
     environment.ts      the query surface AI and combat read; composes clock, weather and ocean
     cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
     cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
+  shatterdome/         ← the complex: authoritative state, rooms, movement; no Babylon, no DOM
+    facilityState.ts   facilities, tiers, construction orders, power and crews, the saved snapshot
+    interiorLayout.ts  facility records to rooms: fixtures, doorways, spawn points, the Conn-Pod
+    onFoot.ts          person-scale movement, collision, and the unstuck action
+    interaction.ts     what the player is looking at, whether it is in reach, and what the prompt says
+    staff.ts           shift loads, ambient work positions, and radio chatter from named crew
+    session.ts         the live session: room, pose, focus, transitions, orders, radio log
   workers/             ← the only code that runs off the main thread
     protocol.ts         versioned, validated terrain request/response messages
     terrainWorker.ts    worker entry: queued generation, cancellation, buffer transfer
@@ -76,6 +85,8 @@ src/
     biomes.ts            biome table, surface classes, climate bands
     climates.ts          what weather each climate zone produces
     districts.ts         district grammar rows and the Hong Kong placement plan
+    facilities.ts        the thirteen facilities, their tiers, and how the rooms connect
+    personnel.ts         named crew: post, shift, and lines that report real facility state
     quality.ts           Low to Cinematic presets with explicit particle, shadow and water budgets
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
@@ -87,6 +98,7 @@ src/
     galleryScreen.ts     asset gallery panel
     saveScreen.ts        save/load panel with storage health
     worldScreen.ts       globe readouts, teleport and walk controls
+    shatterdomeScreen.ts heads-up layer, terminal and berth panels, Conn-Pod instruments, pause menu
 tests/
   unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers,
                         assetManifest, assetInspection, saveSchema, saveMigrations,
@@ -99,7 +111,7 @@ public/
 ```
 
 Everything else in the target shape (`jaegers/`, `kaiju/`, `combat/`, `destruction/`,
-`shatterdome/`, `missions/`, `progression/`, `copilots/`, `audio/`, `network/`,
+`missions/`, `progression/`, `copilots/`, `audio/`, `network/`,
 `sandbox/`) does not exist yet — see [ROADMAP.md](../ROADMAP.md) for which phase
 introduces each one. See TECH_DECISIONS.md's "grow-into, not scaffold-ahead" entry for why.
 
@@ -434,6 +446,58 @@ own mesh: what an alert changes is how many vehicles there are, not how many
 kinds of mesh exist. Counts are reported per kind as well as in total, because a
 total hides the thing that matters - under attack the crowds vanish while
 military traffic fills the roads, so the total barely moves.
+
+## The Shatterdome
+
+Six modules in `src/shatterdome/`, none of which import Babylon or the DOM, plus
+a view, an input source and an interface layer that read what they produce.
+
+**A facility is a rule, not a room.** `data/facilities.ts` gives each of the
+thirteen spaces a footprint, a deck, a set of stations and a list of tiers, and
+each tier carries its construction time, crew cost, power draw, staff slots,
+fixture count and one sentence about what it buys. Adding a facility is a row
+plus a connection. The registry refuses a tier that adds no fixtures over the one
+below it, because an upgrade a player cannot see is not an upgrade.
+
+**Two resources, both real.** Power comes from the reactor and is drawn by
+everything else; crews come from logistics and are held for the length of a
+build. A laboratory can be refused because the reactor cannot carry it, and a
+third order can be refused because there is nobody left to build it. There is no
+money here: the economy arrives with its own milestone, and inventing a currency
+now would be a fake system.
+
+**The complex is a graph of rooms, not one interior scene.** Only the room the
+player is standing in is ever built in Babylon, so the hundred-metre Jaeger bay
+costs nothing while the player is in the archive. A facility that has not been
+built has no room at all, and the doorway that would lead to it is sealed and
+says which facility is missing. Doors, lifts and trams are real edges with real
+travel times, and a transition swaps the room at the darkest point of a short
+fade rather than cutting.
+
+**Movement is person scale and pure.** `onFoot.ts` is a function from pose,
+input, room and environment to the next pose. It resolves one axis at a time, so
+a shoulder slides along a wall, and splits a frame into substeps, so a running
+player cannot pass through a console between two frames. Every constant is
+written down in one object and asserted against Jaeger scale in a test: a person
+walks at 2.4 m/s and stands 1.8 m tall, and the interior camera has a five
+centimetre near plane and a four hundred metre far plane, not the four hundred
+kilometre one the globe view runs.
+
+**The environment reaches inside.** Rooms open to the apron feel the weather the
+world layer reports; everywhere else the roof is doing its job. The controller
+consumes `EnvironmentEffects` rather than inventing its own traction.
+
+**Nobody is simulated outside the active room.** A facility's population is one
+integer derived from its tier and the hour. Inside the active room those numbers
+become positions, and a position is a function of index and tick, so a crew
+member has no state to update and nothing to save. Named characters are the
+exception and a small one: a post, a shift, and lines whose placeholders are
+filled from live facility state, so nobody can claim a tier the complex is not at.
+
+**What is saved is what is genuinely history**: which facilities exist, what tier
+they are at, what is being built and how far along it is, where the player was
+standing and which machine they had selected. The rooms are laid out again from
+those records on load.
 
 ## Quality presets
 

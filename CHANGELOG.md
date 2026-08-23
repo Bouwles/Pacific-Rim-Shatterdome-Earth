@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-08-24, Milestone 08: Explorable Shatterdome and on-foot player
+
+New Game no longer lands on a screen that says the Shatterdome is not implemented. It puts you on the command floor, at eye height, with six people on shift around you and the Marshal telling you how much power is on the board.
+
+- Thirteen facilities, each a rule rather than a room: a footprint, a deck, the stations it holds, and a ladder of tiers that cost time, crews and power and give back staff, fixtures and one honest sentence about what changed. Adding a facility is a row.
+- Two constraints and no invented currency. Power comes from the reactor and everything else draws it, so a laboratory can be refused because the reactor cannot carry it. Crews come from logistics and are tied up for the length of a build, so a third order at once is a decision. Money and contracts arrive with the economy milestone, and nothing here pretends otherwise.
+- The complex is a graph of rooms rather than one enormous interior. Only the room you are standing in exists, so the hundred and thirty metre Jaeger bay costs nothing while you are in the archive. Doors, lifts and trams are real edges with real travel times, and the room swaps at the darkest point of a short fade.
+- A facility you have not built has no room at all, and the doorway that would lead to it is sealed and tells you which one is missing. Order it and the scaffolds go up in that room immediately. When the work lands, the bulkhead becomes a door you can walk through.
+- Walking is at person scale and every number is written down in one place so it can be compared against a seventy five metre machine. You walk, run and crouch, slide along walls instead of sticking to them, and cannot pass through a console even at a full run in a long frame.
+- The whole interior is playable without a mouse. Tab cycles what is in the room and turns you to face it, E uses it, arrows look, U puts you somewhere clear if geometry ever traps you, and every prompt is mirrored to a screen reader.
+- Management happens at terminals you walk up to, not in a menu. The board lists every facility with its deck, tier, power draw and staff, the next tier with its cost in crews and minutes, and an Order button that is greyed with the reason when it cannot be pressed.
+- Berths hold the roster machines and resolve them through the same asset pipeline everything else uses, so dropping in a real model is still a data change. The Conn-Pod is a room you board rather than a camera move, and its instruments read the live world outside: the time, the weather, the wind, how far you can see, and what the alert level is over the city.
+- Nobody is simulated outside the room you are in. A facility's population is one integer derived from its tier and the hour, and inside the active room those numbers become positions that are a function of index and tick, so a crew member has no state to update and nothing to save.
+- Fifteen named crew, original characters written for this project, each with a post, a shift and lines whose blanks are filled from live facility state. The night watch is a different person from the morning one, and half the accommodation deck is asleep at eight in the morning because the steward says so.
+- Saves moved to version 5, carrying the facilities, what is being built and how far along it is, where you were standing, and which machine you had selected. The rooms themselves are never saved: they are laid out again from those records.
+
+Six defects were found and fixed. Four of them only showed up once there was something to look at.
+
+The ceiling was black. A hemispheric light lights downward faces with its ground colour, and the ground colour was almost nothing, so an enclosed room had what looked like a hole above it.
+
+Every fixture glowed. One emissive value for all of them turned a desk, a doorframe and a console into the same white block. Screens and hatches are lit from inside now; furniture is not.
+
+The staff were standing inside their own desks. A post is a piece of furniture with a footprint, so a person placed exactly on it is invisible. The first staffed room I looked at reported six people and showed an empty floor.
+
+Then it reported six people and still showed an empty floor, for a different reason. The instance pool is allocated with everybody parked below the deck, which put its bounding box nowhere near the room and had the whole mesh culled. Refreshing the bounds fixed the culling and it was still empty, because on WebGPU a thin instance buffer whose count grows from zero is not picked up by marking it updated: the buffer has to be set again. It is, now, when the number of people changes rather than every frame.
+
+The radio repeated itself. With two or three lines to a character and one character on shift, picking blind said the same thing three times running, which reads as a broken radio rather than a quiet one. It now walks past whatever was just said.
+
+And the Conn-Pod was a black void with one glowing hatch in it, because the room lamp's range stopped halfway across a four metre room.
+
 ## 2026-08-23, Milestone 07: Hong Kong vertical slice and living city layer
 
 Hong Kong exists. Not a region record with a name on it, an actual city with districts, a skyline, a harbour, roads, a Shatterdome precinct and slums grown against its wall, and a population that reacts when something is coming.

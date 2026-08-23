@@ -18,18 +18,22 @@ test.describe("Milestone 00 boot flow", () => {
     expect(consoleErrors, `unexpected console errors: ${consoleErrors.join("\n")}`).toEqual([]);
   });
 
-  test("New Game takes the player from MainMenu through the honest Shatterdome stub and back", async ({
-    page,
-  }) => {
+  test("New Game takes the player into the Shatterdome and back", async ({ page }) => {
     await page.goto("/");
 
     const newGameButton = page.getByRole("button", { name: "New Game" });
     await expect(newGameButton).toBeVisible();
     await newGameButton.click();
 
-    await expect(page.getByText("Not yet implemented")).toBeVisible();
+    // Milestone 08 replaced the "not yet implemented" stub with the real
+    // interior, so what this flow proves now is that New Game lands the player
+    // on the command floor rather than on a notice.
+    await expect(page.locator('#shatterdomeScreen [data-field="room-name"]')).toHaveText(/LOCCENT Command/, {
+      timeout: 15_000,
+    });
 
-    await page.getByRole("button", { name: "Back to Menu" }).click();
+    await page.keyboard.press("Escape");
+    await page.locator('#shatterdomeScreen [data-action="exit-to-menu"]').click();
     await expect(newGameButton).toBeVisible();
   });
 

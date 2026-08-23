@@ -144,6 +144,61 @@ the things that draw them belong to the ground view.
 | Audio            | Surface, partial or underwater, and whether audio actually started  |
 | Quality budgets  | Live particles against the ceiling, shadow, reflections, telegraphs |
 
+## On foot in the Shatterdome (Milestone 08)
+
+Everything here works from the keyboard alone. The mouse is an option, not a
+requirement: a player who never enables pointer lock can still walk from the
+command floor to a Conn-Pod and back.
+
+| Input           | Action                                                              |
+| --------------- | ------------------------------------------------------------------- |
+| W A S D         | Walk                                                                |
+| Shift           | Run                                                                 |
+| Ctrl            | Crouch                                                              |
+| Mouse           | Look, once pointer lock is engaged by clicking the view             |
+| Arrow keys      | Turn and look, at the same rate, with no mouse                      |
+| E               | Use whatever is focused. Also closes an open panel                  |
+| Tab / Shift+Tab | Cycle the fixtures in the room, nearest first, turning to face each |
+| U               | Unstuck: step to the nearest clear deck plate in the same room      |
+| Esc             | Pause. Opens the pause menu and stops the simulation                |
+
+Pointer lock is requested by clicking the view and released by the browser's own
+Escape, by opening a panel, or by pausing.
+
+### What the prompt says
+
+The prompt names what is focused and how far away it is. Within reach it becomes
+`E — Use ...`. A sealed bulkhead explains which facility has not been built
+rather than staying silent. The same sentence goes to a screen reader through a
+live region, written only when it changes.
+
+### Heads-up readout
+
+| Readout        | Meaning                                                                   |
+| -------------- | ------------------------------------------------------------------------- |
+| Room and deck  | Where the player is and what state that facility is in                    |
+| Time and shift | Local clock and which of the three shifts is on                           |
+| On shift       | People posted in this room right now, against its slots                   |
+| Power          | Complex-wide draw against reactor output                                  |
+| Crews          | Construction crews free against the total mustered                        |
+| Position       | Metres from the centre of the room, on its own floor plan                 |
+| Drawn          | Crew instances actually drawn against the number on shift, and mesh count |
+| Radio          | The last four lines from the crew and from LOCCENT                        |
+
+### Panels
+
+Opened by using something in the world, never from a menu.
+
+- **A terminal** opens facility management: every facility with its deck, status, tier, power draw and staff, the next tier with its benefit, crew cost and build time, and an Order button. A button that cannot be pressed is disabled and carries the reason it was refused.
+- **A berth** opens the machine standing in it: mark, manufacturer, mass, reactor output, cooling, measured height, and which asset manifest it resolves through.
+- **The Conn-Pod** opens the instruments: the selected machine, and the live world outside, the local time, the weather, the wind, visibility and the region's alert level. There is no launch control on it, because deployment does not exist yet.
+
+### Pause menu
+
+Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
+construction, the clock and the weather with it. Saves can be opened from inside
+the complex and returns there rather than to the main menu.
+
 ### City readout
 
 Shown wherever the player is standing in a region that has a city plan, which is

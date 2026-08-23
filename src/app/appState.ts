@@ -25,12 +25,14 @@ const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
     AppState.Error,
   ],
   [AppState.Loading]: [AppState.Shatterdome, AppState.Deployment, AppState.Error],
-  [AppState.Shatterdome]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
+  // Saving from inside the complex rather than only from the menu: a player
+  // who has just ordered a build should not have to leave the game to keep it.
+  [AppState.Shatterdome]: [AppState.MainMenu, AppState.Deployment, AppState.Saves, AppState.Error],
   [AppState.Deployment]: [AppState.Combat, AppState.Shatterdome, AppState.Error],
   [AppState.Combat]: [AppState.Results, AppState.Error],
   [AppState.Results]: [AppState.Shatterdome, AppState.MainMenu, AppState.Error],
   [AppState.AssetGallery]: [AppState.MainMenu, AppState.Error],
-  [AppState.Saves]: [AppState.MainMenu, AppState.Loading, AppState.Error],
+  [AppState.Saves]: [AppState.MainMenu, AppState.Loading, AppState.Shatterdome, AppState.Error],
   [AppState.WorldMap]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
   [AppState.Error]: [AppState.MainMenu],
 };

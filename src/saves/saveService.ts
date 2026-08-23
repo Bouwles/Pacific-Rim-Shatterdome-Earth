@@ -4,6 +4,8 @@ import { sectorIdAt } from "../world/cubeSphere";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 import { emptyEnvironmentSnapshot } from "../world/environment";
+import { createFacilityRegistry } from "../data/facilities";
+import { emptyShatterdomeSnapshot, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -41,6 +43,8 @@ export interface SaveRequest {
   readonly thumbnail?: string | null;
   /** Authoritative world state. Omitted only by callers that have no world yet. */
   readonly world?: WorldSnapshot;
+  /** Facilities and interior position. Omitted only by callers with no complex yet. */
+  readonly shatterdome?: ShatterdomeSnapshot;
 }
 
 /**
@@ -94,6 +98,9 @@ export class SaveService {
   buildDocument(kernel: SimulationKernel, request: SaveRequest = {}): RootSave {
     const sim = kernel.serialize();
     const world = request.world ?? emptyWorldSnapshot();
+    // A fresh complex rather than an absent one: the Shatterdome always exists,
+    // even for a caller that has not opened it yet.
+    const shatterdome = request.shatterdome ?? emptyShatterdomeSnapshot(createFacilityRegistry());
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -103,7 +110,7 @@ export class SaveService {
       appVersion: this.appVersion,
       thumbnail: request.thumbnail ?? null,
     };
-    return { schemaVersion: ROOT_SAVE_VERSION, savedAt: this.now(), metadata, sim, world };
+    return { schemaVersion: ROOT_SAVE_VERSION, savedAt: this.now(), metadata, sim, world, shatterdome };
   }
 
   async save(slotId: string, kernel: SimulationKernel, request: SaveRequest = {}): Promise<RootSave> {

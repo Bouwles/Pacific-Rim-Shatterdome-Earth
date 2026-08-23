@@ -5,7 +5,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 ## What currently works
 
 - `npm install` → `npm run dev` boots a Vite dev server. WebGPU-first engine selection with a WebGL fallback, both paths observed rendering (WebGPU manually, WebGL via Playwright's Chromium).
-- Application state machine with 8 states and a data-driven transition graph; reachable today: Boot → MainMenu → Loading → Shatterdome(stub) → MainMenu, plus Boot → Error on fatal boot failure.
+- Application state machine with 8 states and a data-driven transition graph; reachable today: Boot → MainMenu → Loading → Shatterdome → MainMenu, MainMenu ↔ AssetGallery / Saves / WorldMap, Shatterdome ↔ Saves, plus Boot → Error on fatal boot failure.
 - **Deterministic simulation kernel** running live in the app, independent of Babylon and the DOM:
   - fixed-step loop decoupled from render rate, with pause / resume / single-step / 0.25×–2× time scale;
   - catch-up capped two ways (250 ms delta clamp + 5-substep cap) so a suspended tab cannot spiral;
@@ -70,7 +70,18 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - activity expressed as densities per district rather than as agents, so a district of ninety thousand people costs one sample;
   - pooled thin-instance agents whose count comes from those densities and a quality budget, with per-kind counts reported because a total hides what an alert actually changes;
   - alert level and evacuation progress saved per region, with the layout itself derived from the seed and never stored.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (511 unit+integration), `smoke` (68 Playwright), `build` all pass.
+- **A Shatterdome you walk around**, entered from New Game rather than from a placeholder screen:
+  - thirteen facilities as a grammar of tiers, each with a footprint, a deck, stations, a construction time, a crew cost, a power draw and one sentence about what the tier buys;
+  - power from the reactor and crews from logistics as the two real constraints, so a laboratory can be refused because the reactor cannot carry it and a third order because nobody is free to build it;
+  - rooms generated from the facility records, one built at a time, with doors, lifts and trams as real edges with real travel times and a short fade at the swap;
+  - a doorway to a facility that has not been built is sealed and says which one, and becomes a usable door the moment that build lands;
+  - keyboard and mouse movement at person scale with collision, wall sliding, run and crouch, an unstuck action that always lands somewhere clear, and a pause that stops the simulation rather than hiding it;
+  - interaction focus by looking or by cycling with Tab, so the whole interior is playable without a mouse, with the prompt mirrored to a screen reader;
+  - management at in-world terminals: every facility with its live numbers, the next tier with its cost, and an Order button that carries the reason when it cannot be pressed;
+  - berths that resolve roster machines through the asset pipeline, and a Conn-Pod whose instruments read the live world outside;
+  - staff as one number per facility outside the active room and as pooled instances inside it, with named crew whose lines are filled from real facility state;
+  - facilities, construction progress, interior position and the selected machine saved at envelope version 5.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (636 unit+integration), `smoke` (78 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -83,6 +94,12 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - Terrain is broad-strokes landform, not geography. The generator knows a sample's latitude, a seeded moisture field and the authored region anchors, and nothing else. Real coastlines, mountain ranges, rivers and city footprints are not reproduced and no accuracy is claimed.
+- The interior is boxes: rooms are shells, fixtures and crew are instanced blocks, and there are no interior models yet. Only the Jaeger bay resolves real assets, and those are the procedural placeholders.
+- Staff have no collision, so a player can walk through a crew member. They also do not react to being spoken to beyond a line of radio.
+- Facility benefits are sentences, not systems. A tier changes power, crews, staff and fixtures; nothing yet reads "shortens every repair" because repair, research and manufacture have no mechanics behind them.
+- There is no economy. Construction costs time, crews and power, and nothing else, because money and contracts arrive with a later milestone.
+- The Conn-Pod has instruments and no controls. Boarding a machine does not deploy it, and the panel says so.
+- The complex has one layout. Facility footprints, decks and connections are authored, so a player cannot lay out their own base.
 - City blocks are instanced boxes standing in for buildings. They carry a destruction group id and a landmark slot names a manifest id, but nothing resolves an asset yet, and there are no interiors or damage states.
 - Only Hong Kong has a city. Every other region has `cityPlanId: null` and stays a strategic record, which the panel says plainly rather than showing an empty city.
 - Nothing raises an alert on its own. The alert buttons are debug controls; the attack director that would drive them does not exist.
@@ -131,6 +148,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
 - World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
 - City: [src/world/cityLayout.ts](src/world/cityLayout.ts), [cityActivity.ts](src/world/cityActivity.ts), [src/data/districts.ts](src/data/districts.ts), [src/engine/cityView.ts](src/engine/cityView.ts)
+- Shatterdome: [src/shatterdome/](src/shatterdome/), [src/data/facilities.ts](src/data/facilities.ts), [src/data/personnel.ts](src/data/personnel.ts), [src/engine/interiorView.ts](src/engine/interiorView.ts), [src/ui/shatterdomeScreen.ts](src/ui/shatterdomeScreen.ts)
 - Environment: [src/world/worldClock.ts](src/world/worldClock.ts), [weather.ts](src/world/weather.ts), [ocean.ts](src/world/ocean.ts), [environment.ts](src/world/environment.ts)
 - Environment content: [src/data/climates.ts](src/data/climates.ts), [src/data/quality.ts](src/data/quality.ts)
 - Environment rendering and audio: [src/engine/skyView.ts](src/engine/skyView.ts), [weatherView.ts](src/engine/weatherView.ts), [ambientAudio.ts](src/engine/ambientAudio.ts)
@@ -165,7 +183,6 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set, and walk the
-`walking` deployment route the city layout already produces rather than inventing a path. The
-Shatterdome landmark slot already names `shatterdome.jaeger-bay`, so binding that manifest to a real
-entity is the first thing the milestone should do.
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set. A machine is
+already chosen at a berth and boarded in the Conn-Pod, and that selection is already saved, so the next
+milestone starts from a Jaeger the player has picked rather than from an empty roster.

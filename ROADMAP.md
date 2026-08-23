@@ -193,7 +193,7 @@ civilians; and alert state saved per region. Created `src/data/districts.ts`,
 ## Phase 2 - Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.
-**Status:** not-started.
+**Status:** done, delivered as Milestone 08 below.
 **Scope:** on-foot player controller, one explorable Shatterdome interior area (command + Jaeger bay placeholder rooms), DOM-based management UI shell, save-game create/load against IndexedDB.
 **Acceptance tests:** player can walk the hub, open a management panel, save and reload state, all offline.
 **Next action:** the on-foot player controller and the first real Shatterdome interior, which is the first
@@ -203,13 +203,47 @@ height field to walk on (Milestone 05), and the environment already supplies the
 water-state multipliers a controller has to obey (Milestone 06). The controller consumes those rather than
 inventing its own.
 
+## Phase 2 / Milestone 08 - Explorable Shatterdome and on-foot player
+
+**Depends on:** Milestone 02 (asset manifests), Milestone 03 (saves), Milestone 06 (environment
+effects), Milestone 07 (the city the complex stands in).
+**Status:** done.
+**Scope:** thirteen facilities as a grammar with tiers, construction orders, power and crews;
+generated interior rooms with fixtures, doorways, spawn points and a Conn-Pod; keyboard and mouse
+on-foot movement with collision, interaction focus, accessible prompts, pause and an unstuck action;
+doors, lifts and trams with short fades; in-world management terminals, berth inspection and Conn-Pod
+instruments; lightweight staff schedules, ambient work and radio chatter from named crew. Created
+`src/shatterdome/`, `src/data/facilities.ts`, `src/data/personnel.ts`, `src/engine/interiorView.ts`,
+`src/engine/onFootInput.ts`, `src/ui/shatterdomeScreen.ts`, `src/debug/shatterdomeScenario.ts`.
+Raised the save envelope to version 5 with a real migration. Replaced the Shatterdome placeholder
+screen the boot flow used to land on.
+**Acceptance tests:**
+
+- The player walks from command to a selected Jaeger, inspects it, enters the Conn-Pod and returns,
+  with no menu teleport anywhere in the path. Verified headlessly by the scenario, in the browser by
+  Playwright, and by hand: command to quarters by lift, quarters to the bay by tram, and the bay is
+  130 m of walking wide.
+- Facility state changes appearance after construction and survives reload. Ordering Kaiju Research
+  raised scaffolds immediately, and when the build landed the sealed bulkhead in command became a
+  usable door into a room with fixtures and five staff on shift. A build running at the moment of
+  saving is still running after a full page reload and a load.
+- On-foot controls and camera never inherit Jaeger-scale physics values: a person walks at 2.4 m/s
+  against a 75 m machine's stride, and the interior camera runs a 0.05 m near plane and a 400 m far
+  plane rather than the ground view's 400 km.
+- `npm run typecheck`, `lint`, `format:check`, `test` (636), `smoke` (78), `build` all pass.
+  **Next action:** none - complete. Proceed to Phase 3.
+
 ## Phase 3 — Single Jaeger + single kaiju combat vertical slice
 
 **Depends on:** Phase 2.
 **Status:** not-started.
 **Scope:** one playable Jaeger with light/heavy melee, block, evade, cockpit/third-person camera switch; one kaiju with a basic attack pattern and per-component damage; hit stop, damage numbers optional, component-based damage model.
 **Acceptance tests:** a full scripted encounter can be won or lost; damage persists to the Jaeger's save record after battle.
-**Next action:** not started.
+**Next action:** a Jaeger the player can pilot, starting from the machine they already select at a berth and
+board in the Conn-Pod. The roster entry, its asset manifest and its saved selection all exist; what does not
+is a Jaeger entity in the world, a controller at Jaeger scale, and the damage record that outlives a fight.
+The deployment corridor out of Hong Kong is already surveyed as city layout data, and the environment
+already supplies the traction, movement and water-state multipliers a 75 m machine has to obey.
 
 ## Phase 4 — World map and attack director MVP
 

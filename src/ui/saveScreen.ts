@@ -44,7 +44,12 @@ function formatBytes(bytes: number | null): string {
  * Save and load panel. Every control here operates on real storage; nothing is
  * shown that the save service cannot actually do.
  */
-export function renderSaveScreen(container: HTMLElement, callbacks: SaveScreenCallbacks): SaveScreenHandle {
+export function renderSaveScreen(
+  container: HTMLElement,
+  callbacks: SaveScreenCallbacks,
+  /** Where leaving this panel goes back to. It is not always the menu now. */
+  exitLabel = "Back to Menu",
+): SaveScreenHandle {
   container.replaceChildren();
 
   const panel = document.createElement("div");
@@ -59,7 +64,7 @@ export function renderSaveScreen(container: HTMLElement, callbacks: SaveScreenCa
   exit.type = "button";
   exit.className = "secondary-button";
   exit.dataset.action = "exit-saves";
-  exit.textContent = "Back to Menu";
+  exit.textContent = exitLabel;
   exit.addEventListener("click", () => callbacks.onExit());
   header.append(title, exit);
 

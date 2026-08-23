@@ -168,3 +168,26 @@ One thing worth recording about the chain: each migration writes the world schem
 version as it stood at that step, not the current constant. Writing today's number
 into an older step would make a migrated file claim a shape it does not have, and
 the next step in the chain would have nothing to recognise.
+
+## Milestone 08: version 5 adds the Shatterdome
+
+`ROOT_SAVE_VERSION` is now 5 and the envelope gained a `shatterdome` section
+alongside `sim` and `world`. It carries every facility record, the player's
+position inside the complex, and which machine they had selected.
+
+A version 4 save has no facilities recorded because there was no interior to
+record: the Shatterdome was a screen that said it was not implemented. Every such
+file therefore comes back with the complex a new campaign starts with, standing
+on the command floor. That is the only honest reading of a file that never
+captured one, and it is the same state `emptyShatterdomeSnapshot` produces for a
+save written before the player has been inside. Nothing else in the document is
+touched: the world, the environment and every region alert survive as written.
+
+The interior layout itself is not saved and never will be. Rooms are a pure
+function of the facility records and the world seed, so they are laid out again
+on load. Saving them would freeze old saves against future changes to the
+facility grammar.
+
+One rule the location field enforces: a saved `roomId` is validated against the
+rooms this build knows about rather than trusted, and the session falls back to a
+room that exists rather than throwing the player into nowhere.

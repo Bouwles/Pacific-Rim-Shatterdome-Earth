@@ -252,6 +252,207 @@
         border-color: #6fd0ff;
         color: #eaf8ff;
       }
+      /* The Shatterdome interior: a heads-up layer over a first-person view,
+         plus the panels that open at a terminal, a berth or a Conn-Pod. */
+      #uiRoot .screen-shatterdome-interior {
+        max-width: none;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        background: none;
+        border: none;
+        text-align: left;
+        pointer-events: none;
+      }
+      #uiRoot .sd-fade {
+        position: fixed;
+        inset: 0;
+        background: #04060a;
+        opacity: 0;
+        transition: opacity 90ms linear;
+        pointer-events: none;
+      }
+      #uiRoot .sd-hud {
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        width: min(360px, 32vw);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(8, 12, 18, 0.72);
+        border: 1px solid rgba(127, 214, 255, 0.28);
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 13px;
+      }
+      #uiRoot .sd-room h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      #uiRoot .sd-room p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: #8fb0c6;
+      }
+      #uiRoot .sd-readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #9fd0e8;
+      }
+      #uiRoot .sd-prompt {
+        margin: 4px 0 0;
+        color: #ffe6a8;
+        font-size: 13px;
+      }
+      #uiRoot .sd-announcement {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      #uiRoot .sd-radio {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 12px;
+        color: #c3d8e6;
+      }
+      #uiRoot .sd-radio-speaker {
+        color: #6fd0ff;
+      }
+      #uiRoot .sd-hints {
+        margin: 6px 0 0;
+        font-size: 11px;
+        color: #6f97b0;
+      }
+      #uiRoot .sd-panel-host {
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        bottom: 92px;
+        width: min(460px, 40vw);
+        display: flex;
+        pointer-events: auto;
+      }
+      #uiRoot .sd-panel {
+        flex: 1;
+        overflow-y: auto;
+        background: rgba(8, 12, 18, 0.92);
+        border: 1px solid rgba(127, 214, 255, 0.35);
+        border-radius: 6px;
+        padding: 14px 16px;
+        font-size: 13px;
+      }
+      #uiRoot .sd-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .sd-panel-header h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+      #uiRoot .sd-panel-header button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-panel-summary {
+        margin: 8px 0;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #9fd0e8;
+      }
+      #uiRoot .sd-facility-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .sd-facility-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+      }
+      #uiRoot .sd-facility-row[data-here="true"] {
+        border-color: rgba(127, 214, 255, 0.55);
+      }
+      #uiRoot .sd-facility-row[data-working="true"] {
+        border-color: rgba(255, 200, 120, 0.5);
+      }
+      #uiRoot .sd-facility-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+      }
+      #uiRoot .sd-facility-name {
+        font-weight: 600;
+      }
+      #uiRoot .sd-facility-detail,
+      #uiRoot .sd-facility-benefit {
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-facility-row button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-facility-row button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #uiRoot .sd-panel-fields {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 2px 10px;
+        margin: 10px 0;
+        font-size: 12px;
+      }
+      #uiRoot .sd-panel-fields dt {
+        color: #6f97b0;
+      }
+      #uiRoot .sd-panel-fields dd {
+        margin: 0;
+        font-family: "Consolas", monospace;
+      }
+      #uiRoot .sd-panel-notes {
+        margin: 0;
+        font-size: 12px;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-pause {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: rgba(4, 6, 10, 0.72);
+        pointer-events: auto;
+      }
+      #uiRoot .sd-pause h2 {
+        margin: 0 0 6px;
+      }
       /* The save panel is a working list, not a dialog. */
       #uiRoot .screen-saves {
         max-width: none;

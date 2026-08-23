@@ -2,6 +2,7 @@ import type { SimulationKernel } from "../simulation/kernel";
 import { SaveError } from "../saves/repository";
 import type { SaveService } from "../saves/saveService";
 import type { WorldSnapshot } from "../world/worldState";
+import type { ShatterdomeSnapshot } from "../shatterdome/facilityState";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -44,20 +45,32 @@ export class SaveController {
     }
   }
 
-  async save(slotId: string, kernel: SimulationKernel, name: string, world?: WorldSnapshot): Promise<void> {
+  async save(
+    slotId: string,
+    kernel: SimulationKernel,
+    name: string,
+    world?: WorldSnapshot,
+    shatterdome?: ShatterdomeSnapshot,
+  ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
       playTimeMs: this.playTimeMs,
       thumbnail: await this.thumbnail(),
       world,
+      shatterdome,
     });
   }
 
-  async autosave(kernel: SimulationKernel, world?: WorldSnapshot): Promise<string> {
+  async autosave(
+    kernel: SimulationKernel,
+    world?: WorldSnapshot,
+    shatterdome?: ShatterdomeSnapshot,
+  ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
       thumbnail: await this.thumbnail(),
       world,
+      shatterdome,
     });
   }
 

@@ -182,6 +182,31 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Shatterdome interior cost (Milestone 08)
+
+One room at a time is the whole budget. Measured in the browser on WebGPU at
+High, seed 20260824:
+
+| Room                              | Meshes | Draw calls | Staff drawn | Frame time | Frame rate |
+| --------------------------------- | ------ | ---------- | ----------- | ---------- | ---------- |
+| LOCCENT Command                   | 12     | 11         | 6 of 6      | 0.2 ms     | 144 fps    |
+| Kaiju Research                    | 11     | 9          | 5 of 5      | 0.1 ms     | 144 fps    |
+| Jaeger Bay, two machines resolved | 17     | 32         | 14 of 14    | 0.3 ms     | 144 fps    |
+| Conn-Pod                          | 10     | 5          | 0           | 0.1 ms     | 144 fps    |
+
+A room is six shell meshes, one mesh per obstacle kind, one per fixture kind, one
+pooled staff mesh, and whatever the berths resolve. Walking through a door
+disposes the room behind and builds the next, so the Jaeger bay costs nothing
+while the player is in the archive.
+
+Two costs were found by looking rather than by measuring. The staff pool is
+allocated with its instances parked below the floor, which put its bounding box
+nowhere near the room and had the whole mesh frustum culled: a fully staffed
+command floor reported six people and drew none. And on WebGPU a thin-instance
+buffer whose count grows from zero is not picked up by marking it updated; the
+buffer has to be set again. Both are now handled where the count changes, not per
+frame.
+
 ## City cost (Milestone 07)
 
 The Hong Kong layout at seed 20260823, six kilometre region radius:

@@ -59,6 +59,12 @@ export interface QualityPreset extends RegistryEntry {
   readonly maxCityAgents: number;
   /** Destruction groups kept resident, nearest first. Beyond this the city fades out. */
   readonly maxCityGroups: number;
+  /**
+   * Staff instances drawn in the Shatterdome room the player is standing in.
+   * Only the active room is ever populated, so this is a per-room ceiling rather
+   * than a complex-wide one.
+   */
+  readonly maxInteriorStaff: number;
   readonly telegraphs: readonly Telegraph[];
   readonly notes: string;
 }
@@ -78,6 +84,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityBlocks: 260,
     maxCityAgents: 220,
     maxCityGroups: 30,
+    maxInteriorStaff: 6,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "No shadows or reflections, one wave octave, a thinner city. Every telegraph is still drawn.",
   },
@@ -95,6 +102,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityBlocks: 620,
     maxCityAgents: 620,
     maxCityGroups: 70,
+    maxInteriorStaff: 14,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "Shadows on, cheap reflections, two wave octaves.",
   },
@@ -112,6 +120,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityBlocks: 1200,
     maxCityAgents: 1500,
     maxCityGroups: 130,
+    maxInteriorStaff: 26,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "The default. Full wave detail and a full-resolution shadow map.",
   },
@@ -129,6 +138,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityBlocks: 2200,
     maxCityAgents: 3600,
     maxCityGroups: 240,
+    maxInteriorStaff: 40,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "For capture rather than play. Not expected to hold 60 fps in a heavy fight.",
   },
@@ -152,6 +162,7 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
     "maxCityBlocks",
     "maxCityAgents",
     "maxCityGroups",
+    "maxInteriorStaff",
   ] as const) {
     const value = preset[key];
     if (!Number.isFinite(value) || value < 0) errors.push(`${key} must be a non-negative finite number`);
@@ -164,6 +175,9 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
   // absent one, and absence is information rather than detail.
   if (preset.maxCityBlocks < 1) errors.push("maxCityBlocks must be at least 1");
   if (preset.maxCityGroups < 1) errors.push("maxCityGroups must be at least 1");
+  // An empty room is not a cheaper room, it is an abandoned one, and a complex
+  // with nobody in it tells the player something false about the game.
+  if (preset.maxInteriorStaff < 1) errors.push("maxInteriorStaff must be at least 1");
 
   const missing = REQUIRED_TELEGRAPHS.filter((telegraph) => !preset.telegraphs.includes(telegraph));
   if (missing.length > 0) {

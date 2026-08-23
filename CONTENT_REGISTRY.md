@@ -192,3 +192,44 @@ recovery. Each declares multipliers for civilian, vehicle, shipping, aircraft an
 military activity, a siren intensity, and an evacuation rate. They are world-layer
 tables rather than registry entries, because they describe behaviour rather than
 authored content.
+
+## Facilities (Milestone 08)
+
+Thirteen entries in `src/data/facilities.ts`, registered through
+`ContentRegistry<FacilityDefinition>`. A facility is a rule for making a room and
+a ladder of tiers, so these numbers are a grammar rather than a set of rooms.
+
+| id          | Display name          | Deck | Footprint        | Tiers | Starts built |
+| ----------- | --------------------- | ---- | ---------------- | ----- | ------------ |
+| command     | LOCCENT Command       | 2    | 34 x 26 x 9 m    | 2     | yes          |
+| jaeger-bay  | Jaeger Bay            | 0    | 130 x 96 x 104 m | 2     | yes          |
+| repair      | Repair Gantries       | 0    | 78 x 62 x 84 m   | 2     | yes          |
+| research    | Kaiju Research        | 2    | 30 x 24 x 7 m    | 2     | no           |
+| manufacture | Fabrication Hall      | 1    | 56 x 44 x 16 m   | 2     | no           |
+| reactor     | Reactor and Utilities | -1   | 42 x 36 x 20 m   | 3     | yes          |
+| logistics   | Logistics and Stores  | 1    | 48 x 38 x 12 m   | 2     | yes          |
+| training    | Drift Training        | 3    | 32 x 28 x 11 m   | 2     | no           |
+| quarters    | Crew Quarters         | 3    | 40 x 30 x 8 m    | 2     | yes          |
+| defense     | Defense Control       | 1    | 28 x 22 x 8 m    | 2     | no           |
+| archive     | Memorial Archive      | 3    | 24 x 20 x 7 m    | 1     | no           |
+| contract    | Contracts Office      | 2    | 26 x 20 x 7 m    | 2     | no           |
+| launch      | Launch Infrastructure | 0    | 60 x 50 x 90 m   | 2     | no           |
+
+`FACILITY_CONNECTIONS` joins them with thirteen edges: doors within a deck, lifts
+between decks, and one tram from the bay to the accommodation wing. Every
+facility is reachable, and the ones that have not been built show as sealed
+bulkheads rather than as missing walls.
+
+Only the reactor produces power. Only logistics musters construction crews. A new
+campaign starts with 220 MW against 162 MW of draw and three crews.
+
+## Named crew (Milestone 08)
+
+Fifteen entries in `src/data/personnel.ts`, one to three per facility, each with
+a post, a shift and two or three lines. **These are original characters written
+for this project, not film characters**, and their lines are templates filled from
+live facility state so none of them can claim something the complex is not doing.
+
+Everyone else in the complex is anonymous shift staff: a facility's population is
+one integer derived from its tier and the hour, and only the room the player is
+standing in turns that into positions.

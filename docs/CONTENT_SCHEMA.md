@@ -407,6 +407,68 @@ is not a lower quality city, it is an absent one, and absence is information
 rather than detail. `city-alert-state` joined the required telegraph list, so no
 preset may stop showing what the alert level is.
 
+## Shatterdome schemas (Milestone 08)
+
+### `FacilityDefinition` (src/data/facilities.ts)
+
+| Field                                          | Type             | Constraint                                         |
+| ---------------------------------------------- | ---------------- | -------------------------------------------------- |
+| `id`                                           | `FacilityKind`   | one of the thirteen facilities                     |
+| `deck`                                         | `number`         | integer; negative is below the waterline           |
+| `widthMeters` / `depthMeters` / `heightMeters` | `number`         | positive; height at least 3 so a person fits       |
+| `floorColour` / `accentColour`                 | `[n,n,n]`        | three channels within 0 to 1                       |
+| `stations`                                     | `StationSpec[]`  | at least one, and at least one `terminal`          |
+| `startsBuilt`                                  | `boolean`        | true for the facilities a new campaign begins with |
+| `tiers`                                        | `FacilityTier[]` | numbered 1..n in order                             |
+
+Each `FacilityTier` carries `constructionTicks`, `crewRequired`, `powerDrawMw`,
+`powerOutputMw` (reactor only), `crewProvided` (logistics only), `staffSlots`,
+`fixtures` and a `benefit` sentence. Validation refuses a tier that does not add
+fixtures or take longer than the tier below it, and refuses power output from
+anything but the reactor so the balance stays one sum.
+
+`FACILITY_CONNECTIONS` joins the rooms with `door`, `lift` or `tram` edges.
+`validateConnections` rejects unknown endpoints, self-links, duplicates and any
+facility nothing connects to.
+
+### `CrewMember` (src/data/personnel.ts)
+
+`{ id, name, role, facilityId, shift, lines, notes }`. Lines are templates whose
+placeholders are filled from live state: `{facility} {tier} {status} {power}
+{crews} {staff} {time}`. Validation rejects a placeholder nothing can fill, so a
+typo cannot reach the screen as raw braces. These are original characters written
+for this project, not film characters.
+
+### `ShatterdomeSnapshot` (`SHATTERDOME_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, facilities, location, selectedJaegerId }`, saved as its own
+section of the envelope.
+
+A `FacilityRecord` is `{ facilityId, tier, status, targetTier,
+workRemainingTicks, crewsHeld }` with status one of `absent`, `building`,
+`operational`, `upgrading`. Validation rejects the states that cannot exist: an
+absent facility at a non-zero tier, an operational one at tier zero, a build with
+no work left, or a facility holding crews with no order running.
+
+`location` is `{ roomId, x, z, yawDeg }` in the room's own frame, and is checked
+against the rooms this build knows about rather than trusted.
+
+### `InteriorLayout` (`INTERIOR_LAYOUT_SCHEMA_VERSION = 1`)
+
+Generated, never authored and never saved. Rooms carry obstacles, interactables,
+staff posts, spawn points, fixture count and a construction flag. Every id is
+stable and derived from the facility id.
+
+`Interactable.kind` is one of `terminal`, `staff-post`, `berth`, `conn-pod`,
+`transit`. A transit to a facility that has not been built carries a
+`sealedReason` instead of a target room.
+
+### Quality interior budget
+
+`QualityPreset` gained `maxInteriorStaff`: how many crew instances the active
+room draws. A preset below one is refused, because an empty room is not a cheaper
+room, it is an abandoned one.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

@@ -10,7 +10,7 @@ The project is built in numbered milestones. Everything listed here actually run
 
 - Boots into a real 3D scene, WebGPU when the browser supports it, WebGL otherwise, with no gameplay difference between the two
 - Application state machine covering Boot, MainMenu, Loading, Shatterdome, Deployment, Combat, Results and Error
-- Main menu with a working New Game flow into a clearly labelled Shatterdome placeholder
+- Main menu with a working New Game flow that puts you on the command floor of the Shatterdome, on foot
 - Deterministic simulation kernel that runs on a fixed timestep, independent of framerate and of the renderer
 - Seeded random number streams, one per subsystem, so runs are reproducible from a single seed
 - Versioned, serializable commands and events with validation that fails loudly and early
@@ -34,9 +34,19 @@ The project is built in numbered milestones. Everything listed here actually run
 - A Hong Kong you can stand in, grown from a district grammar: towers along the harbour front, a ridge terraced behind them, container docks down the shore, the Shatterdome precinct, and the Bone Slums pressed against its wall. Roads, shipping lanes, air corridors, evacuation muster points, defence positions and a Jaeger deployment corridor down to the water
 - A city that reacts. Raise the alert and the sirens go up, the streets empty, the harbour clears, the military fills the roads and people start moving to muster points. Drop it back to recovery and the city comes home
 - Traffic, ships, aircraft and crowds drawn as pooled instances on real lanes rather than as thousands of simulated people, so a district of ninety thousand costs the same to run as an empty one
-- Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
+- A Shatterdome you walk around on foot. New Game drops you on the command floor at eye height, with the watch on shift around you and the Marshal reporting how much power is on the board
+- Thirteen facilities: command, the Jaeger bay, repair gantries, kaiju research, fabrication, the reactor, logistics, drift training, quarters, defense control, the memorial archive, contracts and launch. Each has a real footprint on a real deck, its own crew, and tiers you build
+- Building costs time, construction crews and reactor power, and nothing else is invented. A laboratory can be refused because the reactor cannot carry it, and a third job at once can be refused because there is nobody left to build it. Upgrade the reactor or the stores and the refusal goes away
+- Facilities you have not built have no rooms. The doorway that would lead there is sealed and tells you which one is missing. Order it and the scaffolds go up in that room straight away; when the work lands the bulkhead becomes a door you can walk through into a finished space with people working in it
+- Rooms are joined by doors, lifts and a tram, each taking its own time, with a short fade at the change. Only the room you are standing in exists, so the hundred and thirty metre Jaeger bay costs nothing while you are in the archive
+- Walking, running, crouching, wall sliding and an unstuck key that always puts you somewhere clear. Escape pauses the game properly: construction, the clock and the weather all stop with it
+- The whole interior plays without a mouse. Tab cycles what is in the room and turns you to face it, E uses it, the arrow keys look around, and every prompt is read out to a screen reader
+- Management happens at terminals you walk up to rather than in a menu. The board shows every facility with its tier, power draw and staff on shift, the next tier with its cost and build time, and an Order button that greys out with the reason it cannot be pressed
+- Jaeger berths you can walk up to and inspect, with mass, reactor output, cooling, measured height and which asset it renders from. Board the Conn-Pod from the access gantry and the instruments read the live world outside: local time, weather, wind, visibility and the alert level over the city
+- Crew with schedules. A facility's population changes with the hour and the shift, people work at their stations and walk between them, and fifteen named characters hold posts across the complex and tell you real things about their own facility over the radio
+- Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data. Saving works from inside the Shatterdome as well as from the menu, and a build still running when you save is still running when you load
 
-Not built yet: the walkable Shatterdome interior, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. Only Hong Kong has a city; the other regions are still records on a map. Nothing raises an alert on its own yet, so you raise it yourself from the panel, and nothing knocks the city down yet even though it is built in pieces ready for it. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons, and nothing yet reads the weather numbers because there is no AI or combat to slow down or blind. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. The Shatterdome is walkable but everything in it is still boxes, there are no interior models, and the crew have no collision, so you can walk through them. Facility tiers change power, crews, staff and what the room looks like; they do not yet speed up repairs or unlock research, because repair and research have no mechanics behind them. Boarding the Conn-Pod does not deploy anything and the panel says so. Only Hong Kong has a city; the other regions are still records on a map. Nothing raises an alert on its own yet, so you raise it yourself from the panel, and nothing knocks the city down yet even though it is built in pieces ready for it. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and outside the Shatterdome you still move with teleport and walk buttons rather than a Jaeger. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
 ### Using your own models
 
@@ -46,7 +56,7 @@ The game ships with no model files and renders entirely from generated placehold
 
 ### The Shatterdome
 
-One heavily upgradeable base you can walk around on foot. Command, Jaeger bay, repair gantries, research labs, kaiju containment, manufacturing, reactor and utilities, pilot quarters, training, logistics, defense control, memorial, market, and launch infrastructure. Facilities have visible construction states and real mechanical benefits.
+One heavily upgradeable base you can walk around on foot. The rooms, the walking, the construction and the crew are in, as described above; what follows is where it is going. Command, Jaeger bay, repair gantries, research labs, kaiju containment, manufacturing, reactor and utilities, pilot quarters, training, logistics, defense control, memorial, market, and launch infrastructure. Facilities have visible construction states and real mechanical benefits.
 
 ### Jaegers
 

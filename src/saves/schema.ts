@@ -1,12 +1,13 @@
 import { SIM_SCHEMA_VERSION, type SimSnapshot } from "../simulation/kernel";
 import { hashState } from "../simulation/hash";
 import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
+import { SHATTERDOME_SCHEMA_VERSION, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 4;
+export const ROOT_SAVE_VERSION = 5;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -34,6 +35,8 @@ export interface RootSave {
   readonly sim: SimSnapshot;
   /** Where the player is on the globe and the strategic record for every region. */
   readonly world: WorldSnapshot;
+  /** Facilities, construction in progress, and where the player was standing inside. */
+  readonly shatterdome: ShatterdomeSnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -140,6 +143,24 @@ function validateWorldSection(world: unknown): string[] {
   return errors;
 }
 
+function validateShatterdomeSection(shatterdome: unknown): string[] {
+  if (!isRecord(shatterdome)) return ["shatterdome must be an object"];
+  const errors: string[] = [];
+  if (shatterdome["schemaVersion"] !== SHATTERDOME_SCHEMA_VERSION) {
+    errors.push(
+      `shatterdome.schemaVersion must be ${SHATTERDOME_SCHEMA_VERSION}, ` +
+        `got ${String(shatterdome["schemaVersion"])}`,
+    );
+  }
+  if (!Array.isArray(shatterdome["facilities"])) errors.push("shatterdome.facilities must be an array");
+  if (!isRecord(shatterdome["location"])) errors.push("shatterdome.location must be an object");
+  const selected = shatterdome["selectedJaegerId"];
+  if (selected !== null && typeof selected !== "string") {
+    errors.push("shatterdome.selectedJaegerId must be a string or null");
+  }
+  return errors;
+}
+
 /** Full structural validation of a current-version save. */
 export function validateRootSave(document: unknown): string[] {
   if (!isRecord(document)) return ["save document must be an object"];
@@ -157,6 +178,7 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateMetadata(document["metadata"]));
   errors.push(...validateSim(document["sim"]));
   errors.push(...validateWorldSection(document["world"]));
+  errors.push(...validateShatterdomeSection(document["shatterdome"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

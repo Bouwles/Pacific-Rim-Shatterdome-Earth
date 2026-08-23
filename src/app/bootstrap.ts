@@ -6,13 +6,7 @@ import { SimulationKernel } from "../simulation/kernel";
 import { SimulationLoop } from "../simulation/loop";
 import { resolveSeed } from "./config";
 import { AppState, AppStateMachine } from "./appState";
-import {
-  renderErrorScreen,
-  renderLoadingScreen,
-  renderMainMenu,
-  renderShatterdomePlaceholder,
-  clearScreen,
-} from "../ui/screens";
+import { renderErrorScreen, renderLoadingScreen, renderMainMenu, clearScreen } from "../ui/screens";
 import { renderGalleryScreen, type GalleryScreenHandle } from "../ui/galleryScreen";
 import { AssetGallery } from "../debug/gallery";
 import { AssetResolver } from "../assets/resolver";
@@ -66,6 +60,21 @@ import {
 } from "../world/cityActivity";
 import { CityView } from "../engine/cityView";
 import { localToGeo } from "../world/coordinates";
+import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
+import { CREW_MEMBERS, shiftAt } from "../data/personnel";
+import { jaegerRegistry } from "../data/jaegers";
+import { ShatterdomeState } from "../shatterdome/facilityState";
+import { ShatterdomeSession } from "../shatterdome/session";
+import { CONN_POD_ROOM_ID } from "../shatterdome/interiorLayout";
+import { NEUTRAL_INPUT, ON_FOOT } from "../shatterdome/onFoot";
+import { InteriorView } from "../engine/interiorView";
+import { OnFootInputSource } from "../engine/onFootInput";
+import {
+  renderShatterdomeScreen,
+  type FacilityRow,
+  type ShatterdomePanelState,
+  type ShatterdomeScreenHandle,
+} from "../ui/shatterdomeScreen";
 
 export interface AppHandle {
   dispose(): void;
@@ -84,6 +93,23 @@ const READOUT_INTERVAL_MS = 250;
  * rather than against a person who would drown in the shallows.
  */
 const PLAYER_HEIGHT_METERS = 75;
+/**
+ * Ground height under the Shatterdome, metres.
+ *
+ * The complex stands on the apron above the waterline, so a person inside it is
+ * on dry ground whatever the tide is doing. Without this the environment would
+ * resolve a person standing at sea level and report them wading through the
+ * command floor.
+ */
+const SHATTERDOME_DECK_HEIGHT_METERS = 8;
+
+/** What a transition is called while it is happening. A table, not a chain of ternaries. */
+const TRANSIT_LABELS: Readonly<Record<string, string>> = {
+  door: "Door",
+  lift: "Lift",
+  tram: "Tram",
+};
+
 /** Babylon ArcRotateCamera defaults, restored when the ground view closes. */
 const DEFAULT_CAMERA_MIN_Z = 1;
 const DEFAULT_CAMERA_MAX_Z = 10_000;
@@ -134,6 +160,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   let overlay: DebugOverlay | undefined;
   let kernel: SimulationKernel | undefined;
+  /**
+   * The transport. Hoisted out of the boot block because the Shatterdome pause
+   * menu drives it: pausing inside the complex has to stop construction and the
+   * clock, not just hide the view.
+   */
+  let loop: SimulationLoop | undefined;
   let adapterDispose: (() => void) | undefined;
   let bootScene: BootScene;
   /**
@@ -159,14 +191,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const scene = bootScene.scene;
 
     kernel = new SimulationKernel({ seed: resolveSeed(window.location.search) });
-    const loop = new SimulationLoop(kernel);
+    const activeLoop = new SimulationLoop(kernel);
+    loop = activeLoop;
 
     overlay = new DebugOverlay(root, {
       backend: adapter.backend,
       babylonVersion: adapter.version,
       scene,
       kernel,
-      loop,
+      loop: activeLoop,
       // No physics backend is wired yet; null makes the overlay say so.
       activePhysicsBodies: () => null,
     });
@@ -175,7 +208,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     let lastEnvironmentTick = 0;
     adapter.engine.runRenderLoop(() => {
       const deltaMs = adapter.engine.getDeltaTime();
-      loop.advance(deltaMs);
+      activeLoop.advance(deltaMs);
       // Drain outside the tick so subscribers never mutate state mid-step.
       simKernel.events.drain();
 
@@ -296,6 +329,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     repository = new MemorySaveRepository();
   }
   const saveService = new SaveService({ repository });
+  /**
+   * Where the save panel goes back to. Opening it from inside the Shatterdome
+   * and being dropped at the main menu would lose the room the player was in.
+   */
+  let savesReturnState: AppState = AppState.MainMenu;
   const saveController = new SaveController(saveService, () => captureThumbnail(bootScene.scene));
   let saveScreen: SaveScreenHandle | undefined;
 
@@ -324,67 +362,84 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   };
 
   const openSaves = async (): Promise<void> => {
-    saveScreen = renderSaveScreen(uiRoot, {
-      onSaveNew: (name) =>
-        runSaveAction(async () => {
-          const trimmed = name.trim() || `Save ${new Date().toLocaleTimeString()}`;
-          const slotId = `slot.${Date.now().toString(36)}`;
-          if (!kernel) throw new Error("No simulation is running.");
-          await saveController.save(slotId, kernel, trimmed, worldState.serialize());
-          return `Saved "${trimmed}".`;
-        }),
-      onOverwrite: (slotId) =>
-        runSaveAction(async () => {
-          if (!kernel) throw new Error("No simulation is running.");
-          const existing = await saveService.listSlots();
-          const name = existing.find((slot) => slot.slotId === slotId)?.metadata.name ?? "Save";
-          await saveController.save(slotId, kernel, name, worldState.serialize());
-          return `Overwrote "${name}".`;
-        }),
-      onLoad: (slotId) =>
-        runSaveAction(async () => {
-          const result = await saveService.load(slotId);
-          if (!kernel) throw new Error("No simulation is running.");
-          if (result.document.sim.seed !== kernel.seed) {
-            // Restoring needs a kernel built for the save's seed, which means a
-            // full reload. Say so rather than silently loading the wrong world.
-            return (
-              `"${result.document.metadata.name}" uses world seed ${result.document.sim.seed}, ` +
-              `but this session is running seed ${kernel.seed}. Reload with ?seed=${result.document.sim.seed} to load it.`
+    saveScreen = renderSaveScreen(
+      uiRoot,
+      {
+        onSaveNew: (name) =>
+          runSaveAction(async () => {
+            const trimmed = name.trim() || `Save ${new Date().toLocaleTimeString()}`;
+            const slotId = `slot.${Date.now().toString(36)}`;
+            if (!kernel) throw new Error("No simulation is running.");
+            await saveController.save(
+              slotId,
+              kernel,
+              trimmed,
+              worldState.serialize(),
+              shatterdomeState.serialize(),
             );
-          }
-          saveService.applyToKernel(result.document, kernel);
-          worldState.restore(result.document.world);
-          floatingOrigin.forceRebase(worldState.playerPosition);
-          saveController.resetPlayTime(result.document.metadata.playTimeMs);
-          const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
-          const migrated =
-            result.migratedFrom !== null ? ` (migrated from version ${result.migratedFrom})` : "";
-          return `Loaded "${result.document.metadata.name}"${recovered}${migrated}.`;
-        }),
-      onRename: (slotId, name) =>
-        runSaveAction(async () => {
-          await saveService.rename(slotId, name);
-          return `Renamed to "${name.trim()}".`;
-        }),
-      onDelete: (slotId) =>
-        runSaveAction(async () => {
-          await saveService.delete(slotId);
-          return "Deleted save.";
-        }),
-      onExport: (slotId) =>
-        runSaveAction(async () => {
-          await saveController.download(slotId);
-          return "Exported save to a file.";
-        }),
-      onImport: (file) =>
-        runSaveAction(async () => {
-          const slotId = `slot.imported.${Date.now().toString(36)}`;
-          await saveController.importFile(slotId, file);
-          return `Imported "${file.name}".`;
-        }),
-      onExit: () => stateMachine.transition(AppState.MainMenu),
-    });
+            return `Saved "${trimmed}".`;
+          }),
+        onOverwrite: (slotId) =>
+          runSaveAction(async () => {
+            if (!kernel) throw new Error("No simulation is running.");
+            const existing = await saveService.listSlots();
+            const name = existing.find((slot) => slot.slotId === slotId)?.metadata.name ?? "Save";
+            await saveController.save(
+              slotId,
+              kernel,
+              name,
+              worldState.serialize(),
+              shatterdomeState.serialize(),
+            );
+            return `Overwrote "${name}".`;
+          }),
+        onLoad: (slotId) =>
+          runSaveAction(async () => {
+            const result = await saveService.load(slotId);
+            if (!kernel) throw new Error("No simulation is running.");
+            if (result.document.sim.seed !== kernel.seed) {
+              // Restoring needs a kernel built for the save's seed, which means a
+              // full reload. Say so rather than silently loading the wrong world.
+              return (
+                `"${result.document.metadata.name}" uses world seed ${result.document.sim.seed}, ` +
+                `but this session is running seed ${kernel.seed}. Reload with ?seed=${result.document.sim.seed} to load it.`
+              );
+            }
+            saveService.applyToKernel(result.document, kernel);
+            worldState.restore(result.document.world);
+            shatterdomeState.restore(result.document.shatterdome, knownRoomIds);
+            floatingOrigin.forceRebase(worldState.playerPosition);
+            saveController.resetPlayTime(result.document.metadata.playTimeMs);
+            const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
+            const migrated =
+              result.migratedFrom !== null ? ` (migrated from version ${result.migratedFrom})` : "";
+            return `Loaded "${result.document.metadata.name}"${recovered}${migrated}.`;
+          }),
+        onRename: (slotId, name) =>
+          runSaveAction(async () => {
+            await saveService.rename(slotId, name);
+            return `Renamed to "${name.trim()}".`;
+          }),
+        onDelete: (slotId) =>
+          runSaveAction(async () => {
+            await saveService.delete(slotId);
+            return "Deleted save.";
+          }),
+        onExport: (slotId) =>
+          runSaveAction(async () => {
+            await saveController.download(slotId);
+            return "Exported save to a file.";
+          }),
+        onImport: (file) =>
+          runSaveAction(async () => {
+            const slotId = `slot.imported.${Date.now().toString(36)}`;
+            await saveController.importFile(slotId, file);
+            return `Imported "${file.name}".`;
+          }),
+        onExit: () => stateMachine.transition(savesReturnState),
+      },
+      savesReturnState === AppState.Shatterdome ? "Back to the Shatterdome" : "Back to Menu",
+    );
 
     await refreshSaves();
   };
@@ -405,6 +460,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // was elsewhere is still cleared when they arrive.
     worldState.advanceAlerts(ticks);
   };
+  // The complex is authoritative and session-lived, like the world: it is saved
+  // from wherever the player happens to be, not only from inside it.
+  const facilityRegistry = createFacilityRegistry();
+  const shatterdomeState = new ShatterdomeState(facilityRegistry);
+  /** Rooms this build can restore a saved position into. */
+  const knownRoomIds = new Set<string>([...FACILITY_KINDS, CONN_POD_ROOM_ID]);
+
   const floatingOrigin = new FloatingOrigin({ anchor: worldState.playerPosition });
   let globeView: GlobeView | undefined;
   let worldScreen: WorldScreenHandle | undefined;
@@ -1053,10 +1115,349 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refreshWorld();
   };
 
+  // ---------------------------------------------------------------- Shatterdome
+  //
+  // The interior is a session, a view and an input source, all built when the
+  // player walks in and disposed when they leave. Only the room they are
+  // standing in exists in the scene at any moment.
+
+  let session: ShatterdomeSession | undefined;
+  let interiorView: InteriorView | undefined;
+  let onFootInput: OnFootInputSource | undefined;
+  let shatterdomeScreen: ShatterdomeScreenHandle | undefined;
+  let interiorPanel: ShatterdomePanelState | null = null;
+  let interiorPaused = false;
+  let interiorRoomId: string | null = null;
+  let interiorRevision = -1;
+  let lastInteriorTick = 0;
+  let lastInteriorReadoutMs = 0;
+  const berthRoster = jaegerRegistry.all();
+
+  /** Environment as felt from inside: real weather, on ground that is above the water. */
+  const sampleInteriorEnvironment = (): EnvironmentSample =>
+    worldState.environment.sample({
+      position: worldState.playerPosition,
+      groundHeightMeters: Math.max(worldState.playerPosition.altitudeMeters, SHATTERDOME_DECK_HEIGHT_METERS),
+      entityHeightMeters: ON_FOOT.heightMeters,
+    });
+
+  const facilityRows = (active: ShatterdomeSession): FacilityRow[] => {
+    const dayFraction = worldState.environment.clock.dayFraction;
+    return facilityRegistry.all().map((definition) => {
+      const record = active.state.recordFor(definition.id);
+      const tier = record?.tier ?? 0;
+      const next = active.state.nextTier(definition.id);
+      const refusal = active.state.checkOrder(definition.id);
+      const currentTier = tier > 0 ? definition.tiers[tier - 1] : undefined;
+      const working = record?.status === "building" || record?.status === "upgrading";
+      const staffOnShift = Math.max(
+        0,
+        Math.round((currentTier?.staffSlots ?? 0) * (shiftAt(dayFraction) === "night" ? 0.34 : 0.9)),
+      );
+      return {
+        id: definition.id,
+        displayName: definition.displayName,
+        deck: definition.deck,
+        statusLabel: record?.status ?? "absent",
+        tier,
+        maxTier: definition.tiers.length,
+        powerDrawMw: currentTier?.powerDrawMw ?? 0,
+        staffOnShift,
+        here: active.currentRoom.facilityId === definition.id,
+        nextTierName: next?.displayName ?? null,
+        nextTierBenefit: next?.benefit ?? null,
+        nextTierCrews: next?.crewRequired ?? 0,
+        // Ticks are in-game seconds and a day is twenty four real minutes, so a
+        // build measured in in-game hours is roughly that many real minutes.
+        nextTierMinutes: next ? Math.round(next.constructionTicks / 3_600) : 0,
+        progress: active.state.progressOf(definition.id),
+        working: working ?? false,
+        refusal: refusal?.message ?? null,
+      };
+    });
+  };
+
+  const facilityPanelFor = (active: ShatterdomeSession, facilityId: FacilityKind): ShatterdomePanelState => {
+    const power = active.state.power();
+    const crews = active.state.crews();
+    const definition = facilityRegistry.get(facilityId);
+    return {
+      kind: "facility",
+      title: `${definition?.displayName ?? facilityId} terminal`,
+      powerDrawMw: power.drawMw,
+      powerOutputMw: power.outputMw,
+      crewsFree: crews.free,
+      crewCapacity: crews.capacity,
+      rows: facilityRows(active),
+    };
+  };
+
+  const berthPanelFor = (
+    active: ShatterdomeSession,
+    jaegerId: string | null,
+    label: string,
+  ): ShatterdomePanelState => {
+    const jaeger = jaegerId ? jaegerRegistry.get(jaegerId) : undefined;
+    const manifest = jaeger ? assetRegistry.get(jaeger.assetId) : undefined;
+    return {
+      kind: "berth",
+      title: label,
+      jaegerName: jaeger?.name ?? null,
+      manufacturer: jaeger?.manufacturer ?? "unknown",
+      markDesignation: jaeger?.markDesignation ?? "unknown",
+      massTons: jaeger?.massBudget.massTons ?? 0,
+      powerOutputMw: jaeger?.massBudget.powerOutputMw ?? 0,
+      coolingCapacity: jaeger?.massBudget.coolingCapacity ?? 0,
+      assetId: jaeger?.assetId ?? "none",
+      // Truthful about which half of the pipeline is live: no production model
+      // ships, so every machine in the bay is the procedural fallback.
+      assetOrigin: manifest?.source.url === null ? "procedural placeholder" : "model",
+      heightMeters: manifest?.nominalHeightMeters ?? 0,
+      selected: active.state.selectedJaegerId === jaegerId,
+      notes: jaeger?.description ?? "This berth is empty.",
+    };
+  };
+
+  const connPodPanelFor = (active: ShatterdomeSession): ShatterdomePanelState => {
+    const sample = sampleInteriorEnvironment();
+    const selectedId = active.state.selectedJaegerId;
+    const jaeger = selectedId ? jaegerRegistry.get(selectedId) : undefined;
+    const regionId = worldState.activeRegionId;
+    const record = regionId ? worldState.recordFor(regionId) : undefined;
+    return {
+      kind: "conn-pod",
+      title: "Conn-Pod",
+      jaegerName: jaeger?.name ?? null,
+      massTons: jaeger?.massBudget.massTons ?? 0,
+      powerOutputMw: jaeger?.massBudget.powerOutputMw ?? 0,
+      coolingCapacity: jaeger?.massBudget.coolingCapacity ?? 0,
+      outsideWeather: `${sample.weather.kind}, ${Math.round(sample.weather.temperatureC)} C`,
+      outsideTime: `${sample.timeOfDayLabel}, day ${sample.dayNumber}`,
+      windMps: sample.weather.windSpeedMps,
+      visibilityMeters: sample.effects.visibilityMeters,
+      regionLabel: regionId ?? "open water",
+      alertLabel: record ? `alert ${record.alert.level}` : "no alert record",
+      // Honest about the boundary: the instruments read real systems, and
+      // deployment is not one of them yet.
+      readiness:
+        "Instruments read live world state. Deployment and combat arrive with a later milestone, " +
+        "so there is no launch control on this panel.",
+    };
+  };
+
+  const openInteriorPanel = (panel: ShatterdomePanelState | null): void => {
+    interiorPanel = panel;
+    // Movement stops while a panel is open, so a player cannot walk away from
+    // an interface they are still reading.
+    onFootInput?.setEnabled(panel === null && !interiorPaused);
+    refreshShatterdome();
+  };
+
+  const handleInteraction = (): void => {
+    if (!session) return;
+    // Paused means paused: the pause menu is the only thing that answers keys.
+    if (interiorPaused) return;
+    if (interiorPanel !== null) {
+      openInteriorPanel(null);
+      return;
+    }
+    const outcome = session.interact();
+    switch (outcome.kind) {
+      case "terminal":
+        openInteriorPanel(
+          outcome.connPod ? connPodPanelFor(session) : facilityPanelFor(session, outcome.facilityId),
+        );
+        break;
+      case "berth":
+        openInteriorPanel(berthPanelFor(session, outcome.jaegerId, outcome.label));
+        break;
+      default:
+        refreshShatterdome();
+        break;
+    }
+  };
+
+  const setInteriorPaused = (paused: boolean): void => {
+    interiorPaused = paused;
+    // Pausing the simulation pauses construction, the clock and the weather
+    // along with it, which is what a pause is supposed to mean here.
+    if (paused) loop?.pause();
+    else loop?.resume();
+    onFootInput?.setEnabled(!paused && interiorPanel === null);
+    refreshShatterdome();
+  };
+
+  /**
+   * What the interior view is actually drawing. Reported rather than assumed, the
+   * same way the city reports how much of itself is on screen.
+   */
+  const interiorStats = (): string | null => {
+    const stats = interiorView?.stats();
+    if (!stats) return null;
+    return `${stats.staffDrawn}/${stats.staffOnShift} staff drawn, ${stats.meshes} meshes`;
+  };
+
+  const refreshShatterdome = (): void => {
+    if (!shatterdomeScreen || !session) return;
+    const room = session.currentRoom;
+    const focus = session.focus;
+    const power = session.state.power();
+    const crews = session.state.crews();
+    const load = session.roomShift;
+    const transition = session.transition;
+
+    shatterdomeScreen.update({
+      roomName: room.displayName,
+      roomStatus: room.underConstruction
+        ? `under construction, tier ${room.tier}`
+        : `operational, tier ${room.tier}`,
+      deck: room.deck,
+      staffOnShift: load.onShift,
+      staffSlots: load.slots,
+      shiftLabel: load.shift,
+      timeLabel: worldState.environment.clock.timeOfDayLabel,
+      powerText: `${power.drawMw}/${power.outputMw} MW`,
+      crewText: `${crews.free}/${crews.capacity} crews`,
+      positionText: `x ${session.pose.x.toFixed(1)} z ${session.pose.z.toFixed(1)}`,
+      drawnText: interiorStats(),
+      prompt: focus?.prompt ?? null,
+      announcement: focus?.announcement ?? null,
+      transitionLabel: transition ? `${TRANSIT_LABELS[transition.kind]}...` : null,
+      fade: session.fade,
+      radio: session.radioLog.map((line) => ({
+        id: line.id,
+        speaker: line.speaker,
+        role: line.role,
+        text: line.text,
+      })),
+      panel: interiorPanel,
+      paused: interiorPaused,
+    });
+  };
+
+  const closeShatterdome = (): void => {
+    frameHook = null;
+    onFootInput?.dispose();
+    onFootInput = undefined;
+    interiorView?.dispose();
+    interiorView = undefined;
+    shatterdomeScreen?.dispose();
+    shatterdomeScreen = undefined;
+    session = undefined;
+    interiorPanel = null;
+    interiorRoomId = null;
+    interiorRevision = -1;
+    if (interiorPaused) {
+      interiorPaused = false;
+      loop?.resume();
+    }
+    restoreBootStage();
+  };
+
+  const openShatterdome = (): void => {
+    bootScene.jaegerPlaceholder.setEnabled(false);
+    bootScene.ground.setEnabled(false);
+
+    const active = new ShatterdomeSession({
+      state: shatterdomeState,
+      definitions: facilityRegistry,
+      crew: CREW_MEMBERS,
+      berths: berthRoster.map((jaeger) => ({ jaegerId: jaeger.id, displayName: jaeger.name })),
+      seed: kernel?.seed ?? 0,
+    });
+    session = active;
+
+    interiorView = new InteriorView({
+      scene: bootScene.scene,
+      quality,
+      resolver: assetResolver,
+      assets: assetRegistry,
+      berthAssets: berthRoster.map((jaeger) => jaeger.assetId),
+    });
+    interiorRoomId = active.currentRoom.id;
+    interiorRevision = active.revision;
+    void interiorView.setRoom(active.currentRoom);
+
+    onFootInput = new OnFootInputSource(canvas, {
+      onInteract: handleInteraction,
+      onCycleFocus: (direction) => {
+        active.cycleFocus(direction);
+        refreshShatterdome();
+      },
+      onUnstuck: () => {
+        active.unstuck();
+        refreshShatterdome();
+      },
+      onPauseToggle: () => {
+        if (interiorPanel !== null) {
+          openInteriorPanel(null);
+          return;
+        }
+        setInteriorPaused(!interiorPaused);
+      },
+    });
+
+    shatterdomeScreen = renderShatterdomeScreen(uiRoot, {
+      onOrder: (facilityId) => {
+        active.orderUpgrade(facilityId as FacilityKind);
+        // The order changes the room and the panel in the same breath.
+        openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
+      onClosePanel: () => openInteriorPanel(null),
+      onResume: () => setInteriorPaused(false),
+      onOpenSaves: () => stateMachine.transition(AppState.Saves),
+      onExitToMenu: () => stateMachine.transition(AppState.MainMenu),
+    });
+
+    lastInteriorTick = kernel?.tick ?? 0;
+
+    frameHook = (deltaMs) => {
+      if (!session || !interiorView) return;
+      const tick = kernel?.tick ?? 0;
+      const ticks = Math.max(0, tick - lastInteriorTick);
+      lastInteriorTick = tick;
+
+      const input = onFootInput?.sample(deltaMs / 1000) ?? NEUTRAL_INPUT;
+      const sample = sampleInteriorEnvironment();
+      session.update({
+        deltaSeconds: deltaMs / 1000,
+        ticks,
+        tick,
+        dayFraction: sample.dayFraction,
+        timeLabel: sample.timeOfDayLabel,
+        input,
+        outsideEffects: sample.effects,
+      });
+
+      // The room is rebuilt when the player walks into another one, and when a
+      // build finishes and the room itself changes shape.
+      if (session.currentRoom.id !== interiorRoomId || session.revision !== interiorRevision) {
+        interiorRoomId = session.currentRoom.id;
+        interiorRevision = session.revision;
+        void interiorView.setRoom(session.currentRoom);
+      }
+      interiorView.update(session.pose, tick, sample.dayFraction);
+
+      const nowMs = performance.now();
+      if (nowMs - lastInteriorReadoutMs >= READOUT_INTERVAL_MS) {
+        lastInteriorReadoutMs = nowMs;
+        // A live panel keeps its numbers current: construction progress moves
+        // while the player is standing at the terminal watching it.
+        if (interiorPanel?.kind === "facility") {
+          interiorPanel = facilityPanelFor(session, session.currentRoom.facilityId);
+        }
+        refreshShatterdome();
+      }
+    };
+
+    refreshShatterdome();
+  };
+
   const renderForState = (state: AppState): void => {
     if (state !== AppState.AssetGallery && gallery) closeGallery();
     if (state !== AppState.Saves && saveScreen) closeSaves();
     if (state !== AppState.WorldMap && worldScreen) closeWorld();
+    if (state !== AppState.Shatterdome && shatterdomeScreen) closeShatterdome();
 
     switch (state) {
       case AppState.MainMenu:
@@ -1090,7 +1491,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         requestAnimationFrame(() => stateMachine.transition(AppState.Shatterdome));
         break;
       case AppState.Shatterdome:
-        renderShatterdomePlaceholder(uiRoot, goToMainMenu);
+        openShatterdome();
         break;
       case AppState.Error:
         // handled at boot-failure site above for the fatal case; runtime errors reuse this.
@@ -1100,7 +1501,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }
   };
 
-  unsubscribers.push(stateMachine.onChange((to) => renderForState(to)));
+  unsubscribers.push(
+    stateMachine.onChange((to, from) => {
+      // Remember where the save panel was opened from before the screen changes.
+      if (to === AppState.Saves && from !== AppState.Saves) {
+        savesReturnState = from === AppState.Shatterdome ? AppState.Shatterdome : AppState.MainMenu;
+      }
+      renderForState(to);
+    }),
+  );
   renderForState(stateMachine.state);
 
   return {
@@ -1109,6 +1518,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       gallery?.dispose();
       galleryScreen?.dispose();
       saveScreen?.dispose();
+      onFootInput?.dispose();
+      interiorView?.dispose();
+      shatterdomeScreen?.dispose();
       streamer?.dispose();
       sectorRenderer?.dispose();
       cityView?.dispose();

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { emptyEnvironmentSnapshot } from "../../src/world/environment";
 import { WORLD_SCHEMA_VERSION } from "../../src/world/worldState";
+import { createFacilityRegistry } from "../../src/data/facilities";
+import { emptyShatterdomeSnapshot } from "../../src/shatterdome/facilityState";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -33,6 +35,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
       tick: 7500,
       entities: { schemaVersion: 1, nextId: 1, entities: [] },
     },
+    shatterdome: emptyShatterdomeSnapshot(createFacilityRegistry()),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },
