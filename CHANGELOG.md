@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-08-23, Milestone 06: day, weather, atmosphere, and ocean foundation
+
+The world got a sky and a sea. Time passes, weather arrives and leaves, and the ocean is something you can wade into, stand in, swim on and sink under.
+
+- Time runs on simulation ticks, not on the wall clock. One tick is one in game second, so a day is twenty four real minutes. Pausing the simulation pauses the sun, and a save reproduces the sky it was written under rather than whatever time it happens to be when you load it.
+- The sun and moon are placed with the real formulae, so there are real seasons, the sun behaves differently at Anchorage than at Manila, and a full moon rises as the sun sets. It ignores the equation of time and assumes a circular orbit, which is stated rather than hidden.
+- Weather is worked out from the seed rather than simulated forward. Fronts occupy fixed six hour slots, so asking what the weather is a thousand years from now costs exactly as much as asking about today. Weather holds steady and then crossfades, which makes transitions smooth because of how it is built rather than because something smooths them afterwards.
+- Rain, storms, fog, snow, wind, cloud, lightning and spray, each derived from one sample that the sky, the particles and the gameplay numbers all read. What the player sees and what the game believes cannot drift apart.
+- The one thing weather remembers is wetness. Ground stays wet after rain stops, and that single number is all a save carries, because everything else is a function of the seed and the tick.
+- The ocean is a height field, not a pile of physics bodies. One function answers where the surface is, and rendering, gameplay and any future physics all ask it. Wave position is fixed to the planet rather than to the floating origin, so the sea does not slide sideways when you walk two kilometres.
+- Five water states, and the one that matters is the difference between standing and floating. A seventy five metre Jaeger wades through shallows, stands and fights chest deep on the shelf, floats over the deep, and can walk the sea bed if you tell it to. Getting that wrong would have it bobbing in five metres of water.
+- Weather is not decoration. Fog and darkness cut how far anything can see, wet ground is slippery and ice is far worse, water slows you down, wind and rain spoil ranged accuracy, and lightning briefly gives the light back. All of it comes out of one place, so a value that is missing from it is visibly missing rather than quietly absent.
+- Everything AI and combat will ask about the environment goes through one module that cannot reach the renderer at all. That is deliberate: the question "can I see that" must have the same answer in a test with no screen as it does in the game.
+- Low, Medium, High and Cinematic quality, where every setting is a number something actually reads. The rule holding the table together is that lowering quality removes detail and never information: the code refuses to register a quality level that drops the lightning flash, the spray where something entered the water, the fog that explains why you cannot see, or the moving sea.
+- A small synthesised ambience that filters down to almost nothing underwater, because underwater is not quieter, it is the loss of every high frequency. It ships no audio files and never will.
+- Saves moved to version 3 to carry the clock and the wetness, with a migration that starts an older save at the same fresh morning a new world does rather than inventing a history for it.
+
+Seven defects were found and fixed rather than written around. Four of them only appeared once there was something on screen.
+
+The moon spent every night below the horizon. Its phase offset had the wrong sign, so a full moon sat eighty seven degrees underground at midnight. A test caught it before anything was drawn.
+
+Fog was solved from the wrong constant. Exponential squared fog needs the square root of three over the visibility distance, not three, and using three squares the exponent: the whole scene faded to flat colour well inside the distance the game was telling itself it could see. It looked like the world had failed to load.
+
+The debug camera sat seven kilometres back, which is further than visibility in most weather, so even correct fog would have been looking through more fog than air. It now sits at nine hundred metres.
+
+A new session started at tick zero, which is midnight, while a migrated save started shortly after sunrise. Two starting states that disagreed, and the one a new player got was total darkness. Both now come from one constant.
+
+Calling a thirty metre per second storm safe. The hazard test looked at visibility, grip and water and never at wind, which is the loudest hazard in a storm.
+
+Rain sized to scale is invisible. A raindrop is a couple of millimetres, and rain the player cannot see fails as the telegraph it is supposed to be, so it is sized to be legible instead.
+
+The walk buttons stepped a fixed kilometre, which steps clean over a coastline. The shelf between wading depth and open water is a few hundred metres wide, so at a kilometre it does not exist. The step is now selectable, and at a hundred metres the whole coast can be walked.
+
+One more thing was changed for honesty rather than because it was broken. The browser tests were running eight files at once, and every test now starts a graphics context, a terrain worker and a set of particle systems. Eight of those together timed each other out and failed a different test on every run, none of them for a real reason. The suite now runs one file at a time. It is slower and it says the same thing twice.
+
 ## 2026-08-22, Milestone 05: sector streaming, procedural terrain, and world partition
 
 The globe stopped being coordinates and became ground you can look at. Sectors now load, build, sleep and get thrown away as you move, and the terrain under them is generated rather than authored.

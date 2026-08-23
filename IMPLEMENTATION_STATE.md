@@ -51,7 +51,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - priorities by ring depth, direction of travel and declared deployment target; eviction deferred one update so a boundary wobble is rescued rather than rebuilt;
   - live instrumentation for every state count, generation and upload time, memory, cache hits, cancellations and evictions;
   - a deterministic stress route that runs identically headless and in the browser.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (332 unit+integration), `smoke` (49 Playwright), `build` all pass.
+- **Day, weather, atmosphere and ocean**, running live and readable from a panel in both world views:
+  - a world clock driven by simulation ticks, one tick to one in-game second, so pausing the simulation pauses the sun and a save reproduces the sky it was written under;
+  - sun and moon with real seasons, latitude behaviour, twilight and moon phase, driving a single scene sun rather than a second light;
+  - seeded weather fronts in fixed six-hour slots, looked up in constant time at any tick, holding steady then crossfading, per climate zone;
+  - rain, storms, fog, snow, wind, cloud cover, lightning, wetness and spray, all derived from one sample;
+  - ocean waves as a sampled height field shared by gameplay and rendering, with depth zones, shoreline transitions, buoyancy hooks and underwater fog;
+  - five water states with the standing-versus-floating distinction that matters at Jaeger scale, all five reached in the running game;
+  - a synthesised ambient audio bed filtered by water state, which reports whether the browser actually let it start;
+  - an environment query surface for AI and combat that imports no render code and returns visibility, traction, movement, wind push and ranged accuracy penalty;
+  - Low through Cinematic quality presets with explicit particle, reflection, shadow and water budgets, and a registry that refuses a preset which drops a required telegraph.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (437 unit+integration), `smoke` (59 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -70,7 +80,13 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Streamed sectors are visual and navigational only. No gameplay system reads them: no spawning, no line of sight, no cover, no destruction.
 - A city sector whose region radius approaches the sector size comes out entirely land, with its coast in the neighbouring sector. Tokyo, at a 7 km radius in an 11 km sector, is the case that shows this.
 - Walking is a debug control that steps 1 km per click, not a player controller. There is no on-foot movement and no Jaeger in the world view.
-- Region climate drives terrain colour and scatter only. Nothing yet varies weather, time of day, or gameplay by climate.
+- Weather affects the numbers gameplay reads, but nothing reads them yet: there is no AI, no combat and no player controller to slow down, blind or slip over. The effects are computed, tested and exposed rather than consumed.
+- Buoyancy is a tested force calculation with no solver behind it, because no physics backend is wired. Nothing floats by simulation; floating is resolved by a height comparison.
+- Traffic markers, city blocks and the player marker are unaffected by weather. Nothing gets wet, nothing sways in wind, nothing casts spray but the water itself.
+- Ambient audio is one synthesised bed with a filter. There are no positional sources, no events and no mixer, so it is atmosphere rather than a sound system.
+- Cloud cover is a single translucent layer, disabled at Low quality. There is no cloud shadowing and no volumetric anything.
+- Reflection modes are declared per preset and reported, but nothing yet renders a reflection: the field is wired to the budget, not to a reflection probe.
+- Wetness follows the player rather than being recorded per region, so walking from a storm into a desert carries the wet ground with you until it dries.
 - `Deployment`, `Combat`, `Results` app states are valid graph nodes with no screens; nothing transitions into them yet.
 - The kernel runs with **zero entities in the main app** — entity count honestly reads 0. Spawn commands exist and are exercised by tests and the scenario runner, but no gameplay system issues them yet, and nothing in the 3D scene is bound to entity transforms. That binding arrives with the first real gameplay entity.
 - Motion integration is the only system. It is real and used forever, but it is one system, not a physics step.
@@ -98,6 +114,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Asset gallery: [src/debug/gallery.ts](src/debug/gallery.ts), [src/ui/galleryScreen.ts](src/ui/galleryScreen.ts), [src/app/galleryOverrides.ts](src/app/galleryOverrides.ts)
 - World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
 - World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
+- Environment: [src/world/worldClock.ts](src/world/worldClock.ts), [weather.ts](src/world/weather.ts), [ocean.ts](src/world/ocean.ts), [environment.ts](src/world/environment.ts)
+- Environment content: [src/data/climates.ts](src/data/climates.ts), [src/data/quality.ts](src/data/quality.ts)
+- Environment rendering and audio: [src/engine/skyView.ts](src/engine/skyView.ts), [weatherView.ts](src/engine/weatherView.ts), [ambientAudio.ts](src/engine/ambientAudio.ts)
 - Terrain and streaming: [src/world/terrain.ts](src/world/terrain.ts), [terrainNoise.ts](src/world/terrainNoise.ts), [sectorStreaming.ts](src/world/sectorStreaming.ts), [terrainService.ts](src/world/terrainService.ts)
 - Terrain worker: [src/workers/terrainWorker.ts](src/workers/terrainWorker.ts), [protocol.ts](src/workers/protocol.ts), [terrainWorkerClient.ts](src/workers/terrainWorkerClient.ts)
 - Sector rendering and stress route: [src/engine/sectorRenderer.ts](src/engine/sectorRenderer.ts), [src/debug/streamRoute.ts](src/debug/streamRoute.ts)
@@ -117,6 +136,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - The GLB load path has never run against a real GLB file, because no model exists to test with. Its validation logic is unit tested against synthetic inspection data, and its failure path is exercised constantly, but the success path is unverified. First real model installed will be the real test of it.
 - The gallery borrows the boot scene rather than owning one. Fine for two environments; a real scene lifecycle will be needed once the Shatterdome interior and a combat map both exist.
 - Quota exhaustion and a genuinely blocked IndexedDB (real private window) are implemented and unit tested through the repository interface, but neither has been reproduced in a live browser.
+- The sun and moon model ignores the equation of time and assumes a circular orbit, so it is a few minutes off a real almanac. Fine for "the sun is lower in winter"; not fine if anything ever needs real astronomical time.
 - Terrain shape is tuned by measurement, not by art direction. The land-mask target was picked by sweeping values and reading city elevation and water fraction across all eight regions; it will want a proper pass once anyone judges how the world should look.
 - Streaming has only been measured on one machine, on WebGPU, at 144 fps with a frame budget the work never came close to filling. Generation at 0.4 ms and upload at 0.2 ms leave no evidence about behaviour on a slow machine, and the one-upload-per-frame pacing has never actually been the constraint.
 - Shadow stability under a moving Jaeger is unverified, because no Jaeger exists in the world view. Only the mechanism that prevents jitter, local coordinates bounded at 2,000 m, is confirmed. Physics behaviour across a rebase is likewise unverified with no physics backend wired.
@@ -127,4 +147,4 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 2 already carries world state, and the streamed ground gives the controller real terrain and a real height field to stand on. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, and take ground height from `SectorStreamer.sampleGroundHeight` rather than adding a second height source.
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set.

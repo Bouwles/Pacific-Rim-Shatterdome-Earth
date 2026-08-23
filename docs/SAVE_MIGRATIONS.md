@@ -124,3 +124,25 @@ Writing generated terrain into a save would have made saves grow without bound
 with distance travelled, and would have frozen worlds against future changes to
 the generator. Recording the seed and regenerating is both smaller and more
 durable.
+
+## Milestone 06: version 3 adds the environment
+
+`ROOT_SAVE_VERSION` is now 3 and `WORLD_SCHEMA_VERSION` is 2. The world section
+gained an `environment` block holding the world clock and the weather.
+
+A version 2 save has no clock and no weather, because the world it recorded had
+no time of day at all. The migration therefore does not convert anything: it
+seeds the same fresh environment a new world begins with, shortly after sunrise
+on day zero with dry ground. That is honest about information that was never
+captured, rather than fabricating a plausible-looking history for it. Position,
+sector and every region record survive exactly as written.
+
+`emptyEnvironmentSnapshot()` is the single definition of that starting state, and
+both the migration and a save written before any world existed use it. A new
+session uses the same constant through `DEFAULT_START_TICKS`. All three had to
+agree: when they did not, a new session started at tick zero, which is midnight,
+and the world opened in total darkness while a migrated save opened at dawn.
+
+Only wetness is stored from the weather. Everything else is a function of the
+world seed and the tick, so a loaded save regenerates the same fronts, the same
+storm at the same minute, and the same sky.

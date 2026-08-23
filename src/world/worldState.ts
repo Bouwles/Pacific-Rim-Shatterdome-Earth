@@ -4,12 +4,23 @@ import { sectorIdAt, parseSectorId, type SectorId } from "./cubeSphere";
 import {
   initialRecord,
   validateRegionRecord,
+  type ClimateZone,
   type RegionDefinition,
   type RegionRecord,
   type SimulationTier,
 } from "./regions";
+import { EnvironmentSystem, validateEnvironmentSnapshot, type EnvironmentSnapshot } from "./environment";
+import type { ClimateWeatherProfile } from "./weather";
+import type { WorldClockOptions } from "./worldClock";
 
-export const WORLD_SCHEMA_VERSION = 1;
+/** Raised to 2 by Milestone 06, which added the environment section. */
+export const WORLD_SCHEMA_VERSION = 2;
+
+/**
+ * Climate for anywhere the player is not inside a named region. Open water is
+ * the honest answer: most of this planet is ocean.
+ */
+export const OPEN_WATER_CLIMATE: ClimateZone = "oceanic";
 
 /** Radius around the player that receives combat-grade simulation. */
 export const ACTIVE_BUBBLE_RADIUS_METERS = 4_000;
@@ -20,11 +31,24 @@ export interface WorldSnapshot {
   readonly activeRegionId: string | null;
   readonly activeSectorId: SectorId;
   readonly regions: readonly RegionRecord[];
+  /** World clock and weather. Authoritative, so it round-trips through a save. */
+  readonly environment: EnvironmentSnapshot;
 }
 
 export interface WorldStateOptions {
   readonly regions: ContentRegistry<RegionDefinition>;
   readonly startPosition?: GeoPosition;
+  /**
+   * Seed for weather. Injected rather than read from anywhere, so world state
+   * stays a pure function of what it was handed.
+   */
+  readonly seed: number;
+  /**
+   * Resolves a climate zone to its weather profile. A function rather than a
+   * registry import: the world layer must not depend on the content layer.
+   */
+  readonly climateProfileFor: (climate: ClimateZone) => ClimateWeatherProfile;
+  readonly clock?: WorldClockOptions;
 }
 
 /**
@@ -41,15 +65,35 @@ export class WorldState {
   private position: GeoPosition;
   private sector: SectorId;
   private activeRegion: string | null = null;
+  private readonly climateProfileFor: (climate: ClimateZone) => ClimateWeatherProfile;
+  /** World clock and weather. Owned here so it is saved with the rest of the world. */
+  readonly environment: EnvironmentSystem;
 
   constructor(options: WorldStateOptions) {
     this.regionRegistry = options.regions;
+    this.climateProfileFor = options.climateProfileFor;
     for (const region of this.regionRegistry.all()) {
       this.recordsById.set(region.id, initialRecord(region.id));
     }
     this.position = normalizeGeo(options.startPosition ?? defaultStart(this.regionRegistry));
     this.sector = sectorIdAt(this.position);
+    this.environment = new EnvironmentSystem({
+      seed: options.seed,
+      profile: options.climateProfileFor(OPEN_WATER_CLIMATE),
+      clock: options.clock,
+    });
     this.refreshActiveRegion(0);
+  }
+
+  /** Climate where the player is, falling back to open water outside every region. */
+  get currentClimate(): ClimateZone {
+    const region = this.activeRegion ? this.regionRegistry.get(this.activeRegion) : undefined;
+    return region?.climate ?? OPEN_WATER_CLIMATE;
+  }
+
+  /** Advances the world clock and weather. The only thing that moves time forward. */
+  advanceEnvironment(ticks: number): void {
+    this.environment.advance(ticks, this.position.latitudeDeg);
   }
 
   get playerPosition(): GeoPosition {
@@ -141,6 +185,7 @@ export class WorldState {
       activeRegionId: this.activeRegion,
       activeSectorId: this.sector,
       regions: this.records(),
+      environment: this.environment.serialize(),
     };
   }
 
@@ -161,6 +206,9 @@ export class WorldState {
     for (const region of this.regionRegistry.all()) this.recordsById.set(region.id, initialRecord(region.id));
     for (const record of snapshot.regions) this.recordsById.set(record.regionId, record);
     this.activeRegion = snapshot.activeRegionId;
+    this.environment.restore(snapshot.environment);
+    // The climate follows the restored position, not whatever was last active.
+    this.environment.setClimate(this.climateProfileFor(this.currentClimate));
   }
 
   /** Recomputes which region the player is standing in and retiers accordingly. */
@@ -176,7 +224,9 @@ export class WorldState {
       }
     }
 
+    const changed = this.activeRegion !== (nearest?.id ?? null);
     this.activeRegion = nearest?.id ?? null;
+    if (changed) this.environment.setClimate(this.climateProfileFor(this.currentClimate));
     for (const [regionId, record] of this.recordsById) {
       const tier: SimulationTier = regionId === this.activeRegion ? "active" : "strategic";
       const lastVisitedTick = tier === "active" ? tick : record.lastVisitedTick;
@@ -218,6 +268,12 @@ export function validateWorldSnapshot(
   }
   for (const record of snapshot.regions) {
     errors.push(...validateRegionRecord(record, knownRegionIds));
+  }
+
+  if (typeof snapshot.environment !== "object" || snapshot.environment === null) {
+    errors.push("environment must be an object");
+  } else {
+    errors.push(...validateEnvironmentSnapshot(snapshot.environment));
   }
 
   const active = snapshot.regions.filter((record) => record.tier === "active");

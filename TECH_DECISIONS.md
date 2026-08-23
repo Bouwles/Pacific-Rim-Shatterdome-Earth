@@ -331,3 +331,112 @@ across all eight regions; 0.56 keeps every region on dry land between 153 m and
 to 305 m and 810 m for no gain. This is tuning against evidence, not art
 direction, and it will want a proper pass once someone judges how the world
 should look.
+
+## 2026-08-23, Milestone 06
+
+**World time advances on simulation ticks, never on wall clock.** One tick is one
+in-game second, which makes a day 86,400 ticks and 24 real minutes, and makes the
+arithmetic legible in a debug readout. The consequence that matters is that
+pausing the simulation pauses the sun and a save reproduces the sky it was written
+under. A wall-clock sky would make a save load into whatever time of day the
+player happened to press the button.
+
+**Weather is derived from the seed, not simulated forward.** Fronts occupy fixed
+six-hour slots and the front covering any tick is a direct lookup from
+`(seed, climate, slot)`, so a tick half a million slots out resolves as fast as
+the first. Simulating forward would make the sky depend on how the session
+happened to be played rather than on the world being played, and would need the
+whole history in a save.
+
+**Steady-then-crossfade rather than continuous blending.** Weather holds for three
+quarters of a slot and crossfades across the last quarter. Blending continuously
+would mean weather never sits still; a hard switch at the boundary would be a
+visible jump. Smoothness is a property of the construction, not of a smoothing
+pass bolted on afterwards.
+
+**Wetness is the only weather value in a save.** It is the only one that is
+genuinely history: ground stays wet after rain stops. Everything else is a
+function of the seed and the tick, so storing it would be storing a derivation.
+
+**The climate profile is injected, never imported.** `WeatherSystem` takes a
+profile as a constructor parameter and `src/world/**` never imports
+`src/data/**`. This is the same rule Milestone 05 arrived at the hard way, when a
+content import into the world layer produced a module cycle and a planet of NaN.
+
+**Waves are a sampled field, never rigid bodies.** `sampleWaveHeight` is pure in
+position, time and wind, so gameplay, rendering and any future physics ask one
+question and get one answer. Simulating each wave as a body costs orders of
+magnitude more and buys nothing a height field cannot express; the milestone named
+this as a failure mode and this is the structural avoidance of it.
+
+**Wave phase is read in globe-fixed coordinates, not the floating-origin frame.**
+Local coordinates move every time the origin rebases, which would slide the entire
+sea sideways whenever the player walked two kilometres.
+
+**Water state turns on whether the feet are on the bottom.** A Jaeger standing
+chest deep on the shelf is fighting, not swimming, and collapsing those into one
+state is what makes water feel like the same game in a different place rather than
+a different game. `resolveFeetHeight` picks standing, floating or diving by
+comparing depth against the body's own height, so a 75 m machine wades through
+shallows instead of bobbing in them.
+
+**Buoyancy is exported and tested, not wired.** There is no physics backend, so a
+buoyancy force with nothing to apply it to would be a fake system. It is a pure
+function ready for the milestone that has a solver.
+
+**Environment queries cannot reach the renderer.** `src/world/environment.ts`
+imports no Babylon and no DOM. An AI deciding whether it can see a target and a
+test asking the same question have to go through the same door, and the only way
+to guarantee that is to make the other door structurally unavailable.
+
+**Every environmental effect lands in one struct.** `EnvironmentEffects` holds
+visibility, traction, movement, wind push and ranged accuracy penalty. If a value
+is not there, nothing outside rendering can act on it, and the gap is visible
+rather than arguable. This is what stops weather from quietly becoming cosmetic.
+
+**Fog density is solved from the visibility distance gameplay reads.** Exp2 fog is
+`exp(-(density * distance)^2)`, so 95 percent obscured at V metres gives
+`density = sqrt(3) / V`. Using 3 instead squares the exponent and fogs the scene
+flat well inside the stated range: it did exactly that, and looked like the world
+had failed to load. Deriving it from the same number an AI reads means the two
+cannot drift.
+
+**The sky drives the existing sun rather than adding one.** Two directional lights
+called sun is how a scene ends up lit from two directions with nothing to say
+which is real. The boot scene owns the light and the shadow map; `SkyView` moves
+and colours them.
+
+**Shadow map size changes by rebuilding the generator.** Babylon fixes a shadow
+map's resolution at construction. The boot scene exposes `setShadowMapSize`, which
+disposes and rebuilds, so there is still exactly one owner. A second generator
+elsewhere would double the shadow cost while looking like it had replaced the
+first.
+
+**Quality presets are budgets, not labels.** Every field is a number some system
+reads directly. The rule holding the table together is that lowering quality
+removes detail and never information: each preset declares the telegraphs it
+draws, and the registry refuses one that drops a required telegraph. A future
+tuning pass therefore cannot buy frame time by deleting the lightning flash.
+
+**Changing quality rebuilds the ground view.** Particle capacity and water grid
+resolution are both fixed when their objects are built. Rebuilding is a visible
+reload, which is honest about the cost, rather than pretending the change was free.
+
+**Rain is sized to be legible, not to scale.** A raindrop is a couple of
+millimetres and would be invisible at any camera distance this game uses. Rain the
+player cannot see fails as a telegraph, and the telegraph is the point.
+
+**Time controls are labelled with clock times, not with dawn and dusk.** Sunrise
+moves with latitude and season, so a button called Dawn would be lying at most of
+the places the player can stand.
+
+**Ambient audio is synthesised, and says when it is blocked.** The project ships no
+audio files and never will ship film audio, so an ambience that is generated is the
+only kind that can exist here. Browsers refuse to start audio outside a user
+gesture; the panel reports `blocked` rather than implying sound is playing.
+
+**Browser tests run one file at a time.** Playwright otherwise runs spec files
+across half the CPUs, and every test now starts a WebGPU context, a terrain worker
+and a set of particle systems. Eight at once thrashed the GPU and timed each other
+out, failing a different test on every run for no real reason. A serial suite is
+slower and gives the same answer twice, which is the only property a gate needs.

@@ -3,6 +3,7 @@ import { FIXED_STEP_MS } from "../simulation/clock";
 import { LEGACY_UNWRAPPED_VERSION, ROOT_SAVE_VERSION, detectSaveVersion, type RootSave } from "./schema";
 import { sectorIdAt } from "../world/cubeSphere";
 import { WORLD_SCHEMA_VERSION } from "../world/worldState";
+import { emptyEnvironmentSnapshot } from "../world/environment";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 
 /**
@@ -77,7 +78,10 @@ const addWorldSection: MigrationStep = {
     ...document,
     schemaVersion: 2,
     world: {
-      schemaVersion: WORLD_SCHEMA_VERSION,
+      // The world schema version as it stood at this step. Writing the current
+      // constant here would make a migrated file claim a shape it does not have,
+      // and the next step would have nothing to recognise.
+      schemaVersion: 1,
       playerPosition: DEFAULT_START_POSITION,
       activeRegionId: DEFAULT_START_REGION_ID,
       activeSectorId: sectorIdAt(DEFAULT_START_POSITION),
@@ -87,6 +91,39 @@ const addWorldSection: MigrationStep = {
       regions: [],
     },
   }),
+};
+
+/**
+ * Adds the environment section introduced by Milestone 06.
+ *
+ * A version 2 save has no clock and no weather, so there is nothing to convert:
+ * the world it recorded had no time of day at all. It starts at the same fresh
+ * environment a new world does, on dry ground shortly after sunrise, which is
+ * honest about the fact that this information was never captured rather than
+ * fabricating a plausible-looking history for it.
+ *
+ * The rest of the world section is untouched, so position, sector and every
+ * region record survive exactly as written.
+ */
+const addEnvironmentSection: MigrationStep = {
+  id: "2",
+  fromVersion: 2,
+  toVersion: 3,
+  description: "Add the environment section: world clock and weather.",
+  apply: (document) => {
+    const world = (
+      typeof document["world"] === "object" && document["world"] !== null ? document["world"] : {}
+    ) as Record<string, unknown>;
+    return {
+      ...document,
+      schemaVersion: 3,
+      world: {
+        ...world,
+        schemaVersion: WORLD_SCHEMA_VERSION,
+        environment: emptyEnvironmentSnapshot(),
+      },
+    };
+  },
 };
 
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
@@ -105,6 +142,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   });
   registry.register(wrapBareSnapshot);
   registry.register(addWorldSection);
+  registry.register(addEnvironmentSection);
   return registry;
 }
 

@@ -106,3 +106,46 @@ City cells, traffic lanes and landmarks are generated per sector from the world
 seed. They are not registry entries, carry no manifest, and are not tracked here.
 When buildings become real assets they will move to the asset registry and be
 listed with the rest.
+
+## Climate weather profiles (Milestone 06)
+
+Seven entries in `src/data/climates.ts`, one per climate zone, registered through
+`ContentRegistry<ClimateWeatherProfile>` and keyed by the same `ClimateZone`
+union regions, biomes and terrain use.
+
+| id          | Base temp | Daily swing | Base wind | Excludes  |
+| ----------- | --------- | ----------- | --------- | --------- |
+| polar       | -18 C     | 6 C         | 9 m/s     | rain      |
+| subarctic   | -2 C      | 9 C         | 8 m/s     | nothing   |
+| temperate   | 13 C      | 10 C        | 6 m/s     | nothing   |
+| subtropical | 23 C      | 8 C         | 6 m/s     | snow      |
+| tropical    | 28 C      | 6 C         | 5 m/s     | snow      |
+| arid        | 21 C      | 16 C        | 7 m/s     | fog, snow |
+| oceanic     | 17 C      | 4 C         | 12 m/s    | snow      |
+
+Weights are relative likelihoods, chosen for gameplay variety rather than from
+climate records, which is the same standard the region table already sets. A zero
+excludes a kind outright: the arid profile is guaranteed never to snow.
+
+Six weather kinds are defined in `src/world/weather.ts` as a table of effects:
+clear, cloudy, rain, storm, fog and snow. Each declares cloud cover,
+precipitation, fog density, wind multiplier, lightning chance, visibility,
+temperature offset and whether precipitation is frozen.
+
+## Quality presets (Milestone 06)
+
+Four entries in `src/data/quality.ts`: Low, Medium, High and Cinematic. High is
+the default. Every field is a budget a system reads directly, listed in
+docs/PERFORMANCE_BUDGETS.md.
+
+Four required telegraphs are declared and enforced: `lightning-flash`,
+`water-entry-spray`, `fog-visibility-cue` and `wave-surface-motion`. The registry
+refuses a preset that drops any of them, because lowering quality may remove
+detail and never information.
+
+## Depth zones (Milestone 06)
+
+Five bands in `src/world/ocean.ts`, shallowest first: shoreline, shallows, shelf,
+deep and abyssal. Each carries underwater visibility, a darkness fraction and
+whether a body can stand there. These are gameplay bands rather than oceanography
+and are not registry entries, because nothing authors them.

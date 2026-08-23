@@ -237,12 +237,18 @@
         color: #eaf8ff;
       }
       /* Streaming instrumentation reads as a second block, not as more coordinates. */
-      #uiRoot .world-streaming {
+      #uiRoot .world-streaming,
+      #uiRoot .world-environment {
         border-top: 1px solid #1d3244;
         padding-top: 8px;
       }
-      #uiRoot .world-streaming .world-key {
+      #uiRoot .world-streaming .world-key,
+      #uiRoot .world-environment .world-key {
         color: #86a7bd;
+      }
+      #uiRoot .world-walk button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
       }
       /* The save panel is a working list, not a dialog. */
       #uiRoot .screen-saves {

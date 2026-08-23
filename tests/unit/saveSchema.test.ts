@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { emptyEnvironmentSnapshot } from "../../src/world/environment";
+import { WORLD_SCHEMA_VERSION } from "../../src/world/worldState";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -32,11 +34,12 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
       entities: { schemaVersion: 1, nextId: 1, entities: [] },
     },
     world: {
-      schemaVersion: 1,
+      schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },
       activeRegionId: "hong-kong",
       activeSectorId: "+X/8/9",
       regions: [],
+      environment: emptyEnvironmentSnapshot(),
     },
     ...overrides,
   };

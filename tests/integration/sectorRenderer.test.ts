@@ -4,6 +4,9 @@ import { SectorRenderer } from "../../src/engine/sectorRenderer";
 import { SectorStreamer } from "../../src/world/sectorStreaming";
 import { InlineTerrainService } from "../../src/world/terrainService";
 import { createDefaultTerrainAnchors } from "../../src/data/regions";
+import { createQualityRegistry } from "../../src/data/quality";
+import { EnvironmentSystem } from "../../src/world/environment";
+import { createClimateRegistry } from "../../src/data/climates";
 import { generateSectorTerrain, LOD_GRID_RESOLUTION } from "../../src/world/terrain";
 import { FloatingOrigin, rebaseLocal } from "../../src/world/floatingOrigin";
 import { geo, geoToLocal } from "../../src/world/coordinates";
@@ -12,6 +15,7 @@ import { sectorCentre, sectorIdAt, parseSectorId } from "../../src/world/cubeSph
 const ANCHORS = createDefaultTerrainAnchors();
 const SEED = 31_415;
 const HONG_KONG = geo(22.3193, 114.1694, 0);
+const quality = createQualityRegistry().getOrThrow("high");
 
 let engine: NullEngine;
 let scene: Scene;
@@ -29,7 +33,7 @@ afterEach(() => {
 });
 
 function makeRenderer(): SectorRenderer {
-  return new SectorRenderer({ scene, anchor: () => origin.anchor });
+  return new SectorRenderer({ scene, anchor: () => origin.anchor, quality });
 }
 
 function terrainFor(sectorId: string, lod: 0 | 1 | 2 | 3 = 0) {
@@ -215,5 +219,117 @@ describe("sector renderer", () => {
     renderer.dispose();
     renderer.upload(terrainFor(sectorIdAt(HONG_KONG)));
     expect(renderer.stats().sectorNodes).toBe(0);
+  });
+});
+
+describe("sector water", () => {
+  const climates = createClimateRegistry();
+
+  function sampleAt(tick: number) {
+    const environment = new EnvironmentSystem({
+      seed: SEED,
+      profile: climates.getOrThrow("oceanic"),
+    });
+    environment.setTicks(tick, HONG_KONG.latitudeDeg);
+    return environment.sample({ position: HONG_KONG, groundHeightMeters: -400 });
+  }
+
+  function waterHeights(scene: Scene): number[] {
+    const mesh = scene.meshes.find((entry) => entry.name.startsWith("sector.water."));
+    const positions = mesh?.getVerticesData("position");
+    if (!positions) return [];
+    const heights: number[] = [];
+    for (let index = 1; index < positions.length; index += 3) heights.push(positions[index] ?? 0);
+    return heights;
+  }
+
+  it("builds a water sheet at the resolution the quality preset asks for", () => {
+    const renderer = makeRenderer();
+    const coastal = terrainFor(sectorIdAt(HONG_KONG));
+    expect(coastal.waterFraction).toBeGreaterThan(0);
+    renderer.upload(coastal);
+
+    const heights = waterHeights(scene);
+    expect(heights.length).toBe(quality.waterGridResolution ** 2);
+    renderer.dispose();
+  });
+
+  it("moves the surface as the world clock advances", () => {
+    const renderer = makeRenderer();
+    renderer.upload(terrainFor(sectorIdAt(HONG_KONG)));
+    const player = { east: 0, north: 0 };
+
+    renderer.updateWater(sampleAt(1_000), player);
+    const first = waterHeights(scene);
+    renderer.updateWater(sampleAt(1_030), player);
+    const second = waterHeights(scene);
+
+    expect(first.length).toBe(second.length);
+    // A flat sheet would be identical at both ticks; a wave field is not.
+    expect(second.some((value, index) => Math.abs(value - (first[index] ?? 0)) > 0.01)).toBe(true);
+    renderer.dispose();
+  });
+
+  it("gives the same surface for the same tick, so it is not drifting on its own", () => {
+    const renderer = makeRenderer();
+    renderer.upload(terrainFor(sectorIdAt(HONG_KONG)));
+    const player = { east: 0, north: 0 };
+
+    renderer.updateWater(sampleAt(2_000), player);
+    const first = waterHeights(scene);
+    renderer.updateWater(sampleAt(9_999), player);
+    renderer.updateWater(sampleAt(2_000), player);
+    expect(waterHeights(scene)).toEqual(first);
+    renderer.dispose();
+  });
+
+  it("stays inside the wave amplitude the weather justifies", () => {
+    const renderer = makeRenderer();
+    renderer.upload(terrainFor(sectorIdAt(HONG_KONG)));
+    const sample = sampleAt(4_321);
+    renderer.updateWater(sample, { east: 0, north: 0 });
+
+    for (const height of waterHeights(scene)) {
+      expect(Math.abs(height)).toBeLessThanOrEqual(sample.waveAmplitudeMeters + 1e-6);
+    }
+    renderer.dispose();
+  });
+
+  it("animates only as many sheets as the preset budgets, nearest first", async () => {
+    const low = createQualityRegistry().getOrThrow("low");
+    expect(low.animatedWaterSectors).toBe(1);
+
+    const renderer = new SectorRenderer({ scene, anchor: () => origin.anchor, quality: low });
+    const streamer = new SectorStreamer({
+      service: new InlineTerrainService(),
+      sink: renderer,
+      seed: SEED,
+      anchors: ANCHORS,
+      maxUploadsPerUpdate: 8,
+      maxConcurrentGenerations: 8,
+    });
+    await streamer.pump({ position: HONG_KONG });
+
+    const sheets = scene.meshes.filter((entry) => entry.name.startsWith("sector.water."));
+    expect(sheets.length).toBeGreaterThan(1);
+
+    const before = sheets.map((mesh) => Array.from(mesh.getVerticesData("position") ?? []));
+    renderer.updateWater(sampleAt(5_000), { east: 0, north: 0 });
+    const after = sheets.map((mesh) => Array.from(mesh.getVerticesData("position") ?? []));
+
+    const changed = before.filter((positions, index) =>
+      positions.some((value, at) => Math.abs(value - (after[index]?.[at] ?? 0)) > 0.01),
+    ).length;
+    expect(changed).toBe(low.animatedWaterSectors);
+
+    streamer.dispose();
+    renderer.dispose();
+  });
+
+  it("ignores water updates once disposed", () => {
+    const renderer = makeRenderer();
+    renderer.upload(terrainFor(sectorIdAt(HONG_KONG)));
+    renderer.dispose();
+    expect(() => renderer.updateWater(sampleAt(10), { east: 0, north: 0 })).not.toThrow();
   });
 });

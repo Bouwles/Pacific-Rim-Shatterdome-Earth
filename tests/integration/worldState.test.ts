@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+
 import { createDefaultRegionRegistry, TELEPORT_TEST_REGION_IDS } from "../../src/data/regions";
+import { createClimateRegistry } from "../../src/data/climates";
 import { geo, localToGeo, surfaceDistanceMeters } from "../../src/world/coordinates";
 import { parseSectorId, sectorIdAt } from "../../src/world/cubeSphere";
 import {
@@ -15,8 +17,19 @@ import { SimulationKernel } from "../../src/simulation/kernel";
 let world: WorldState;
 
 beforeEach(() => {
-  world = new WorldState({ regions: createDefaultRegionRegistry() });
+  world = makeWorld();
 });
+
+const climates = createClimateRegistry();
+
+/** World state needs a seed and a climate resolver as of Milestone 06. */
+function makeWorld(): WorldState {
+  return new WorldState({
+    regions: createDefaultRegionRegistry(),
+    seed: 20260822,
+    climateProfileFor: (climate) => climates.getOrThrow(climate),
+  });
+}
 
 describe("world state basics", () => {
   it("starts at the home Shatterdome with that region active", () => {
@@ -163,7 +176,7 @@ describe("world snapshots", () => {
     world.applyRegionDamage("tokyo", 0.25, 90);
     const snapshot = JSON.parse(JSON.stringify(world.serialize())) as WorldSnapshot;
 
-    const restored = new WorldState({ regions: createDefaultRegionRegistry() });
+    const restored = makeWorld();
     restored.restore(snapshot);
 
     expect(restored.serialize()).toEqual(snapshot);
@@ -178,7 +191,7 @@ describe("world snapshots", () => {
       regions: snapshot.regions.filter((record) => record.regionId !== "lima"),
     };
 
-    const restored = new WorldState({ regions: createDefaultRegionRegistry() });
+    const restored = makeWorld();
     restored.restore(trimmed);
 
     expect(restored.recordFor("lima")).toBeDefined();
@@ -237,7 +250,7 @@ describe("world state through the save system", () => {
     await service.save("slot.a", kernel, { name: "World test", world: world.serialize() });
     const loaded = await service.load("slot.a");
 
-    const restored = new WorldState({ regions: createDefaultRegionRegistry() });
+    const restored = makeWorld();
     restored.restore(loaded.document.world);
 
     expect(restored.playerPosition.latitudeDeg).toBeCloseTo(61.2181, 4);
@@ -279,7 +292,7 @@ describe("world state through the save system", () => {
     // The simulation it already had must come through untouched.
     expect(result.document.sim.tick).toBe(600);
 
-    const restored = new WorldState({ regions: createDefaultRegionRegistry() });
+    const restored = makeWorld();
     restored.restore(result.document.world);
     expect(restored.regionCount).toBe(createDefaultRegionRegistry().all().length);
   });

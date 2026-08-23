@@ -34,8 +34,56 @@ export interface StreamingReadout {
   readonly routeProgress: string;
 }
 
+/**
+ * Live environment instrumentation. Every field is measured from the same
+ * `EnvironmentSample` gameplay reads, so the panel cannot show a sky the
+ * simulation does not agree with.
+ */
+export interface EnvironmentReadout {
+  readonly dayNumber: number;
+  readonly timeOfDay: string;
+  readonly sunElevationDeg: number;
+  readonly moonElevationDeg: number;
+  readonly moonIllumination: number;
+  readonly lightLevel: number;
+  readonly weatherKind: string;
+  readonly nextWeatherKind: string;
+  readonly transition: number;
+  readonly intensity: number;
+  readonly cloudCover: number;
+  readonly precipitation: number;
+  readonly frozen: boolean;
+  readonly fogDensity: number;
+  readonly windSpeedMps: number;
+  readonly windDirectionDeg: number;
+  readonly temperatureC: number;
+  readonly wetness: number;
+  readonly lightningFlash: number;
+  readonly visibilityMeters: number;
+  readonly tractionMultiplier: number;
+  readonly movementMultiplier: number;
+  readonly rangedAccuracyPenalty: number;
+  readonly hazardous: boolean;
+  readonly waterState: string;
+  readonly depthZone: string;
+  readonly depthMeters: number;
+  readonly submergedFraction: number;
+  readonly waveHeightMeters: number;
+  readonly waveAmplitudeMeters: number;
+  readonly audioState: string;
+  readonly audioStatus: string;
+  readonly diving: boolean;
+  readonly qualityId: string;
+  readonly particleCapacity: number;
+  readonly activeParticles: number;
+  readonly shadowMapSize: number;
+  readonly reflections: string;
+  readonly telegraphs: number;
+}
+
 export interface WorldReadout {
   readonly viewMode: WorldViewMode;
+  readonly environment: EnvironmentReadout;
   readonly streaming: StreamingReadout | null;
   readonly position: GeoPosition;
   readonly localEast: number;
@@ -55,6 +103,12 @@ export interface WorldScreenCallbacks {
   onWalk(eastMeters: number, northMeters: number): void;
   onViewMode(mode: WorldViewMode): void;
   onRouteToggle(): void;
+  /** Advances the world clock to the next occurrence of a fraction of the day. */
+  onSkipToDayFraction(fraction: number): void;
+  /** Advances the world clock by whole in-game hours. */
+  onAdvanceHours(hours: number): void;
+  onDiveToggle(): void;
+  onQualityChange(level: string): void;
   onExit(): void;
 }
 
@@ -66,6 +120,10 @@ export interface WorldScreenHandle {
 function formatDegrees(value: number, positive: string, negative: string): string {
   const hemisphere = value >= 0 ? positive : negative;
   return `${Math.abs(value).toFixed(4)}° ${hemisphere}`;
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 function megabytes(bytes: number): string {
@@ -93,6 +151,7 @@ function row(label: string, field: string): HTMLElement {
 export function renderWorldScreen(
   container: HTMLElement,
   regions: readonly RegionDefinition[],
+  qualityLevels: readonly { readonly id: string; readonly label: string }[],
   callbacks: WorldScreenCallbacks,
 ): WorldScreenHandle {
   container.replaceChildren();
@@ -188,6 +247,90 @@ export function renderWorldScreen(
   routeButton.addEventListener("click", () => callbacks.onRouteToggle());
   routeRow.append(routeLabel, routeButton);
 
+  // Time and quality controls. Both are debug controls and are labelled as such
+  // in CONTROLS.md; neither implies a settings menu that does not exist.
+  const timeRow = document.createElement("div");
+  timeRow.className = "world-walk";
+  const timeLabel = document.createElement("span");
+  timeLabel.className = "world-walk-label";
+  timeLabel.textContent = "Time";
+  timeRow.appendChild(timeLabel);
+
+  // Labelled by the clock time they set, not by "dawn" or "dusk". Sunrise moves
+  // with latitude and season, so a button called Dawn would be lying at three
+  // quarters of the places you can stand.
+  const timeButtons: readonly (readonly [string, string, () => void])[] = [
+    ["time-hour", "+1h", () => callbacks.onAdvanceHours(1)],
+    ["time-six-hours", "+6h", () => callbacks.onAdvanceHours(6)],
+    ["time-morning", "06:00", () => callbacks.onSkipToDayFraction(0.25)],
+    ["time-noon", "12:00", () => callbacks.onSkipToDayFraction(0.5)],
+    ["time-evening", "18:00", () => callbacks.onSkipToDayFraction(0.75)],
+    ["time-midnight", "00:00", () => callbacks.onSkipToDayFraction(0.0)],
+  ];
+  for (const [action, label, handler] of timeButtons) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary-button";
+    button.dataset.action = action;
+    button.textContent = label;
+    button.addEventListener("click", handler);
+    timeRow.appendChild(button);
+  }
+
+  const waterRow = document.createElement("div");
+  waterRow.className = "world-walk";
+  waterRow.dataset.section = "water";
+  waterRow.hidden = true;
+  const waterLabel = document.createElement("span");
+  waterLabel.className = "world-walk-label";
+  waterLabel.textContent = "Water";
+  const diveButton = document.createElement("button");
+  diveButton.type = "button";
+  diveButton.className = "secondary-button";
+  diveButton.dataset.action = "dive-toggle";
+  diveButton.textContent = "Dive";
+  diveButton.addEventListener("click", () => callbacks.onDiveToggle());
+  waterRow.append(waterLabel, diveButton);
+
+  const qualityRow = document.createElement("div");
+  qualityRow.className = "world-teleport";
+  const qualityLabel = document.createElement("label");
+  qualityLabel.textContent = "Quality";
+  const qualitySelect = document.createElement("select");
+  qualitySelect.name = "world-quality";
+  qualitySelect.dataset.action = "quality-select";
+  qualitySelect.setAttribute("aria-label", "Rendering quality");
+  for (const level of qualityLevels) {
+    const option = document.createElement("option");
+    option.value = level.id;
+    option.textContent = level.label;
+    qualitySelect.appendChild(option);
+  }
+  qualitySelect.addEventListener("change", () => callbacks.onQualityChange(qualitySelect.value));
+  qualityLabel.appendChild(qualitySelect);
+  qualityRow.appendChild(qualityLabel);
+
+  const environment = document.createElement("div");
+  environment.className = "world-readout world-environment";
+  environment.dataset.section = "environment";
+  environment.append(
+    row("Day / time", "env-time"),
+    row("Sun / moon", "env-celestial"),
+    row("Light", "env-light"),
+    row("Weather", "env-weather"),
+    row("Cloud / rain", "env-precipitation"),
+    row("Wind", "env-wind"),
+    row("Temperature", "env-temperature"),
+    row("Wetness", "env-wetness"),
+    row("Visibility", "env-visibility"),
+    row("Traction / speed", "env-traction"),
+    row("Ranged penalty", "env-accuracy"),
+    row("Water", "env-water"),
+    row("Waves", "env-waves"),
+    row("Audio", "env-audio"),
+    row("Quality budgets", "env-quality"),
+  );
+
   const teleportRow = document.createElement("div");
   teleportRow.className = "world-teleport";
   const teleportLabel = document.createElement("label");
@@ -216,14 +359,34 @@ export function renderWorldScreen(
   walkRow.className = "world-walk";
   const walkLabel = document.createElement("span");
   walkLabel.className = "world-walk-label";
-  walkLabel.textContent = "Walk 1 km";
+  walkLabel.textContent = "Walk";
   walkRow.appendChild(walkLabel);
 
+  // A fixed one kilometre stride steps straight over a coastline: the shelf
+  // between wading depth and open water is a few hundred metres wide, so at one
+  // kilometre it is invisible. The step is selectable for that reason.
+  const stepSelect = document.createElement("select");
+  stepSelect.name = "world-walk-step";
+  stepSelect.dataset.action = "walk-step";
+  stepSelect.setAttribute("aria-label", "Walk distance");
+  for (const [value, label] of [
+    ["100", "100 m"],
+    ["1000", "1 km"],
+    ["10000", "10 km"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (value === "1000") option.selected = true;
+    stepSelect.appendChild(option);
+  }
+  walkRow.appendChild(stepSelect);
+
   const directions: readonly (readonly [string, string, number, number])[] = [
-    ["walk-north", "N", 0, 1000],
-    ["walk-south", "S", 0, -1000],
-    ["walk-east", "E", 1000, 0],
-    ["walk-west", "W", -1000, 0],
+    ["walk-north", "N", 0, 1],
+    ["walk-south", "S", 0, -1],
+    ["walk-east", "E", 1, 0],
+    ["walk-west", "W", -1, 0],
   ];
   for (const [action, label, east, north] of directions) {
     const button = document.createElement("button");
@@ -231,14 +394,29 @@ export function renderWorldScreen(
     button.className = "secondary-button";
     button.dataset.action = action;
     button.textContent = label;
-    button.addEventListener("click", () => callbacks.onWalk(east, north));
+    button.addEventListener("click", () => {
+      const distance = Number(stepSelect.value) || 1000;
+      callbacks.onWalk(east * distance, north * distance);
+    });
     walkRow.appendChild(button);
   }
 
   // Controls first, readouts last. The readouts grow without bound as more of the
   // world reports itself; the buttons must stay reachable regardless, so it is the
   // numbers that scroll away, never the things you click.
-  panel.append(header, viewRow, teleportRow, walkRow, routeRow, readout, streaming);
+  panel.append(
+    header,
+    viewRow,
+    teleportRow,
+    walkRow,
+    timeRow,
+    waterRow,
+    routeRow,
+    qualityRow,
+    readout,
+    environment,
+    streaming,
+  );
   container.appendChild(panel);
 
   const fields = new Map<string, HTMLElement>();
@@ -282,9 +460,62 @@ export function renderWorldScreen(
         button.setAttribute("aria-pressed", String(mode === state.viewMode));
       }
 
+      const env = state.environment;
+      set("env-time", `day ${env.dayNumber}, ${env.timeOfDay}`);
+      set(
+        "env-celestial",
+        `sun ${env.sunElevationDeg.toFixed(1)}°, moon ${env.moonElevationDeg.toFixed(1)}° ` +
+          `(${percent(env.moonIllumination)} lit)`,
+      );
+      set("env-light", percent(env.lightLevel) + (env.lightningFlash > 0 ? " (flash)" : ""));
+      set(
+        "env-weather",
+        env.transition > 0.001
+          ? `${env.weatherKind} to ${env.nextWeatherKind} ${percent(env.transition)}`
+          : `${env.weatherKind} at ${percent(env.intensity)}`,
+      );
+      set(
+        "env-precipitation",
+        `${percent(env.cloudCover)} cloud, ${percent(env.precipitation)} ` +
+          `${env.frozen ? "snow" : "rain"}, ${percent(env.fogDensity)} fog`,
+      );
+      set("env-wind", `${env.windSpeedMps.toFixed(1)} m/s from ${env.windDirectionDeg.toFixed(0)}°`);
+      set("env-temperature", `${env.temperatureC.toFixed(1)} °C`);
+      set("env-wetness", percent(env.wetness));
+      set(
+        "env-visibility",
+        `${Math.round(env.visibilityMeters).toLocaleString()} m${env.hazardous ? " (hazardous)" : ""}`,
+      );
+      set(
+        "env-traction",
+        `${env.tractionMultiplier.toFixed(2)}x grip, ${env.movementMultiplier.toFixed(2)}x speed`,
+      );
+      set("env-accuracy", percent(env.rangedAccuracyPenalty));
+      set(
+        "env-water",
+        `${env.waterState}, ${env.depthZone} ${env.depthMeters.toFixed(1)} m deep, ` +
+          `${percent(env.submergedFraction)} submerged`,
+      );
+      set(
+        "env-waves",
+        `${env.waveHeightMeters.toFixed(2)} m here, ${env.waveAmplitudeMeters.toFixed(2)} m amplitude`,
+      );
+      set("env-audio", `${env.audioState} (${env.audioStatus})`);
+      set(
+        "env-quality",
+        `${env.qualityId}: ${env.activeParticles}/${env.particleCapacity} particles, ` +
+          `shadow ${env.shadowMapSize || "off"}, ${env.reflections} reflections, ` +
+          `${env.telegraphs} telegraphs`,
+      );
+      diveButton.textContent = env.diving ? "Surface" : "Dive";
+      diveButton.classList.toggle("is-active", env.diving);
+      if (qualitySelect.value !== env.qualityId) qualitySelect.value = env.qualityId;
+
       const stream = state.streaming;
       streaming.hidden = stream === null;
       routeRow.hidden = stream === null;
+      // Diving only means anything where there is streamed water to dive into.
+      waterRow.hidden = stream === null;
       if (!stream) return;
 
       routeButton.textContent = stream.routeRunning ? "Stop route" : "Fly route";

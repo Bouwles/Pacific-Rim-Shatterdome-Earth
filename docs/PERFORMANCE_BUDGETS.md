@@ -3,8 +3,11 @@
 ## Target (from GAME_SPEC.md, not yet enforced in code)
 
 Stable 60 fps @ 1080p on a reasonable gaming PC in ordinary play; 30 fps fallback under extreme
-destruction. Low / Medium / High / Cinematic presets are required but do not exist yet — there is
-exactly one rendering configuration today (whatever `EngineAdapter`/`buildBootScene` hard-code).
+destruction.
+
+Low / Medium / High / Cinematic presets exist as of Milestone 06 and are listed below. They are real
+budgets that systems read, not labels: particle ceilings, shadow map size, water resolution, wave
+octaves and animated water sheets all come from the active preset.
 
 ## What's measured today
 
@@ -16,8 +19,12 @@ Streamed sectors are tracked as of Milestone 05, in the ground view's own
 instrumentation block: sector counts by state, generation and upload time, data
 and GPU bytes, cache hits, evictions and cancellations.
 
-Not tracked yet: AI agents, debris, particles, shadow map count, texture memory, audio
-voices. Those budgets are meaningless before the systems that would consume them exist.
+Particles, shadow map size, reflections and animated water are tracked as of Milestone 06, in the
+same panel: live particles against the ceiling, shadow map resolution, reflection mode and how many
+telegraphs the active preset draws.
+
+Not tracked yet: AI agents, debris, texture memory, audio voices. Those budgets are meaningless
+before the systems that would consume them exist.
 
 ## Per-asset budgets (Milestone 02)
 
@@ -138,6 +145,61 @@ Three consecutive laps of the full route:
 Laps two and three generated nothing at all: every sector came from the cache,
 and resident, cached and scene figures were identical to the byte. That is the
 evidence behind the stable-memory and no-regeneration acceptance items.
+
+## Quality presets (Milestone 06)
+
+Every column is a number a system reads directly. Nothing here is decorative.
+
+| Preset    | Particles | Rate/s | Reflections | Shadow map | Water grid | Wave octaves | Animated sheets | Fog  |
+| --------- | --------- | ------ | ----------- | ---------- | ---------- | ------------ | --------------- | ---- |
+| Low       | 600       | 260    | none        | off        | 5          | 1            | 1               | 0.75 |
+| Medium    | 2,000     | 900    | probe       | 1,024      | 9          | 2            | 3               | 0.90 |
+| High      | 6,000     | 2,600  | probe       | 2,048      | 17         | 3            | 5               | 1.00 |
+| Cinematic | 16,000    | 6,500  | planar      | 4,096      | 25         | 3            | 9               | 1.15 |
+
+High is the default. Cinematic is for capture rather than play and is not expected to hold 60 fps in
+a heavy fight; the table says so rather than implying otherwise.
+
+**Lowering quality removes detail, never information.** Every preset declares the telegraphs it draws,
+and the registry refuses to register one that drops any of `lightning-flash`, `water-entry-spray`,
+`fog-visibility-cue` or `wave-surface-motion`. A unit test asserts this across all four, and the
+browser test reads the telegraph count off the panel at Low and at Cinematic and requires them equal.
+
+Particle capacity and water grid resolution are fixed when their objects are built, so changing preset
+rebuilds the ground view. That is a visible reload, which is the honest cost.
+
+Measured in the browser on WebGPU at seed 20260822, standing at Manila in a storm at 55 percent
+intensity, orbit camera at 900 m:
+
+| Preset    | Live particles | Draw calls | Frame time | fps |
+| --------- | -------------- | ---------- | ---------- | --- |
+| Low       | 35 / 600       | 27         | 0.2 ms     | 144 |
+| Medium    | 155 / 2,000    | 28         | 0.3 ms     | 144 |
+| High      | 528 / 6,000    | 28         | 0.4 ms     | 144 |
+| Cinematic | 1,519 / 16,000 | 28         | 0.4 ms     | 144 |
+
+All four hold the frame comfortably at this scene complexity, which is expected: there is still no
+combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
+target has been met.
+
+## Environment cost (Milestone 06)
+
+| Quantity                    | Value              | Note                                                   |
+| --------------------------- | ------------------ | ------------------------------------------------------ |
+| Day length                  | 86,400 ticks       | One tick is one in-game second; 24 real minutes        |
+| Weather front slot          | 21,600 ticks       | Six in-game hours; front lookup is O(1) at any tick    |
+| Front crossfade             | Last 25% of a slot | Smooth by construction rather than by a smoothing pass |
+| Wave components             | 3                  | Sum of travelling sines; never rigid bodies            |
+| Max wave amplitude          | 14 m               | Capped so a storm is not taller than the Jaeger in it  |
+| Lightning roll window       | 180 ticks          | A strike is a discrete event both sides can agree on   |
+| Environment state in a save | 3 numbers          | Elapsed ticks, day length, wetness                     |
+
+Weather costs nothing to store because it is derived. Only wetness is history.
+
+Fog density is solved from the visibility distance gameplay reads, as `sqrt(3) / visibility`, so the
+fog the player sees and the metres an AI is told it can see are the same number. Getting that constant
+wrong squares the exponent and fogs the scene flat well inside the stated range; it did, and was fixed
+by measurement.
 
 ## Frame pacing guarantees (Milestone 01)
 

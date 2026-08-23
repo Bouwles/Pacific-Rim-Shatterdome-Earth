@@ -269,6 +269,77 @@ Requests are `generate` or `cancel`; responses are `generated`, `cancelled` or
 mismatch loudly, because a worker built from a stale bundle otherwise shows up as
 terrain that quietly never arrives.
 
+## Environment schemas (Milestone 06)
+
+### `ClimateWeatherProfile` (src/data/climates.ts)
+
+Keyed by the same `ClimateZone` union regions, biomes and terrain use, so a
+region, the ground under it and the sky above it cannot disagree.
+
+| Field              | Type                          | Constraint                                  |
+| ------------------ | ----------------------------- | ------------------------------------------- |
+| `id`               | `ClimateZone`                 | must be one of the seven climate zones      |
+| `weights`          | `Record<WeatherKind, number>` | non-negative; at least one must be positive |
+| `baseTemperatureC` | `number`                      | finite                                      |
+| `dailySwingC`      | `number`                      | finite, non-negative                        |
+| `baseWindMps`      | `number`                      | finite, non-negative                        |
+
+Weights are relative likelihoods, not probabilities. A zero excludes a kind
+outright, which is how the arid profile is guaranteed never to produce snow. A
+profile whose weights are all zero is refused at registration, because it would
+silently freeze the sky on whatever the fallback happened to be.
+
+The world layer never imports this file. `WeatherSystem` takes a profile as a
+constructor parameter, which is what keeps `src/world/**` independent of content.
+
+### `WeatherKindProfile` (src/world/weather.ts)
+
+One row per weather kind, blended rather than branched on: cloud cover,
+precipitation, fog density, wind multiplier, lightning chance, visibility in
+metres, temperature offset, and whether precipitation is frozen. Adding a kind is
+a row, never a case.
+
+### `WorldClockSnapshot` (`WORLD_CLOCK_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, elapsedTicks, dayLengthTicks }`. Ticks are whole; the clock
+refuses a fractional advance so it cannot drift off the tick grid.
+
+### `WeatherSnapshot` (`WEATHER_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, wetness }`. Only wetness is stored, because it is the only
+weather value that is history rather than derivation. Everything else is a
+function of the seed and the tick.
+
+### `EnvironmentSnapshot` (`ENVIRONMENT_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, clock, weather }`, carried inside the world section of a save.
+
+### `DepthZone` (src/world/ocean.ts)
+
+Ordered shallow to deep, the last open ended so a lookup always resolves:
+shoreline, shallows, shelf, deep, abyssal. Each carries underwater visibility in
+metres, a darkness fraction, and whether a body can stand there. These are
+gameplay bands, not oceanography.
+
+### `QualityPreset` (src/data/quality.ts)
+
+| Field                   | Type           | Constraint                                 |
+| ----------------------- | -------------- | ------------------------------------------ |
+| `id`                    | `QualityLevel` | low, medium, high or cinematic             |
+| `maxParticles`          | `number`       | non-negative; a hard ceiling, not a target |
+| `particleRatePerSecond` | `number`       | non-negative                               |
+| `reflections`           | enum           | none, probe or planar                      |
+| `shadowMapSize`         | `number`       | non-negative; zero disables shadows        |
+| `waterGridResolution`   | `number`       | at least 3                                 |
+| `waterWaveOctaves`      | `number`       | at least 1                                 |
+| `animatedWaterSectors`  | `number`       | non-negative                               |
+| `fogQuality`            | `number`       | non-negative multiplier on fog density     |
+| `telegraphs`            | `Telegraph[]`  | must contain every required telegraph      |
+
+`validateQualityPreset` refuses a preset missing any of `lightning-flash`,
+`water-entry-spray`, `fog-visibility-cue` or `wave-surface-motion`. Lowering
+quality may remove detail; it may never remove information.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

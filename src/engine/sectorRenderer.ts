@@ -22,6 +22,9 @@ import {
 import { parseSectorId, sectorCentre, type SectorId } from "../world/cubeSphere";
 import type { SectorSink } from "../world/sectorStreaming";
 import type { SectorTerrain } from "../world/terrain";
+import { sampleWaveHeight, waveFieldCoordinates } from "../world/ocean";
+import type { EnvironmentSample } from "../world/environment";
+import type { QualityPreset } from "../data/quality";
 
 /**
  * Babylon presentation for streamed sectors.
@@ -69,6 +72,26 @@ interface SectorNode {
   readonly centre: GeoPosition;
   readonly meshes: PooledMesh[];
   readonly gpuBytes: number;
+  /** Water sheet and what is needed to animate it, or null for a dry sector. */
+  readonly water: WaterSheet | null;
+}
+
+/**
+ * A sector's water surface, kept ready to animate.
+ *
+ * `positions` is the live vertex array; only the vertical component is rewritten
+ * each frame. `fieldEast`/`fieldNorth` place the sheet in globe-fixed wave
+ * coordinates, so neighbouring sectors share one continuous sea and a floating
+ * origin rebase does not shift it.
+ */
+interface WaterSheet {
+  readonly mesh: Mesh;
+  readonly positions: Float32Array;
+  readonly vertexCount: number;
+  readonly fieldEast: number;
+  readonly fieldNorth: number;
+  /** Distance from the sector centre to the player, refreshed each update. */
+  distanceMeters: number;
 }
 
 interface PooledMesh {
@@ -80,6 +103,8 @@ export interface SectorRendererOptions {
   readonly scene: Scene;
   /** Current floating-origin anchor. Read on every upload and on every rebase. */
   anchor(): GeoPosition;
+  /** Drives water resolution, wave octaves and how many sheets animate. */
+  readonly quality: QualityPreset;
 }
 
 export interface RendererStats {
@@ -105,11 +130,13 @@ export class SectorRenderer implements SectorSink {
   private readonly playerMarker: Mesh;
   private readonly fill: HemisphericLight;
   private thinInstanceCount = 0;
+  private quality: QualityPreset;
   private disposed = false;
 
   constructor(options: SectorRendererOptions) {
     this.scene = options.scene;
     this.anchorOf = options.anchor;
+    this.quality = options.quality;
     this.root = new TransformNode("sectorRenderer", this.scene);
 
     this.groundMaterial = this.material("sector.ground", new Color3(1, 1, 1));
@@ -167,11 +194,21 @@ export class SectorRenderer implements SectorSink {
     meshes.push(ground);
     gpuBytes += ground.bytes;
 
+    let waterSheet: WaterSheet | null = null;
     if (terrain.waterFraction > 0) {
       const water = this.buildWater(terrain, basis);
       water.mesh.parent = root;
       meshes.push(water);
       gpuBytes += water.bytes;
+      const field = waveFieldCoordinates(centre.latitudeDeg, centre.longitudeDeg);
+      waterSheet = {
+        mesh: water.mesh,
+        positions: water.positions,
+        vertexCount: water.positions.length / 3,
+        fieldEast: field.east,
+        fieldNorth: field.north,
+        distanceMeters: Infinity,
+      };
     }
 
     const buildings = this.buildCityInstances(terrain, basis);
@@ -201,6 +238,7 @@ export class SectorRenderer implements SectorSink {
       centre,
       meshes: meshes.map(({ kind, mesh }) => ({ kind, mesh })),
       gpuBytes,
+      water: waterSheet,
     };
     this.nodes.set(terrain.sectorId, node);
     this.placeNode(node, tangentBasisAt(this.anchorOf()));
@@ -367,7 +405,10 @@ export class SectorRenderer implements SectorSink {
    * sector a flat plane sits about 120 m above the sphere at the corners, which
    * puts the sea visibly on top of the coast it is supposed to meet.
    */
-  private buildWater(terrain: SectorTerrain, basis: TangentBasis): PooledMesh & { bytes: number } {
+  private buildWater(
+    terrain: SectorTerrain,
+    basis: TangentBasis,
+  ): PooledMesh & { bytes: number; positions: Float32Array } {
     const kind = "water";
     const mesh = this.take(kind, () => {
       const created = new Mesh("sector.water", this.scene);
@@ -376,17 +417,71 @@ export class SectorRenderer implements SectorSink {
       return created;
     });
 
+    // Resolution comes from the quality preset: this is the one mesh in the
+    // scene whose vertex count is a live performance dial.
+    const resolution = this.quality.waterGridResolution;
     const flat: SectorTerrain = {
       ...terrain,
-      gridResolution: 5,
-      positions: seaLevelGrid(terrain, 5),
-      heights: new Float32Array(25),
-      surfaces: new Uint8Array(25),
+      gridResolution: resolution,
+      positions: seaLevelGrid(terrain, resolution),
+      heights: new Float32Array(resolution * resolution),
+      surfaces: new Uint8Array(resolution * resolution),
     };
     const data = buildGridVertexData(flat, basis, null, 0);
+    // Updatable: the vertical component of every vertex is rewritten each frame
+    // for the nearest sectors, which is how waves move without a shader.
     data.applyToMesh(mesh, true);
     mesh.name = `sector.water.${terrain.sectorId}`;
-    return { kind, mesh, bytes: estimateMeshBytes(data) };
+    const positions = (data.positions as Float32Array) ?? new Float32Array(0);
+    return { kind, mesh, bytes: estimateMeshBytes(data), positions };
+  }
+
+  /**
+   * Animates the sea.
+   *
+   * Only the nearest `animatedWaterSectors` sheets are updated, and only their
+   * vertical component: everything further away holds still at sea level, which
+   * is indistinguishable at that distance and costs nothing. Wave height comes
+   * from the same `sampleWaveHeight` gameplay uses, so what the player sees the
+   * water doing is what the water is actually doing.
+   */
+  updateWater(sample: EnvironmentSample, playerLocal: { east: number; north: number }): void {
+    if (this.disposed) return;
+    const sheets: WaterSheet[] = [];
+    for (const node of this.nodes.values()) {
+      if (!node.water || !node.root.isEnabled()) continue;
+      node.water.distanceMeters = Math.hypot(
+        node.root.position.x - playerLocal.east,
+        node.root.position.z - playerLocal.north,
+      );
+      sheets.push(node.water);
+    }
+    sheets.sort((a, b) => a.distanceMeters - b.distanceMeters);
+
+    const budget = Math.max(1, this.quality.animatedWaterSectors);
+    const octaves = this.quality.waterWaveOctaves;
+    const weather = sample.weather;
+
+    for (let index = 0; index < sheets.length && index < budget; index += 1) {
+      const sheet = sheets[index];
+      if (!sheet) continue;
+      for (let vertex = 0; vertex < sheet.vertexCount; vertex += 1) {
+        const offset = vertex * 3;
+        sheet.positions[offset + 1] = sampleWaveHeight({
+          east: sheet.fieldEast + (sheet.positions[offset] ?? 0),
+          north: sheet.fieldNorth + (sheet.positions[offset + 2] ?? 0),
+          timeSeconds: sample.tick,
+          windSpeedMps: weather.windSpeedMps,
+          windDirectionDeg: weather.windDirectionDeg,
+          octaves,
+        });
+      }
+      sheet.mesh.updateVerticesData("position", sheet.positions, false, false);
+    }
+  }
+
+  setQuality(quality: QualityPreset): void {
+    this.quality = quality;
   }
 
   private buildCityInstances(

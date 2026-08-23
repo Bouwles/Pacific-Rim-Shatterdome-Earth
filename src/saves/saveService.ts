@@ -3,6 +3,7 @@ import type { SimulationKernel } from "../simulation/kernel";
 import { sectorIdAt } from "../world/cubeSphere";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
+import { emptyEnvironmentSnapshot } from "../world/environment";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -51,6 +52,7 @@ export interface SaveRequest {
 function emptyWorldSnapshot(): WorldSnapshot {
   return {
     schemaVersion: WORLD_SCHEMA_VERSION,
+    environment: emptyEnvironmentSnapshot(),
     playerPosition: DEFAULT_START_POSITION,
     activeRegionId: DEFAULT_START_REGION_ID,
     activeSectorId: sectorIdAt(DEFAULT_START_POSITION),

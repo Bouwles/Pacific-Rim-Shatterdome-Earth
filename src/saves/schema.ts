@@ -6,7 +6,7 @@ import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 2;
+export const ROOT_SAVE_VERSION = 3;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -136,6 +136,7 @@ function validateWorldSection(world: unknown): string[] {
     errors.push("world.activeRegionId must be a string or null");
   }
   if (!Array.isArray(world["regions"])) errors.push("world.regions must be an array");
+  if (!isRecord(world["environment"])) errors.push("world.environment must be an object");
   return errors;
 }
 

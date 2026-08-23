@@ -26,9 +26,14 @@ The project is built in numbered milestones. Everything listed here actually run
 - A ground view that streams the world in as you move: generated terrain with coastlines, hills and seabed, water, city blocks, roadside traffic markers and landmarks, all built from the world seed so the same seed always gives the same planet
 - Sector streaming with levels of detail, mesh reuse, memory budgets and a cache, so flying across the world never stutters and never grows: terrain is generated on a background thread, and what you have already seen is remembered rather than rebuilt
 - A stress route you can fly from the panel, and a live readout of everything streaming is doing, from generation time to memory to how many sectors are loaded
+- A day and night cycle with a real sun and moon, so the light changes through the day, the seasons change through the year, and Anchorage does not get the same sky as Manila
+- Weather that arrives and leaves on its own: clear, cloudy, rain, storms, fog and snow, each rolling into the next rather than snapping, and each drawn from what the local climate can actually produce
+- Weather that matters rather than decorates. Fog and darkness cut how far you can see, wet ground is slippery and ice is much worse, wind and rain spoil your aim, and lightning briefly lights the whole world back up
+- An ocean you can wade into, stand and fight in chest deep, swim on, and dive under, with waves that move, depth zones that get darker and murkier the further down you go, and sound that loses all its treble the moment you go below the surface
+- Low, Medium, High and Cinematic quality settings where every setting is a real budget. Turning quality down removes detail and never removes information: the lightning, the spray and the fog you need to read a fight are drawn at every level
 - Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
 
-Not built yet: the walkable Shatterdome, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: the walkable Shatterdome, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons, and nothing yet reads the weather numbers because there is no AI or combat to slow down or blind. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
 ### Using your own models
 
@@ -97,7 +102,9 @@ npm run dev
 
 Then open the address it prints, usually http://localhost:5173.
 
-Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines and cities. Press F3 to toggle the debug overlay.
+Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines, the same cities and the same storm at the same minute. Press F3 to toggle the debug overlay.
+
+Add `?quality=low` to start on a different quality level. Low, medium, high and cinematic are all accepted, and you can change it from the world panel while the game runs.
 
 ### Other commands
 
@@ -116,7 +123,7 @@ npm run smoke         Playwright browser tests
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
 src/assets       asset manifests, procedural generators, model validation, resolver
-src/world        globe coordinates, cube sphere sectors, floating origin, regions, terrain, sector streaming
+src/world        globe coordinates, cube sphere sectors, floating origin, regions, terrain, streaming, clock, weather, ocean
 src/workers      terrain generation off the main thread
 src/saves        save schema, migrations, IndexedDB storage, backups and recovery
 src/engine       Babylon engine selection and the boot scene

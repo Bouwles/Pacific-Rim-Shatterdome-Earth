@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 05. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 06. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -15,9 +15,12 @@ src/
     engineAdapter.ts   WebGPU-first/WebGL-fallback engine selection, resize handling, context-lost/restored
                         hooks, disposal. Nothing outside this file is allowed to branch on backend.
     scene.ts           builds the boot scene: ground, reference-size Jaeger placeholder, sun light + shadow,
-                        sky color, orbit/debug camera
+                        sky color, orbit/debug camera, rebuildable shadow map
     sectorRenderer.ts  Babylon presentation for streamed sectors: pooled meshes, thin instances, skirts,
-                        rebase by root transform. The only Babylon-aware part of streaming.
+                        rebase by root transform, animated water. The only Babylon-aware part of streaming.
+    skyView.ts         sun, moon, ambient, sky colour and fog, all driven from one environment sample
+    weatherView.ts     rain, snow, spray, lightning and cloud, capacity-capped by quality preset
+    ambientAudio.ts    synthesised ambience filtered by the world layer's audio environment
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
     clock.ts           FixedStepClock — accumulator-pattern fixed timestep, epsilon-guarded, substep-capped
     loop.ts             SimulationLoop — render-delta → ticks, pause/resume/single-step/time scale,
@@ -47,6 +50,10 @@ src/
     terrain.ts          sector terrain generation, cache keys, collision sampling
     terrainService.ts   the generation boundary plus the inline (main-thread) implementation
     sectorStreaming.ts  sector state machine, LOD rings, priorities, budgets, LRU data cache
+    worldClock.ts       tick-driven clock, sun and moon positions, twilight and moon phase
+    weather.ts          seeded weather fronts, per-kind effects, transitions, wetness
+    ocean.ts            wave sampling, depth zones, water states, buoyancy, audio environment
+    environment.ts      the query surface AI and combat read; composes clock, weather and ocean
   workers/             ← the only code that runs off the main thread
     protocol.ts         versioned, validated terrain request/response messages
     terrainWorker.ts    worker entry: queued generation, cancellation, buffer transfer
@@ -64,6 +71,8 @@ src/
     assets.ts            the shipped asset manifests, one per placeholder
     regions.ts           the shipped strategic regions and the terrain anchors they produce
     biomes.ts            biome table, surface classes, climate bands
+    climates.ts          what weather each climate zone produces
+    quality.ts           Low to Cinematic presets with explicit particle, shadow and water budgets
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
     scenarioRunner.ts    headless deterministic scenario runner + `kernel-smoke` fixture
@@ -310,6 +319,75 @@ be guessed.
 save already stores, so nothing about streaming is written to a save and no
 migration was needed. Two streamers built from the same seed produce identical
 digests for every sector; that is asserted rather than assumed.
+
+## Environment
+
+Four modules in `src/world/`, none of which import Babylon or the DOM, plus three
+in `src/engine/` that read what they produce and decide only how it looks.
+
+**The clock** advances with simulation ticks, never with wall clock. One tick is
+one in-game second, so a day is 86,400 ticks and twenty four real minutes.
+Pausing the simulation pauses the sun, and a save reproduces the sky it was
+written under. Sun and moon positions come from the standard declination and
+hour-angle formulae, which give real seasons and real latitude behaviour; the
+model ignores the equation of time and assumes a circular orbit, and says so.
+
+**Weather** is derived, not simulated forward. Fronts occupy fixed six-hour
+slots, and the front covering any tick is a direct lookup from
+`(seed, climate, slot)`. A tick a thousand years out resolves as fast as the
+first. Steady weather holds for three quarters of a slot and then crossfades, so
+transitions are smooth by construction rather than by a smoothing pass. The one
+value that is genuinely history is wetness: ground stays wet after rain stops,
+and that single number is the only weather state a save carries.
+
+**The ocean** is a sampled height field, never a set of bodies. `sampleWaveHeight`
+is pure in position, time and wind, so gameplay, rendering and any future physics
+all ask one question and get one answer. Wave phase is read from globe-fixed
+coordinates rather than the floating-origin frame, or the whole sea would shift
+sideways every time the origin rebased. Buoyancy is exported as a force
+calculation, tested and unused, because no physics backend exists yet.
+
+**Water states** are `dry`, `wading`, `surface-combat`, `swimming` and
+`underwater`. The distinction that carries the design is whether the feet are on
+the bottom: a Jaeger standing chest deep on the shelf is fighting, not swimming.
+`resolveFeetHeight` decides between standing, floating and diving by comparing
+depth against the body's own height, so a 75 m machine wades through shallows it
+would otherwise be bobbing in.
+
+**`environment.ts` is the query surface** AI and combat talk to. It returns light
+level, visibility in metres, traction, movement multiplier, wind push, ranged
+accuracy penalty, water situation and audio environment. Nothing in it can reach
+a scene graph, which is the point: an AI deciding whether it can see a target and
+a test asking the same question must go through the same door.
+
+**Weather is not cosmetic.** Everything the sky does lands in `EnvironmentEffects`,
+and if a value is not there then nothing outside rendering can act on it and the
+gap is visible. Fog and darkness cut visibility, wetness cuts traction, ice cuts
+it much harder, water slows movement, wind and rain spoil ranged accuracy, and
+lightning briefly restores light.
+
+**Presentation reads the same sample.** `SkyView` drives the boot scene's existing
+sun rather than adding a second one, owns a moon and an ambient fill, and solves
+fog density from the same visibility distance gameplay reads, so what the player
+sees and what the simulation believes cannot drift apart. `WeatherView` caps every
+emitter at construction from the active quality preset. `AmbientAudio` is a
+synthesised noise bed filtered by the world layer's decision, not a sound system.
+
+## Quality presets
+
+Low, Medium, High and Cinematic, each a table of numbers some system reads
+directly: particle ceiling and rate, reflection mode, shadow map size, water grid
+resolution, wave octaves, how many water sheets animate, and a fog multiplier.
+
+The rule the table exists to enforce is that **lowering quality removes detail,
+never information**. Each preset lists the telegraphs it draws, and the registry
+refuses to register one that drops any of them. Low has no shadows, no
+reflections and one wave octave, and still draws the lightning flash, the water
+entry spray, the fog cue and the moving sea.
+
+Particle capacity and water resolution are both fixed when their objects are
+built, so changing quality tears the ground view down and rebuilds it. That is a
+visible reload, which is honest about what the change costs.
 
 ## Persistence
 

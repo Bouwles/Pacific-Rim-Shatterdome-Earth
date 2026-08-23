@@ -139,6 +139,32 @@ keys, and full instrumentation. Created `src/workers/`, `src/world/terrain*.ts`,
 - `npm run typecheck`, `lint`, `format:check`, `test` (332), `smoke` (49), `build` all pass.
   **Next action:** none - complete. Proceed to Phase 2.
 
+## Phase 1.98 / Milestone 06 - Day, weather, atmosphere, and ocean foundation
+
+**Depends on:** Milestone 04 (coordinates), Milestone 05 (streamed terrain and collision heights).
+**Status:** done.
+**Scope:** tick-driven world clock with sun and moon, seeded weather fronts with smooth transitions,
+rain, storms, fog, snow, wind, cloud, lightning, wetness and spray, ocean wave sampling with depth
+zones and water states, buoyancy hooks, underwater fog and audio, an environment query surface for AI
+and combat that imports no render code, and Low through Cinematic quality presets with explicit
+budgets. Created `src/world/worldClock.ts`, `weather.ts`, `ocean.ts`, `environment.ts`,
+`src/data/climates.ts`, `quality.ts`, `src/engine/skyView.ts`, `weatherView.ts`, `ambientAudio.ts`,
+`src/debug/environmentScenario.ts`. Raised the save envelope to version 3 with a real migration.
+**Acceptance tests:**
+
+- Time and weather advance deterministically from debug controls and survive save and load: the debug
+  scenario produces an identical digest across runs and a different one per seed, and a browser round
+  trip restores the same in-game hour and the same front.
+- Entering water transitions correctly: all five states were reached in the running game. Wading at
+  Manila in 20.9 m of water at 28 percent submerged, surface combat on the shelf at 56.7 m and 76
+  percent, swimming over 101.7 m of shelf, underwater at the Breach with visibility capped at 14 m,
+  and dry on land.
+- Low quality stays readable: every preset carries all four required telegraphs, asserted in a unit
+  test and read off the panel in the browser at Low and at Cinematic. Live particles scale from 35 at
+  Low to 1,519 at Cinematic on the same storm.
+- `npm run typecheck`, `lint`, `format:check`, `test` (437), `smoke` (59), `build` all pass.
+  **Next action:** none - complete. Proceed to Phase 2.
+
 ## Phase 2 - Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.
@@ -147,8 +173,10 @@ keys, and full instrumentation. Created `src/workers/`, `src/world/terrain*.ts`,
 **Acceptance tests:** player can walk the hub, open a management panel, save and reload state, all offline.
 **Next action:** the on-foot player controller and the first real Shatterdome interior, which is the first
 consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to a manifest.
-Persistence already exists (Milestone 03), and the streamed ground now gives a controller real terrain and
-a real height field to walk on (Milestone 05), so the controller has somewhere to stand from day one.
+Persistence already exists (Milestone 03), the streamed ground gives a controller real terrain and a real
+height field to walk on (Milestone 05), and the environment already supplies the traction, movement and
+water-state multipliers a controller has to obey (Milestone 06). The controller consumes those rather than
+inventing its own.
 
 ## Phase 3 — Single Jaeger + single kaiju combat vertical slice
 

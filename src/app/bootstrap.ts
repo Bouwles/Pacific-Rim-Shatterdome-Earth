@@ -27,6 +27,7 @@ import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
 import { probeStorageHealth } from "../saves/storageHealth";
 import {
   renderWorldScreen,
+  type EnvironmentReadout,
   type StreamingReadout,
   type WorldScreenHandle,
   type WorldViewMode,
@@ -41,6 +42,18 @@ import { SECTOR_STATES, SectorStreamer } from "../world/sectorStreaming";
 import { SectorRenderer } from "../engine/sectorRenderer";
 import { WorkerTerrainService } from "../workers/terrainWorkerClient";
 import { buildRouteSamples, STRESS_ROUTE_REGION_IDS, type RouteSample } from "../debug/streamRoute";
+import { createClimateRegistry } from "../data/climates";
+import {
+  createQualityRegistry,
+  resolveQualityLevel,
+  type QualityLevel,
+  type QualityPreset,
+} from "../data/quality";
+import { SkyView } from "../engine/skyView";
+import { WeatherView } from "../engine/weatherView";
+import { AmbientAudio } from "../engine/ambientAudio";
+import { resolveFeetHeight, sampleWaveHeight, waveFieldCoordinates } from "../world/ocean";
+import type { EnvironmentSample } from "../world/environment";
 
 export interface AppHandle {
   dispose(): void;
@@ -53,6 +66,12 @@ const ROUTE_SPEED_MPS = 4_000;
 const ROUTE_STEP_SECONDS = 0.25;
 /** DOM writes are throttled; the streamer itself still updates every frame. */
 const READOUT_INTERVAL_MS = 250;
+/**
+ * Height of the body the environment is sampled for. The ground view's player
+ * marker is a 75 m Jaeger-scale box, so water states are resolved against that
+ * rather than against a person who would drown in the shallows.
+ */
+const PLAYER_HEIGHT_METERS = 75;
 /** Babylon ArcRotateCamera defaults, restored when the ground view closes. */
 const DEFAULT_CAMERA_MIN_Z = 1;
 const DEFAULT_CAMERA_MAX_Z = 10_000;
@@ -95,6 +114,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const stateMachine = new AppStateMachine();
   const unsubscribers: Array<() => void> = [];
 
+  const qualityRegistry = createQualityRegistry();
+  const climateRegistry = createClimateRegistry();
+  // Resolved before the scene exists because the shadow map size is decided at
+  // construction; changing it later rebuilds the generator rather than resizing.
+  let quality: QualityPreset = qualityRegistry.getOrThrow(resolveQualityLevel(window.location.search));
+
   let overlay: DebugOverlay | undefined;
   let kernel: SimulationKernel | undefined;
   let adapterDispose: (() => void) | undefined;
@@ -105,12 +130,20 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * budget: one upload per frame is the whole point.
    */
   let frameHook: ((deltaMs: number) => void) | null = null;
+  /**
+   * Advances world time. Assigned once world state exists.
+   *
+   * The render loop starts before that, and there is an `await` in between, so
+   * the first frame really can arrive first; referencing world state directly
+   * from the loop would throw on that frame.
+   */
+  let advanceWorldTime: ((ticks: number) => void) | null = null;
 
   try {
     const adapter = await createEngineAdapter(canvas);
     adapterDispose = adapter.dispose;
 
-    bootScene = buildBootScene(adapter.engine, canvas);
+    bootScene = buildBootScene(adapter.engine, canvas, quality.shadowMapSize);
     const scene = bootScene.scene;
 
     kernel = new SimulationKernel({ seed: resolveSeed(window.location.search) });
@@ -127,11 +160,22 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     });
 
     const simKernel = kernel;
+    let lastEnvironmentTick = 0;
     adapter.engine.runRenderLoop(() => {
       const deltaMs = adapter.engine.getDeltaTime();
       loop.advance(deltaMs);
       // Drain outside the tick so subscribers never mutate state mid-step.
       simKernel.events.drain();
+
+      // World time advances with simulation ticks, never with wall clock. Pausing
+      // the simulation therefore pauses the sun, and a save reproduces the sky it
+      // was written under.
+      const advanced = simKernel.tick - lastEnvironmentTick;
+      if (advanced > 0 && advanceWorldTime) {
+        lastEnvironmentTick = simKernel.tick;
+        advanceWorldTime(advanced);
+      }
+
       frameHook?.(deltaMs);
       scene.render();
     });
@@ -337,7 +381,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // is presentation and is built and torn down with the screen.
   const regionRegistry = createDefaultRegionRegistry();
   const terrainAnchors = createDefaultTerrainAnchors();
-  const worldState = new WorldState({ regions: regionRegistry });
+  const worldState = new WorldState({
+    regions: regionRegistry,
+    seed: kernel?.seed ?? 0,
+    // Injected as a function so the world layer never imports the content layer.
+    climateProfileFor: (climate) => climateRegistry.getOrThrow(climate),
+  });
+  advanceWorldTime = (ticks) => worldState.advanceEnvironment(ticks);
   const floatingOrigin = new FloatingOrigin({ anchor: worldState.playerPosition });
   let globeView: GlobeView | undefined;
   let worldScreen: WorldScreenHandle | undefined;
@@ -349,6 +399,42 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let routeSeconds = 0;
   let lastReadoutMs = 0;
   let lastVelocity: LocalPosition = { east: 0, north: 0, up: 0 };
+  let skyView: SkyView | undefined;
+  let weatherView: WeatherView | undefined;
+  let ambientAudio: AmbientAudio | undefined;
+  let diving = false;
+
+  /**
+   * The one environment sample per frame. Presentation and any future gameplay
+   * read the same object, so what is drawn and what is decided cannot disagree.
+   */
+  const sampleEnvironment = (): EnvironmentSample => {
+    const position = worldState.playerPosition;
+    const groundHeightMeters = streamer?.sampleGroundHeight(position) ?? 0;
+    const field = waveFieldCoordinates(position.latitudeDeg, position.longitudeDeg);
+    const preview = worldState.environment.weather.sample(
+      worldState.environment.clock.elapsedTicks,
+      worldState.environment.clock.dayFraction,
+    );
+    const waterHeightMeters = sampleWaveHeight({
+      east: field.east,
+      north: field.north,
+      timeSeconds: worldState.environment.clock.elapsedTicks,
+      windSpeedMps: preview.windSpeedMps,
+      windDirectionDeg: preview.windDirectionDeg,
+    });
+    return worldState.environment.sample({
+      position,
+      groundHeightMeters,
+      entityHeightMeters: PLAYER_HEIGHT_METERS,
+      feetHeightMeters: resolveFeetHeight({
+        groundHeightMeters,
+        waterHeightMeters,
+        entityHeightMeters: PLAYER_HEIGHT_METERS,
+        diving,
+      }),
+    });
+  };
 
   /**
    * Puts a position on the streamed ground when the sector under it is loaded.
@@ -403,17 +489,38 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const closeGroundView = (): void => {
     routeRunning = false;
     routeSeconds = 0;
+    diving = false;
     streamer?.dispose();
     streamer = undefined;
     sectorRenderer?.dispose();
     sectorRenderer = undefined;
+    weatherView?.dispose();
+    weatherView = undefined;
+    // Sky last: it restores the scene's clear colour, fog and sun, so anything
+    // still reading them must be gone first.
+    skyView?.dispose();
+    skyView = undefined;
+    ambientAudio?.dispose();
+    ambientAudio = undefined;
   };
 
   const openGroundView = (): void => {
     sectorRenderer = new SectorRenderer({
       scene: bootScene.scene,
       anchor: () => floatingOrigin.anchor,
+      quality,
     });
+    skyView = new SkyView({
+      scene: bootScene.scene,
+      sun: bootScene.sun,
+      setShadowMapSize: (size) => bootScene.setShadowMapSize(size),
+      quality,
+    });
+    weatherView = new WeatherView({ scene: bootScene.scene, quality });
+    ambientAudio = new AmbientAudio(kernel?.seed ?? 0);
+    // Browsers refuse audio outside a user gesture. Entering the ground view is
+    // one, so this is the earliest honest place to try.
+    void ambientAudio.start();
     streamer = new SectorStreamer({
       service: WorkerTerrainService.create(),
       sink: sectorRenderer,
@@ -427,9 +534,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // scene's 10 km far plane would clip the world away.
     bootScene.camera.minZ = 5;
     bootScene.camera.maxZ = 400_000;
-    bootScene.camera.lowerRadiusLimit = 200;
+    // Close enough that weather can be seen through rather than fogging the
+    // whole view flat. Visibility in a storm is about two kilometres, so a camera
+    // seven kilometres back was always looking through more fog than air.
+    bootScene.camera.lowerRadiusLimit = 80;
     bootScene.camera.upperRadiusLimit = 60_000;
-    bootScene.camera.radius = 7_000;
+    bootScene.camera.radius = 900;
     bootScene.camera.beta = 1.05;
     bootScene.camera.setTarget(Vector3.Zero());
 
@@ -454,6 +564,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     worldScreen.update({
       viewMode,
+      environment: environmentReadout(sampleEnvironment()),
       streaming: streamer && sectorRenderer ? streamingReadout(streamer, sectorRenderer) : null,
       position: worldState.playerPosition,
       localEast: local.east,
@@ -468,6 +579,52 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       anchor: floatingOrigin.anchor,
     });
     globeView?.refresh();
+  };
+
+  /** Flattens the environment sample for the panel. Every figure is read back, not requested. */
+  const environmentReadout = (sample: EnvironmentSample): EnvironmentReadout => {
+    const weatherStats = weatherView?.stats();
+    return {
+      dayNumber: sample.dayNumber,
+      timeOfDay: sample.timeOfDayLabel,
+      sunElevationDeg: sample.sun.elevationDeg,
+      moonElevationDeg: sample.moon.elevationDeg,
+      moonIllumination: sample.moon.illumination,
+      lightLevel: sample.lightLevel,
+      weatherKind: sample.weather.kind,
+      nextWeatherKind: sample.weather.nextKind,
+      transition: sample.weather.transition,
+      intensity: sample.weather.intensity,
+      cloudCover: sample.weather.cloudCover,
+      precipitation: sample.weather.precipitation,
+      frozen: sample.weather.frozenPrecipitation,
+      fogDensity: sample.weather.fogDensity,
+      windSpeedMps: sample.weather.windSpeedMps,
+      windDirectionDeg: sample.weather.windDirectionDeg,
+      temperatureC: sample.weather.temperatureC,
+      wetness: sample.weather.wetness,
+      lightningFlash: sample.weather.lightningFlash,
+      visibilityMeters: sample.effects.visibilityMeters,
+      tractionMultiplier: sample.effects.tractionMultiplier,
+      movementMultiplier: sample.effects.movementMultiplier,
+      rangedAccuracyPenalty: sample.effects.rangedAccuracyPenalty,
+      hazardous: sample.effects.hazardous,
+      waterState: sample.water.state,
+      depthZone: sample.water.zone.id,
+      depthMeters: sample.water.depthMeters,
+      submergedFraction: sample.water.submergedFraction,
+      waveHeightMeters: sample.waveHeightMeters,
+      waveAmplitudeMeters: sample.waveAmplitudeMeters,
+      audioState: sample.audio.state,
+      audioStatus: ambientAudio?.currentStatus ?? "idle",
+      diving,
+      qualityId: quality.id,
+      particleCapacity: weatherStats?.particleCapacity ?? 0,
+      activeParticles: weatherStats?.activeParticles ?? 0,
+      shadowMapSize: quality.shadowMapSize,
+      reflections: quality.reflections,
+      telegraphs: quality.telegraphs.length,
+    };
   };
 
   /** Flattens live streaming instrumentation for the panel. Nothing here is estimated. */
@@ -548,6 +705,25 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refreshWorld();
   };
 
+  /**
+   * Applies a quality preset.
+   *
+   * Particle capacity and water resolution are both fixed when their objects are
+   * built, so the ground view is torn down and rebuilt rather than nudged. That
+   * is a visible reload of the sectors, which is honest about what changing
+   * quality actually costs.
+   */
+  const applyQuality = (level: QualityLevel): void => {
+    const next = qualityRegistry.get(level);
+    if (!next || next.id === quality.id) return;
+    quality = next;
+    if (viewMode === "ground") {
+      closeGroundView();
+      openGroundView();
+    }
+    refreshWorld();
+  };
+
   const switchViewMode = (mode: WorldViewMode): void => {
     if (mode === viewMode) return;
     viewMode = mode;
@@ -570,41 +746,60 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     bootScene.ground.setEnabled(false);
     openGlobeView();
 
-    worldScreen = renderWorldScreen(uiRoot, regionRegistry.all(), {
-      onTeleport: (regionId) => {
-        routeRunning = false;
-        worldState.teleportTo(regionId, kernel?.tick ?? 0);
-        // A teleport is an intentional jump, so the origin follows immediately
-        // rather than waiting for the drift threshold.
-        floatingOrigin.forceRebase(worldState.playerPosition);
-        sectorRenderer?.rebase();
-        // Land on the terrain rather than at the region's nominal sea level, now
-        // that there is terrain to land on.
-        movePlayerTo(worldState.playerPosition);
-        refreshWorld();
-        // A teleport is a deliberate jump, so bring the camera with it. Walking
-        // deliberately does not, or it would fight the player orbiting.
-        globeView?.lookAtPlayer();
+    worldScreen = renderWorldScreen(
+      uiRoot,
+      regionRegistry.all(),
+      qualityRegistry.all().map((preset) => ({ id: preset.id, label: preset.displayName })),
+      {
+        onTeleport: (regionId: string) => {
+          routeRunning = false;
+          worldState.teleportTo(regionId, kernel?.tick ?? 0);
+          // A teleport is an intentional jump, so the origin follows immediately
+          // rather than waiting for the drift threshold.
+          floatingOrigin.forceRebase(worldState.playerPosition);
+          sectorRenderer?.rebase();
+          // Land on the terrain rather than at the region's nominal sea level, now
+          // that there is terrain to land on.
+          movePlayerTo(worldState.playerPosition);
+          refreshWorld();
+          // A teleport is a deliberate jump, so bring the camera with it. Walking
+          // deliberately does not, or it would fight the player orbiting.
+          globeView?.lookAtPlayer();
+        },
+        onWalk: (eastMeters: number, northMeters: number) => {
+          const from = floatingOrigin.toLocal(worldState.playerPosition);
+          const next = floatingOrigin.toGeo({
+            east: from.east + eastMeters,
+            north: from.north + northMeters,
+            up: from.up,
+          });
+          // A tangent plane is flat and the globe is not, so walking a straight
+          // line in local space lifts you off the surface: measured at 239 m of
+          // false altitude over a 25 km walk. Carrying the previous altitude keeps
+          // movement level; `movePlayerTo` then snaps it to the streamed ground
+          // wherever that ground is actually loaded.
+          movePlayerTo({ ...next, altitudeMeters: worldState.playerPosition.altitudeMeters });
+          refreshWorld();
+        },
+        onViewMode: switchViewMode,
+        onRouteToggle: toggleRoute,
+        onSkipToDayFraction: (fraction: number) => {
+          worldState.environment.skipToDayFraction(fraction, worldState.playerPosition.latitudeDeg);
+          refreshWorld();
+        },
+        onAdvanceHours: (hours: number) => {
+          const ticks = Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24);
+          worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
+          refreshWorld();
+        },
+        onDiveToggle: () => {
+          diving = !diving;
+          refreshWorld();
+        },
+        onQualityChange: (level: string) => applyQuality(level as QualityLevel),
+        onExit: () => stateMachine.transition(AppState.MainMenu),
       },
-      onWalk: (eastMeters, northMeters) => {
-        const from = floatingOrigin.toLocal(worldState.playerPosition);
-        const next = floatingOrigin.toGeo({
-          east: from.east + eastMeters,
-          north: from.north + northMeters,
-          up: from.up,
-        });
-        // A tangent plane is flat and the globe is not, so walking a straight
-        // line in local space lifts you off the surface: measured at 239 m of
-        // false altitude over a 25 km walk. Carrying the previous altitude keeps
-        // movement level; `movePlayerTo` then snaps it to the streamed ground
-        // wherever that ground is actually loaded.
-        movePlayerTo({ ...next, altitudeMeters: worldState.playerPosition.altitudeMeters });
-        refreshWorld();
-      },
-      onViewMode: switchViewMode,
-      onRouteToggle: toggleRoute,
-      onExit: () => stateMachine.transition(AppState.MainMenu),
-    });
+    );
 
     frameHook = (deltaMs) => {
       if (viewMode !== "ground" || !streamer || !sectorRenderer) return;
@@ -614,9 +809,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // is already standing there, so a position set before the sector loaded
       // would otherwise stay at its old altitude: measured at 0 m while the
       // ground under it read 169.8 m.
+      //
+      // Over water the answer is not simply the ground: a 75 m body stands in
+      // shallows, floats over the deep, and walks the bottom while diving.
       const ground = streamer.sampleGroundHeight(worldState.playerPosition);
       if (ground !== null) {
-        const target = Math.max(ground, 0);
+        const wave = sampleEnvironment().waveHeightMeters;
+        const target = resolveFeetHeight({
+          groundHeightMeters: ground,
+          waterHeightMeters: wave,
+          entityHeightMeters: PLAYER_HEIGHT_METERS,
+          diving,
+        });
         if (Math.abs(worldState.playerPosition.altitudeMeters - target) > 0.05) {
           worldState.moveTo({ ...worldState.playerPosition, altitudeMeters: target }, kernel?.tick ?? 0);
         }
@@ -627,6 +831,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       const local = floatingOrigin.toLocal(worldState.playerPosition);
       sectorRenderer.setPlayerLocal(local.east, local.up, local.north);
       bootScene.camera.setTarget(new Vector3(local.east, local.up, local.north));
+
+      // One sample, three consumers. Sky, weather and water all read the same
+      // object gameplay would, so none of them can drift from the others.
+      const sample = sampleEnvironment();
+      skyView?.update(sample);
+      weatherView?.update(sample, bootScene.scene.activeCamera);
+      sectorRenderer.updateWater(sample, local);
+      ambientAudio?.update(sample.audio);
 
       // The streamer runs every frame; the panel does not. A 144 Hz DOM write is
       // both wasteful and unreadable.
@@ -698,6 +910,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       saveScreen?.dispose();
       streamer?.dispose();
       sectorRenderer?.dispose();
+      weatherView?.dispose();
+      skyView?.dispose();
+      ambientAudio?.dispose();
       globeView?.dispose();
       worldScreen?.dispose();
       repository.close();

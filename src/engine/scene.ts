@@ -16,6 +16,23 @@ export interface BootScene {
   readonly camera: ArcRotateCamera;
   readonly ground: ReturnType<typeof MeshBuilder.CreateGround>;
   readonly jaegerPlaceholder: ReturnType<typeof MeshBuilder.CreateBox>;
+  /**
+   * The scene's one sun. Exposed so the sky can drive it rather than adding a
+   * second directional light of its own; two suns is how a scene ends up lit
+   * from two directions with nothing to say which is real.
+   */
+  readonly sun: DirectionalLight;
+  /** Current shadow generator, or null when the quality preset has shadows off. */
+  shadowGenerator: ShadowGenerator | null;
+  /**
+   * Rebuilds the shadow generator at a new resolution, or removes it at zero.
+   *
+   * A shadow map's size is fixed when Babylon creates it, so changing quality
+   * genuinely means building a new one. Doing that here keeps the scene the only
+   * owner: a second generator elsewhere would double the shadow cost while
+   * looking like it had replaced the first.
+   */
+  setShadowMapSize(size: number): void;
 }
 
 /**
@@ -23,7 +40,11 @@ export interface BootScene {
  * light + shadow, sky color, orbit/debug camera. Everything here is disposed for free
  * when the owning Scene is disposed by the caller.
  */
-export function buildBootScene(engine: AbstractEngine, canvas: HTMLCanvasElement): BootScene {
+export function buildBootScene(
+  engine: AbstractEngine,
+  canvas: HTMLCanvasElement,
+  shadowMapSize = 1024,
+): BootScene {
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.53, 0.66, 0.78, 1); // overcast daylight sky, not a neon void
 
@@ -62,9 +83,23 @@ export function buildBootScene(engine: AbstractEngine, canvas: HTMLCanvasElement
   jaegerMat.diffuseColor = new Color3(0.35, 0.38, 0.42);
   jaegerPlaceholder.material = jaegerMat;
 
-  const shadowGenerator = new ShadowGenerator(1024, sun);
-  shadowGenerator.addShadowCaster(jaegerPlaceholder);
-  shadowGenerator.usePoissonSampling = true;
-
-  return { scene, camera, ground, jaegerPlaceholder };
+  const built: BootScene = {
+    scene,
+    camera,
+    ground,
+    jaegerPlaceholder,
+    sun,
+    shadowGenerator: null,
+    setShadowMapSize(size: number): void {
+      built.shadowGenerator?.dispose();
+      built.shadowGenerator = null;
+      if (size <= 0) return;
+      const generator = new ShadowGenerator(size, sun);
+      generator.addShadowCaster(jaegerPlaceholder);
+      generator.usePoissonSampling = true;
+      built.shadowGenerator = generator;
+    },
+  };
+  built.setShadowMapSize(shadowMapSize);
+  return built;
 }

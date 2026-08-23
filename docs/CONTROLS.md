@@ -68,7 +68,12 @@ backup can still be loaded.
 | -------------------- | ---------------------------------------------------------------- |
 | **Globe / Ground**   | Switch between the map and the streamed ground                   |
 | Deploy to + Teleport | Jump to a region centre; the floating origin rebases immediately |
-| **N / S / E / W**    | Walk 1 km, settling onto the streamed ground where it is loaded  |
+| **N / S / E / W**    | Walk the selected distance, settling onto the streamed ground    |
+| Walk distance        | 100 m, 1 km or 10 km per step                                    |
+| **+1h / +6h**        | Advance the world clock by whole in-game hours                   |
+| **06:00 to 00:00**   | Skip forward to that clock time; never backwards                 |
+| **Dive / Surface**   | Walk the seabed instead of floating. Ground view only            |
+| Quality              | Low, Medium, High or Cinematic                                   |
 | **Fly route**        | Run the deterministic stress route; press again to stop          |
 | Left-drag / wheel    | Orbit and zoom                                                   |
 
@@ -105,6 +110,41 @@ not.
 The stress route flies Hong Kong, Manila, Tokyo, Vladivostok and back at 4,000
 metres per second. It is a fixed set of waypoints at a fixed speed and step, so
 two runs are comparable, and it is the same route the headless test drives.
+
+The walk distance is selectable because a fixed one kilometre stride steps
+straight over a coastline. The shelf between wading depth and open water is a few
+hundred metres wide, so at one kilometre it is invisible; at 100 m it can be
+walked into.
+
+Time buttons are labelled with the clock time they set rather than with "dawn" or
+"dusk". Sunrise moves with latitude and season, so a button called Dawn would be
+lying at most of the places you can stand.
+
+### Environment readout
+
+Shown in both views, because the world clock and the weather run everywhere; only
+the things that draw them belong to the ground view.
+
+| Readout          | Meaning                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| Day / time       | Days elapsed and the in-game clock. One tick is one in-game second  |
+| Sun / moon       | Elevation of each, and how much of the moon is lit                  |
+| Light            | 0 to 1 after cloud, marked when a lightning flash is raising it     |
+| Weather          | Current front, or the crossfade into the next one                   |
+| Cloud / rain     | Cover, precipitation and fog, and whether it is falling as snow     |
+| Wind             | Speed and the bearing it blows from                                 |
+| Temperature      | Degrees, including the day and night swing                          |
+| Wetness          | How saturated the ground is. The only weather value a save carries  |
+| Visibility       | Metres, the same figure an AI reads. Flags hazardous conditions     |
+| Traction / speed | Grip and movement multipliers gameplay applies                      |
+| Ranged penalty   | Accuracy lost to wind, rain and water                               |
+| Water            | State, depth zone, depth and how submerged the body is              |
+| Waves            | Surface height at this point and the amplitude the wind justifies   |
+| Audio            | Surface, partial or underwater, and whether audio actually started  |
+| Quality budgets  | Live particles against the ceiling, shadow, reflections, telegraphs |
+
+Audio reports its real state. Browsers refuse to start audio outside a user
+gesture, so it says `blocked` rather than pretending to be running.
 
 ## Not yet bound
 
