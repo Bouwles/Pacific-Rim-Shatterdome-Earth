@@ -98,7 +98,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - reactions as a shared table, with poise gating staggers so a heavy attack cannot hold a creature down for a whole fight;
   - stamina, heat and an overheat lockout, all derived from the machine's own mass and cooling rather than authored per fighter;
   - every event carries a tick, a volume, a zone, a packet and, for a refusal, a reason in words, which is the debug view rather than a picture of one.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (774 unit+integration), `smoke` (93 Playwright), `build` all pass.
+- **A close-range vertical slice on top of that framework**:
+  - light and heavy chains, directional variants of the heavy, and one charged attack whose damage scales with the wind-up;
+  - dodges with invulnerable frames in the middle rather than the front, a real stamina cost and a real recovery, cancelling only out of moves that list an evade;
+  - blocks with a perfect window, parries that answer with a free counter, and five graded outcomes each with a coaching line written for a player;
+  - grapples with eligibility checks, a struggle meter both sides push on, throws, wall slams and safe failure when there is no room, plus the rule that something being held cannot swing;
+  - environmental weapons as tagged props, where one move covers every prop and the prop's own mass, reach, damage and durability do the rest;
+  - finishers as short beat machines with camera framings, held-input checks, interruption, banked damage, and a space query that refuses to start one anywhere unsafe;
+  - a move list written from the move table, in plain language with no frame data anywhere in it, and a coaching line that says what just happened;
+  - reduced camera motion, hold-to-complete and skip-sequences, all producing the same outcome.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (824 unit+integration), `smoke` (101 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -111,6 +120,8 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - Terrain is broad-strokes landform, not geography. The generator knows a sample's latitude, a seeded moisture field and the authored region anchors, and nothing else. Real coastlines, mountain ranges, rivers and city footprints are not reproduced and no accuracy is claimed.
+- Melee is one machine's moveset. Weapon-specific branches exist as a field on the move table and as the environmental prop path, but no Jaeger carries its own weapon set yet.
+- A grapple has no ground follow-up beyond the throw and the slam: there is no ground game once a target is down.
 - Kaiju behaviour does not exist. The creature attacks on a fixed cadence, which the panel and the code both call a schedule rather than an attack director.
 - A machine has one hull zone rather than per-component armour, so component damage lands on a single number. The zones exist on the creature side and the same code path will carry the machine's when its milestone comes.
 - Nothing about a fight is saved. Damage that outlives a battle arrives with the per-component damage milestone.
@@ -211,6 +222,8 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
 The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and give the creature behaviour rather than a cadence, and give the machine components rather than a hull.
+Melee now has enough vocabulary for a real fight, so what the creature lacks is the part that chooses
+between answers.
 The arena already resolves both sides, already reports every hit by zone, and already carries the reactions a
 behaviour would choose between; what it lacks is anything deciding what the creature does. Per-component
 damage is the other half: the zone path exists and the machine currently uses one zone through it, so

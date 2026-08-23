@@ -295,6 +295,27 @@ code path and reports everything as events. Created `src/combat/`, `src/data/mov
 - `npm run typecheck`, `lint`, `format:check`, `test` (774), `smoke` (93), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 11 - Melee combos, defence, counters, grapples and finishers
+
+**Depends on:** Milestone 10 (the attack framework this extends).
+**Status:** done.
+**Scope:** directional and charged attacks, dodges, blocks, perfect guards, parries with free
+counters, combo tracking, grapples with struggle, escape, throws and slams, environmental weapons as
+tagged props, finishers as short beat state machines with placement safety and accessibility
+settings, and a move list written from the move table. Created `src/combat/defense.ts`,
+`src/combat/grapple.ts`, `src/combat/finisher.ts`, `src/data/props.ts`. Extended the move table, the
+arena, the pilot panel and the input source.
+**Acceptance tests:**
+
+- An encounter can be won through offense, defence and counters, grapples, or mixed play: four
+  scripted routes through the same arena, each ending with a lethal zone destroyed and the machine
+  standing.
+- Finishers never place actors inside buildings, in water too deep, or outside the loaded world:
+  every start goes through an injected space query, and so do dodges, throws and grapple clearance.
+- Reduced camera motion and hold-to-complete work, and skipping a sequence pays out the same damage.
+- `npm run typecheck`, `lint`, `format:check`, `test` (824), `smoke` (101), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

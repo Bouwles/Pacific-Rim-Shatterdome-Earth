@@ -676,3 +676,55 @@ sees a variable delta.
 **Nothing new is saved.** A fight is live state. Per-component damage that
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
+
+## 2026-08-24, Milestone 11
+
+**Defences are rows in the move table, not a parallel system.** A dodge, a block
+and a parry each have a startup, an active frame and a recovery like everything
+else, and they go through the same request, cancel and buffer path. That is what
+keeps "a dodge has weight" true by construction rather than by discipline.
+
+**Invulnerable frames sit in the middle of the dodge.** At the front they would
+make the dodge a reaction to anything; at the back they would make it useless.
+The middle is what makes the timing a skill and the recovery a real cost.
+
+**A parry's counter steps outside the cancel rules.** It is the one guaranteed
+answer in the game, so the parry's own recovery is cleared before the counter is
+started. Leaving the rules in place meant the arena refused what the parry had
+just promised.
+
+**A seize takes hold on contact, not on release.** A grapple that began when the
+button was pressed left the seize animation running as an active attack, which
+then refused a finisher as an illegal cancel. Holding is a state that replaces
+the attack rather than running alongside it.
+
+**Refusals never cost the commitment.** A slam with nothing to slam into leaves
+the hold intact; a throw with no room becomes a release and says so. The
+alternative is a system where using a tool badly is punished twice.
+
+**Space is one injected query, used by everything that moves an actor.**
+Finishers, dodges, throws and grapple clearance all ask the same `SpaceQuery`.
+There is no second opinion about what counts as solid ground, and a test can hand
+the arena open ground without touching terrain.
+
+**Damage that bypasses armour goes through one path.** Finisher payouts and
+grapple impacts both call the same helper, which owns the zone destruction and
+defeat checks. Reducing zone health directly is how a creature ended up at zero
+core health and still fighting.
+
+**A destroyed zone stops absorbing.** Hits fall through to the core, which makes
+taking a creature apart worth doing and stops long fights stalling against a body
+made entirely of dead plate.
+
+**Accessibility settings produce identical outcomes.** Skipping a finisher pays
+the same damage as watching it; hold-to-complete asks for the same input in a
+different shape; reduced motion changes framings and nothing else. A setting that
+costs the player something is not an accessibility setting.
+
+**The move list is generated from the move table.** It cannot drift, it cannot
+miss a move, and it cannot describe one that was deleted. Speed is a word because
+a frame count is a developer's unit, not a player's.
+
+**Still nothing new is saved.** Holds, charges, defences and finisher settings are
+all live state on the arena, which is built when a target is spawned and torn down
+with it. `ROOT_SAVE_VERSION` stays at 5.

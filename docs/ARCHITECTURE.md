@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 10. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 11. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -67,6 +67,9 @@ src/
     hitVolumes.ts      swept capsules, target spheres, overlap history
     targeting.ts       soft targets, locks, cycling, aim mode, body-zone selection
     reactions.ts       stagger, guard break, launch, knockdown, component shock, finisher windows
+    defense.ts         dodges, blocks, perfect guards, parries, combo tracking, graded timing
+    grapple.ts         eligibility, struggle, escape, throws, slams, safe failure on obstruction
+    finisher.ts        beat state machine, hold and skip settings, placement safety query
   jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
     locomotion.ts      states, acceleration, turn authority, ground queries, footfalls, reactions
     camera.ts          three rigs, comfort settings, impulse, obstruction, lossless rig switching
@@ -99,7 +102,8 @@ src/
     climates.ts          what weather each climate zone produces
     districts.ts         district grammar rows and the Hong Kong placement plan
     facilities.ts        the thirteen facilities, their tiers, and how the rooms connect
-    moves.ts             every attack: phases, curves, cancels, volumes, packets and costs
+    moves.ts             every attack: phases, curves, cancels, volumes, packets, costs and coaching
+    props.ts             environmental weapons: mass, reach, damage scale, durability, clearance
     kaiju.ts             creatures as body zones with their own health, armour and consequences
     personnel.ts         named crew: post, shift, and lines that report real facility state
     quality.ts           Low to Cinematic presets with explicit particle, shadow and water budgets
@@ -645,6 +649,60 @@ of one.
 **Nothing new is saved.** A fight is live state. Damage that outlives a battle
 belongs to the per-component damage milestone, and inventing a save format for
 it now would be guessing at that milestone's schema.
+
+## Melee, defence and grapples
+
+Three modules joined the combat folder, and the arena grew to run them. Nothing
+here is a parallel system: a dodge, a block, a seize and a finisher are all rows
+in the same move table the jab is in, resolved by the same arena, and reported
+through the same event log.
+
+**A dodge does not erase weight.** Its invulnerable frames sit in the middle of
+the move rather than at the front, it costs stamina, it has a recovery, and it
+only cancels out of moves that list an evade. A heavy attack does not, which is
+the rule that stops the dodge becoming a free exit from every commitment.
+
+**Timing is graded and explained in words.** Early, late, blocked, perfect and
+parried are five different outcomes with five different consequences, and each
+carries a coaching line written for a player: "Guard as the hit lands to take
+nothing at all." Nothing in the interface mentions a tick, a frame or a window.
+
+**A perfect answer opens the attacker.** A perfect guard or a parry ends the
+attacker's move on the spot and leaves them open for about two thirds of a
+second; a parry also answers with a free counter, which steps outside the cancel
+rules because the whole point is that it is guaranteed.
+
+**A grapple is a negotiation.** Eligibility is checked before the hold, not
+after: out of reach, already held, on the ground, too heavy, or not enough room
+each refuse with their own sentence. Once held, a struggle meter fills from the
+victim's effort and empties from the holder's grip, the hold times out on its
+own, and being held means being unable to swing.
+
+**Space is checked before anything is thrown.** A throw that would put a body
+through a tower fails safely and becomes a release; a slam needs something solid
+behind the victim and stops short of it. A refused slam leaves the hold intact
+rather than costing the player their whole commitment.
+
+**Environmental weapons are one move and a table of props.** `env.swing.prop`
+works with anything in hand; what changes is the prop's mass, reach, damage
+scale, startup penalty and how many connections it survives. A prop that adds
+damage without adding startup is refused at registration.
+
+**A finisher is a short state machine, not a cutscene.** Beats carry a camera
+framing and whether the input must be held. Damage is banked beat by beat, so an
+interruption or a release keeps what was earned and loses the rest. It is rare by
+construction: the target must be nearly finished and either reeling or held.
+
+**Placement safety is an injected query.** `SpaceQuery` answers whether a body
+fits, whether a point is in the loaded world, and how deep the water is.
+Finishers, dodges, throws and grapple clearance all go through it, so nothing can
+put an actor inside a building, in water too deep to fight in, or outside the
+sectors that are actually streamed in.
+
+**Accessibility is part of the system rather than a setting bolted on.** Reduced
+camera motion flattens every finisher framing to one wide shot, hold-to-complete
+turns repeated presses into a held input, and skipping sequences applies the
+whole outcome at once. All three produce the same damage.
 
 ## Quality presets
 

@@ -565,6 +565,43 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Melee schemas (Milestone 11)
+
+### `MoveDefinition` additions
+
+All optional, so every move written before this milestone still validates.
+
+| Field                                | Meaning                                                          | Constraint                                                                                   |
+| ------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `direction`                          | Which way the stick was pushed for this variant                  | one of neutral, forward, back, side                                                          |
+| `chargeTicks` / `chargedDamageScale` | Wind-up length and what a full charge is worth                   | a chargeable move must scale above 1                                                         |
+| `requiresPropTag`                    | Prop tag needed in hand, or `any`                                | refused with no prop in hand                                                                 |
+| `defense`                            | Dodge, block or parry windows                                    | a dodge needs invulnerable frames, a block or parry a perfect window, a parry a counter move |
+| `grapple`                            | Reach, hold length, escape difficulty, clearance, throw distance | clearance must cover the throw distance                                                      |
+| `finisher`                           | Beats, guaranteed damage, interruptibility, clearance            | at least one beat, damage above zero                                                         |
+| `coaching`                           | Plain language for the move list                                 | required on every move                                                                       |
+
+Only a `finisher` move may carry a finisher, and only a `grapple` move a grapple.
+
+### `PropDefinition` (src/data/props.ts)
+
+`{ id, displayName, tag, massTons, reachMeters, damageScale, startupPenaltyTicks,
+swingsBeforeBreaking, clearanceMeters, sourceKind }`. Validation refuses a prop
+that adds damage without adding startup, and one whose clearance is smaller than
+its own reach. `PropInstance` carries what is left of one in the world:
+`{ instanceId, propId, east, north, swingsLeft, heldBy }`.
+
+### `SpaceQuery` (src/combat/finisher.ts)
+
+`{ isClear(east, north, radius), inLoadedWorld(east, north),
+waterDepthMeters(east, north) }`. Injected into the arena; `OPEN_GROUND` is the
+default and what tests use. Finishers refuse deeper than 24 m of water.
+
+### Nothing new is saved
+
+`ROOT_SAVE_VERSION` stays at 5. A fight, a hold and a finisher are all live
+state, and the accessibility settings are session settings on the arena.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

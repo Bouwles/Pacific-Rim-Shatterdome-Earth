@@ -182,6 +182,24 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Melee cost (Milestone 11)
+
+Measured in the browser on WebGPU at High, seed 20260824, with a fight live in
+Hong Kong:
+
+| State                             | Draw calls | Frame time    | Frame rate |
+| --------------------------------- | ---------- | ------------- | ---------- |
+| Combo, grapple and dodge exchange | 98 to 100  | 0.6 to 0.9 ms | 60 to 144  |
+| Move list open                    | 100        | 0.9 ms        | 144        |
+
+Nothing new is drawn: defences, holds and finishers are all state on fighters the
+arena already had, and the move list is DOM built once when the panel opens.
+
+The one query with a cost worth naming is `SpaceQuery.isClear`, which scans the
+active region's city blocks linearly. It is asked a handful of times a second by
+grapples, dodges and finishers rather than every frame; if that ever changes it
+wants a grid rather than a loop, and the comment in `bootstrap.ts` says so.
+
 ## Combat cost (Milestone 10)
 
 Measured in the browser on WebGPU at High, seed 20260824, in Hong Kong with the

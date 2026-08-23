@@ -59,7 +59,7 @@ import {
   type AlertLevel,
 } from "../world/cityActivity";
 import { CityView } from "../engine/cityView";
-import { localToGeo } from "../world/coordinates";
+import { geoToLocal, localToGeo } from "../world/coordinates";
 import { PilotSession } from "../jaegers/pilotSession";
 import { JaegerView } from "../engine/jaegerView";
 import { PilotInputSource } from "../engine/pilotInput";
@@ -76,7 +76,10 @@ import {
   type CombatEvent,
 } from "../combat/arena";
 import { CombatView } from "../engine/combatView";
-import type { PilotCombatState } from "../ui/pilotScreen";
+import type { MoveListEntry, PilotCombatState } from "../ui/pilotScreen";
+import { createPropRegistry, spawnProp, type PropInstance } from "../data/props";
+import type { SpaceQuery } from "../combat/finisher";
+import { moveLengthTicks, type MoveDefinition } from "../data/moves";
 import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry } from "../data/jaegers";
@@ -522,6 +525,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const combatLog: string[] = [];
   const moveRegistry = createMoveRegistry();
   const kaijuRegistry = createKaijuRegistry();
+  const propRegistry = createPropRegistry();
+  /** Props lying around the fight, spawned with the target. */
+  let propInstances: PropInstance[] = [];
+  let trainingLine = "";
+  let moveListOpen = false;
   /** The number row, in order. Slot 5 is the finisher, which is usually refused. */
   const ATTACK_SLOTS: readonly string[] = [
     "melee.light.jab",
@@ -531,6 +539,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     "melee.guard-break.shoulder",
     "melee.finisher.plasma-drop",
   ];
+  /** The melee row: everything the number keys do not cover. */
+  const MELEE_KEYS: Readonly<Record<string, string>> = {
+    KeyG: "grapple.clinch",
+    KeyV: "defense.dodge.step",
+    KeyB: "defense.counter.parry",
+    KeyN: "env.swing.prop",
+  };
 
   const districtRegistry = createDistrictRegistry();
   const districtsById = new Map<DistrictKind, ReturnType<typeof districtRegistry.getOrThrow>>(
@@ -798,6 +813,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     combatArena = undefined;
     combatAccumulator = 0;
     combatLog.length = 0;
+    propInstances = [];
+    trainingLine = "";
     refreshPilot();
   };
 
@@ -823,6 +840,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     combatArena = new CombatArena({
       moves: moveRegistry,
+      space: spaceQuery(),
       fighters: [
         {
           id: "jaeger",
@@ -857,13 +875,94 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightAt: localGroundHeight,
     });
     combatView.setDebugVolumes(combatDebugVolumes);
+
+    // Something to pick up. Placed to the side of the fight rather than under
+    // it, so reaching one is a decision rather than an accident.
+    propInstances = propRegistry
+      .all()
+      .slice(0, 3)
+      .map((prop, index) => {
+        const angle = (index * 120 * Math.PI) / 180;
+        return spawnProp(
+          `prop.${index}`,
+          prop,
+          pose.east + Math.sin(angle) * 90,
+          pose.north + Math.cos(angle) * 90,
+        );
+      });
+
     session.lockTarget("kaiju");
     refreshPilot();
   };
 
+  /**
+   * Picks up the nearest prop, or drops the one in hand.
+   *
+   * Refusals come back as words, the same way every other refusal does.
+   */
+  const toggleProp = (): void => {
+    const arena = combatArena;
+    const session = pilotSession;
+    if (!arena || !session) return;
+    const view = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (view?.wieldingPropId) {
+      arena.dropProp("jaeger");
+      pushCombatLine("Dropped it.");
+      return;
+    }
+    let best: { instance: PropInstance; distance: number } | null = null;
+    for (const instance of propInstances) {
+      if (instance.heldBy !== null) continue;
+      const distance = Math.hypot(instance.east - session.pose.east, instance.north - session.pose.north);
+      if (!best || distance < best.distance) best = { instance, distance };
+    }
+    if (!best) {
+      pushCombatLine("Nothing here to pick up.");
+      return;
+    }
+    const definition = propRegistry.getOrThrow(best.instance.propId);
+    const result = arena.takeProp("jaeger", definition, best.instance, best.distance);
+    pushCombatLine(result.ok ? `Picked up the ${definition.displayName.toLowerCase()}.` : result.message);
+  };
+
+  /** The melee row: grapple, dodge, parry and a prop swing. */
+  const pressMelee = (code: string): void => {
+    const arena = combatArena;
+    if (!arena) return;
+    if (code === "KeyP") {
+      toggleProp();
+      return;
+    }
+    const moveId = MELEE_KEYS[code];
+    if (!moveId) return;
+    const request = arena.request("jaeger", moveId);
+    if (!request.ok) {
+      pushCombatLine(`refused: ${request.message}`);
+      trainingLine = request.message;
+      return;
+    }
+    arena.press("jaeger", moveId);
+  };
+
+  /**
+   * Directional variants of the heavy attack.
+   *
+   * The same button with a different answer depending on which way the machine
+   * is being pushed, which is how the moveset stays deep without the move list
+   * turning into a keyboard diagram.
+   */
+  const HEAVY_VARIANTS: Readonly<Record<string, string>> = {
+    forward: "melee.heavy.smash.forward",
+    side: "melee.heavy.spin.side",
+  };
+
   /** Presses an attack. The arena decides whether it is legal, and says why not. */
   const pressAttack = (slot: number): void => {
-    const moveId = ATTACK_SLOTS[slot];
+    let moveId = ATTACK_SLOTS[slot];
+    // Slot three is the heavy, and the heavy is the one with directions on it.
+    if (moveId === "melee.heavy.overhead" && pilotInput) {
+      moveId = HEAVY_VARIANTS[pilotInput.moveDirection] ?? moveId;
+    }
     if (!moveId || !combatArena) return;
     const request = combatArena.request("jaeger", moveId);
     if (!request.ok) {
@@ -892,8 +991,28 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         pushCombatLine(`t${event.tick} ${event.actorId} lost ${event.zoneId ?? ""} (${event.reason ?? ""})`);
       } else if (event.type === "defeated") {
         pushCombatLine(`t${event.tick} ${event.actorId} is down`);
+      } else if (event.type === "whiffed") {
+        // A miss is feedback too, and it is the difference between "that did not
+        // work" and "nothing happened".
+        pushCombatLine(`t${event.tick} missed with ${event.moveId ?? ""}`);
       } else if (event.type === "attack-rejected") {
         pushCombatLine(`t${event.tick} refused: ${event.reason ?? ""}`);
+      } else if (
+        event.type === "evaded" ||
+        event.type === "perfect-guard" ||
+        event.type === "parried" ||
+        event.type === "grapple-started" ||
+        event.type === "grapple-ended" ||
+        event.type === "finisher-started" ||
+        event.type === "finisher-ended" ||
+        event.type === "prop-taken" ||
+        event.type === "prop-broken" ||
+        event.type === "combo"
+      ) {
+        // The coaching line is the one piece of the log written for the player
+        // rather than for a developer, so it takes the reason and nothing else.
+        if (event.reason) trainingLine = event.reason;
+        pushCombatLine(`t${event.tick} ${event.type}: ${event.reason ?? ""}`);
       }
 
       // A reaction on the machine is felt rather than only logged: locomotion
@@ -938,8 +1057,57 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       defeated: kaijuView.defeated,
       hitLog: [...combatLog],
       debugVolumes: combatDebugVolumes,
+      // While the list is open the coaching line explains where the list comes
+      // from, which is the one thing a move list cannot say about itself.
+      training: moveListOpen ? "Every move here is read from the game's own move table." : trainingLine,
+      comboHits: jaegerView.comboHits,
+      bestCombo: jaegerView.bestCombo,
+      chargeProgress: jaegerView.chargeProgress,
+      grapplePhase: jaegerView.grapplePhase,
+      grappleStruggle: jaegerView.grappleStruggle,
+      finisherPhase: jaegerView.finisherPhase,
+      holdingProp: jaegerView.wieldingPropId,
+      propSwingsLeft: jaegerView.wieldingSwingsLeft,
     };
   };
+
+  /**
+   * Where a machine may legally stand, answered from the world that is actually
+   * loaded.
+   *
+   * City blocks are solid, unloaded ground is off limits, and deep water is not
+   * somewhere a finisher happens. The block scan is linear over the region's own
+   * layout, which is fine because it is asked a handful of times a second by
+   * grapples and finishers rather than every frame; if that ever changes it wants
+   * a grid rather than a loop.
+   */
+  const spaceQuery = (): SpaceQuery => ({
+    isClear: (east, north, radiusMeters) => {
+      const regionId = worldState.activeRegionId;
+      const layout = regionId ? cityLayouts.get(regionId) : null;
+      const region = regionId ? regionRegistry.get(regionId) : undefined;
+      if (!layout || !region) return true;
+      const position = floatingOrigin.toGeo({ east, north, up: 0 });
+      const local = geoToLocal(region.centre, position);
+      for (const block of layout.blocks) {
+        const reach = radiusMeters + Math.max(block.widthMeters, block.depthMeters) * 0.5;
+        if (Math.abs(block.east - local.east) > reach) continue;
+        if (Math.abs(block.north - local.north) > reach) continue;
+        return false;
+      }
+      return true;
+    },
+    inLoadedWorld: (east, north) => {
+      const position = floatingOrigin.toGeo({ east, north, up: 0 });
+      return streamer?.sampleGroundHeight(position) !== null && streamer !== undefined;
+    },
+    waterDepthMeters: (east, north) => {
+      const position = floatingOrigin.toGeo({ east, north, up: 0 });
+      const ground = streamer?.sampleGroundHeight(position) ?? 0;
+      const sample = sampleEnvironment();
+      return Math.max(0, sample.waveHeightMeters - ground);
+    },
+  });
 
   const stopPilot = (): void => {
     clearTarget();
@@ -1009,6 +1177,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       },
       onExit: stopPilot,
       onAttack: pressAttack,
+      onMelee: pressMelee,
+      onChargeStart: () => combatArena?.beginCharge("jaeger", "melee.charge.haymaker"),
+      onChargeRelease: () => {
+        const outcome = combatArena?.releaseCharge("jaeger");
+        if (outcome && !outcome.ok) pushCombatLine(`refused: ${outcome.message}`);
+      },
+      onFinisherHold: (holding: boolean) => combatArena?.setFinisherHold("jaeger", holding),
       onAimModeToggle: () => {
         if (!combatArena) return;
         const current = combatArena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
@@ -1028,6 +1203,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       jaegerRegistry
         .all()
         .map((entry) => ({ id: entry.id, label: `${entry.name} (${entry.markDesignation})` })),
+      buildMoveList(),
       {
         onCameraMode: (mode: CameraMode) => {
           pilotSession?.setCameraMode(mode);
@@ -1052,6 +1228,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onSwitchJaeger: (id: string) => startPilot(id),
         onSpawnTarget: spawnTarget,
         onClearTarget: clearTarget,
+        onMoveList: (open: boolean) => {
+          moveListOpen = open;
+        },
+        onHoldToComplete: (enabled: boolean) => {
+          combatArena?.setFinisherSettings("jaeger", { holdToComplete: enabled });
+        },
+        onSkipSequences: (enabled: boolean) => {
+          combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
+        },
         onDebugVolumes: (enabled: boolean) => {
           combatDebugVolumes = enabled;
           combatView?.setDebugVolumes(enabled);
@@ -1065,6 +1250,51 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // in the same spot and hide it.
     sectorRenderer?.setPlayerMarkerVisible(false);
     refreshPilot();
+  };
+
+  /**
+   * The move list, written from the move table.
+   *
+   * Speed is a word rather than a tick count, and the input is the key the
+   * player actually presses, so nothing in the interface leaks the numbers
+   * underneath it.
+   */
+  const buildMoveList = (): MoveListEntry[] => {
+    const inputs = new Map<string, string>();
+    ATTACK_SLOTS.forEach((moveId, index) => inputs.set(moveId, `press ${index + 1}`));
+    for (const [code, moveId] of Object.entries(MELEE_KEYS)) {
+      inputs.set(moveId, `press ${code.replace("Key", "")}`);
+    }
+    inputs.set("melee.charge.haymaker", "hold H, release to swing");
+    inputs.set("melee.heavy.smash.forward", "hold forward, press 3");
+    inputs.set("melee.heavy.spin.side", "hold sideways, press 3");
+
+    const groupFor = (move: MoveDefinition): string => {
+      if (move.defense) return "Defence";
+      if (move.grapple) return "Grapples";
+      if (move.finisher) return "Finishers";
+      if (move.requiresPropTag) return "Environment";
+      if (move.id.startsWith("kaiju.")) return "What it does to you";
+      return "Attacks";
+    };
+    const speedFor = (move: MoveDefinition): string => {
+      const total = moveLengthTicks(move);
+      if (total <= 24) return "fast";
+      if (total <= 48) return "steady";
+      return "slow, and worth committing to";
+    };
+
+    return moveRegistry
+      .all()
+      .map((move) => ({
+        id: move.id,
+        displayName: move.displayName,
+        group: groupFor(move),
+        input: inputs.get(move.id) ?? "not bound",
+        coaching: move.coaching,
+        speed: speedFor(move),
+      }))
+      .sort((a, b) => a.group.localeCompare(b.group) || a.displayName.localeCompare(b.displayName));
   };
 
   /** Pushes the machine's own numbers at the panel. Throttled like every other readout. */
@@ -1109,6 +1339,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // Guarding is one idea with two consumers: it slows the machine down and it
     // is what the arena checks when a hit lands.
     combatArena?.setGuard("jaeger", input.guard);
+    // Holding guard is a block; tapping it at the right moment is a perfect one,
+    // which the block move is what provides.
+    combatArena?.setFinisherHold("jaeger", input.guard || pilotInput?.finisherHeld === true);
     const sample = sampleEnvironment();
 
     const frame = session.update({

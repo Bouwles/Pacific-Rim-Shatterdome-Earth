@@ -94,6 +94,69 @@ export interface MoveCues {
   readonly whiff: string;
 }
 
+/**
+ * Which way the stick was pushed when the move came out.
+ *
+ * A directional variant is the same button with a different answer, which is
+ * how a move list stays short while the moveset stays deep.
+ */
+export const MOVE_DIRECTIONS = ["neutral", "forward", "back", "side"] as const;
+export type MoveDirection = (typeof MOVE_DIRECTIONS)[number];
+
+/** What a defensive move does. Present only on defensive rows. */
+export interface DefenseSpec {
+  readonly kind: "dodge" | "block" | "parry";
+  /** Ticks of invulnerability, for a dodge. */
+  readonly invulnerableFromTick: number;
+  readonly invulnerableToTick: number;
+  /**
+   * Ticks from the start of the move in which a block counts as perfect: no
+   * guard damage, no chip, and the attacker is left open.
+   */
+  readonly perfectFromTick: number;
+  readonly perfectToTick: number;
+  /** Move that comes out free when a parry connects, or null for a plain block. */
+  readonly counterMoveId: string | null;
+  /** Metres the dodge carries, in the direction the move is tagged with. */
+  readonly travelMeters: number;
+}
+
+/** What a grapple initiator asks for. Present only on grapple rows. */
+export interface GrappleSpec {
+  /** Metres the target must be inside to be seized at all. */
+  readonly reachMeters: number;
+  /** Ticks the hold lasts before it must be resolved or released. */
+  readonly holdTicks: number;
+  /** How hard the victim has to work to break out, against their own poise. */
+  readonly escapeDifficulty: number;
+  /** Clear ground the throw needs, or it fails safely instead of throwing into a wall. */
+  readonly clearanceMeters: number;
+  /** Metres a throw carries the victim. */
+  readonly throwDistanceMeters: number;
+}
+
+/** What a cinematic finisher runs. Present only on finisher rows. */
+export interface FinisherSpec {
+  /**
+   * Beats of the sequence: each is a camera framing, a length, and whether the
+   * player has to do anything to keep it going.
+   */
+  readonly beats: readonly {
+    readonly id: string;
+    readonly durationTicks: number;
+    /** Camera framing this beat asks for. Presentation reads it; rules do not. */
+    readonly camera: "close" | "wide" | "low" | "orbit";
+    /** True when the player must be holding the input through this beat. */
+    readonly requiresHold: boolean;
+  }[];
+  /** Damage guaranteed on completion, whatever else happens. */
+  readonly guaranteedDamage: number;
+  /** True when anything hitting the attacker mid-sequence stops it. */
+  readonly interruptible: boolean;
+  /** Clear ground both actors need before it may start. */
+  readonly clearanceMeters: number;
+}
+
 export interface MoveDefinition extends RegistryEntry {
   readonly id: string;
   readonly displayName: string;
@@ -121,6 +184,22 @@ export interface MoveDefinition extends RegistryEntry {
   /** Tag this move answers to when something else cancels into it. */
   readonly tag: CancelTag;
   readonly cues: MoveCues;
+  /**
+   * Direction this variant answers to. Defaults to neutral, so every move
+   * written before directional variants existed still reads correctly.
+   */
+  readonly direction?: MoveDirection;
+  /** Ticks of holding that fully charge the move. Zero or absent means it does not charge. */
+  readonly chargeTicks?: number;
+  /** Damage multiplier at a full charge. */
+  readonly chargedDamageScale?: number;
+  /** Prop tag this move needs in hand, or absent for a bare-handed move. */
+  readonly requiresPropTag?: string;
+  readonly defense?: DefenseSpec;
+  readonly grapple?: GrappleSpec;
+  readonly finisher?: FinisherSpec;
+  /** Plain language for the move list. No frame data, no jargon. */
+  readonly coaching: string;
   readonly description: string;
 }
 
@@ -164,6 +243,7 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 3,
     tag: "light",
     cues: { windUp: "servo.light", impact: "impact.light", whiff: "whiff.light" },
+    coaching: "Your quickest punch. Throw it first, then follow it with anything.",
     description: "Fast, cheap, and cancels into almost anything. The move that opens a guard.",
   },
   {
@@ -205,6 +285,8 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 5,
     tag: "light",
     cues: { windUp: "servo.light", impact: "impact.light", whiff: "whiff.light" },
+    coaching:
+      "The follow-up to a jab. It only leads anywhere if it connects, so do not throw it into a guard.",
     description: "The second half of a jab. Only cancels onward if it actually landed.",
   },
   {
@@ -246,6 +328,8 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 18,
     tag: "heavy",
     cues: { windUp: "servo.heavy", impact: "impact.heavy", whiff: "whiff.heavy" },
+    coaching:
+      "A big commitment. Land it off a combo rather than throwing it on its own, and it shrugs off small hits while it swings.",
     description: "Slow, expensive and worth respecting. Light armour, so it trades rather than loses.",
   },
   {
@@ -287,6 +371,7 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 14,
     tag: "launcher",
     cues: { windUp: "servo.heavy", impact: "impact.launch", whiff: "whiff.heavy" },
+    coaching: "Lifts the target off its feet. Follow it up while they are in the air.",
     description: "Lifts what it hits. The opening of anything that follows a kaiju off its feet.",
   },
   {
@@ -328,6 +413,7 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 16,
     tag: "heavy",
     cues: { windUp: "servo.charge", impact: "impact.guardbreak", whiff: "whiff.heavy" },
+    coaching: "Use this when they will not stop blocking. Nothing interrupts it once it starts.",
     description: "Goes through a guard rather than around it, and cannot be interrupted while it runs.",
   },
   {
@@ -369,6 +455,7 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 55,
     tag: "finisher",
     cues: { windUp: "reactor.charge", impact: "impact.plasma", whiff: "whiff.plasma" },
+    coaching: "Only available when the target is nearly finished and reeling. Ends the fight.",
     description:
       "Only legal against a target that is already finished. Ends fights, and costs a fight's worth of heat.",
   },
@@ -411,6 +498,7 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 0,
     tag: "heavy",
     cues: { windUp: "kaiju.roar", impact: "impact.claw", whiff: "whiff.claw" },
+    coaching: "The creature's opening swing. Wide, and slow enough to read.",
     description: "A wide swing that reaches across the front. The attack a kaiju opens with.",
   },
   {
@@ -452,7 +540,464 @@ const MOVES: readonly MoveDefinition[] = [
     heatCost: 0,
     tag: "launcher",
     cues: { windUp: "kaiju.tail", impact: "impact.tail", whiff: "whiff.tail" },
+    coaching: "A low sweep. Step out of it rather than trying to trade with it.",
     description: "Low and wide, and it takes the legs out. Nothing interrupts it once it starts.",
+  },
+  // ------------------------------------------------------------------ combos
+  {
+    id: "melee.heavy.smash.forward",
+    displayName: "Forward smash",
+    kind: "heavy",
+    direction: "forward",
+    startupTicks: 20,
+    activeTicks: 6,
+    recoveryTicks: 30,
+    turnAuthority: 0.25,
+    movement: { forwardMps: 9, fromTick: 14, toTick: 26 },
+    armor: "light",
+    cancelInto: ["finisher", "grapple"],
+    cancelFromTick: 26,
+    cancelToTick: 44,
+    cancelRequiresHit: true,
+    volumes: [
+      {
+        id: "fist.forward",
+        heightFraction: 0.7,
+        fromForwardMeters: 10,
+        toForwardMeters: 32,
+        lateralMeters: 0,
+        radiusMeters: 7,
+        activeFromTick: 0,
+        activeToTick: 6,
+      },
+    ],
+    damage: {
+      amount: 340,
+      kind: "impact",
+      poise: 72,
+      guardDamage: 48,
+      knockbackMps: 12,
+      componentShock: 0.2,
+      reaction: "stagger",
+    },
+    staminaCost: 22,
+    heatCost: 14,
+    tag: "heavy",
+    cues: { windUp: "servo.heavy", impact: "impact.heavy", whiff: "whiff.heavy" },
+    coaching: "Push forward with a heavy attack to close distance and put your weight behind it.",
+    description: "The forward variant of a heavy: more travel, more knockback, and it leads into a grapple.",
+  },
+  {
+    id: "melee.heavy.spin.side",
+    displayName: "Spinning backhand",
+    kind: "heavy",
+    direction: "side",
+    startupTicks: 22,
+    activeTicks: 8,
+    recoveryTicks: 28,
+    turnAuthority: 0.6,
+    movement: { forwardMps: 2, fromTick: 16, toTick: 28 },
+    armor: "light",
+    cancelInto: ["light", "guard"],
+    cancelFromTick: 30,
+    cancelToTick: 48,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "arm.sweep.L",
+        heightFraction: 0.68,
+        fromForwardMeters: 8,
+        toForwardMeters: 26,
+        lateralMeters: -12,
+        radiusMeters: 8,
+        activeFromTick: 0,
+        activeToTick: 4,
+      },
+      {
+        id: "arm.sweep.R",
+        heightFraction: 0.68,
+        fromForwardMeters: 8,
+        toForwardMeters: 26,
+        lateralMeters: 12,
+        radiusMeters: 8,
+        activeFromTick: 4,
+        activeToTick: 8,
+      },
+    ],
+    damage: {
+      amount: 230,
+      kind: "impact",
+      poise: 48,
+      guardDamage: 34,
+      knockbackMps: 8,
+      componentShock: 0.1,
+      reaction: "flinch",
+    },
+    staminaCost: 18,
+    heatCost: 11,
+    tag: "heavy",
+    cues: { windUp: "servo.heavy", impact: "impact.heavy", whiff: "whiff.heavy" },
+    coaching:
+      "Hold sideways with a heavy attack to sweep both arms around you. Good when something is beside you.",
+    description: "Two volumes, one either side, so it answers a target that has circled rather than closed.",
+  },
+  {
+    id: "melee.charge.haymaker",
+    displayName: "Charged haymaker",
+    kind: "heavy",
+    direction: "neutral",
+    chargeTicks: 72,
+    chargedDamageScale: 2.3,
+    startupTicks: 26,
+    activeTicks: 6,
+    recoveryTicks: 40,
+    turnAuthority: 0.12,
+    movement: { forwardMps: 7, fromTick: 20, toTick: 32 },
+    armor: "super",
+    cancelInto: ["finisher"],
+    cancelFromTick: 32,
+    cancelToTick: 52,
+    cancelRequiresHit: true,
+    volumes: [
+      {
+        id: "fist.charged",
+        heightFraction: 0.72,
+        fromForwardMeters: 12,
+        toForwardMeters: 34,
+        lateralMeters: 4,
+        radiusMeters: 8,
+        activeFromTick: 0,
+        activeToTick: 6,
+      },
+    ],
+    damage: {
+      amount: 380,
+      kind: "crush",
+      poise: 110,
+      guardDamage: 90,
+      knockbackMps: 16,
+      componentShock: 0.35,
+      reaction: "stagger",
+    },
+    staminaCost: 30,
+    heatCost: 24,
+    tag: "heavy",
+    cues: { windUp: "reactor.charge", impact: "impact.heavy", whiff: "whiff.heavy" },
+    coaching:
+      "Hold the button to wind it up. A full charge more than doubles the damage, but you cannot be interrupted out of it either.",
+    description: "The only chargeable move. Super armour throughout, and it hurts to be wrong about.",
+  },
+  // ----------------------------------------------------------------- defense
+  {
+    id: "defense.dodge.step",
+    displayName: "Evasive step",
+    kind: "light",
+    direction: "side",
+    startupTicks: 3,
+    activeTicks: 1,
+    recoveryTicks: 14,
+    turnAuthority: 0.9,
+    movement: { forwardMps: 0, fromTick: 0, toTick: 0 },
+    armor: "none",
+    cancelInto: ["light", "heavy", "guard"],
+    cancelFromTick: 10,
+    cancelToTick: 18,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "step.none",
+        heightFraction: 0.5,
+        fromForwardMeters: 0,
+        toForwardMeters: 0,
+        lateralMeters: 0,
+        radiusMeters: 0.1,
+        activeFromTick: 0,
+        activeToTick: 1,
+      },
+    ],
+    damage: {
+      amount: 1,
+      kind: "impact",
+      poise: 0,
+      guardDamage: 0,
+      knockbackMps: 0,
+      componentShock: 0,
+      reaction: "none",
+    },
+    defense: {
+      kind: "dodge",
+      invulnerableFromTick: 2,
+      invulnerableToTick: 12,
+      perfectFromTick: 0,
+      perfectToTick: 0,
+      counterMoveId: null,
+      travelMeters: 34,
+    },
+    staminaCost: 14,
+    heatCost: 2,
+    tag: "evade",
+    cues: { windUp: "thruster.step", impact: "impact.none", whiff: "thruster.step" },
+    coaching:
+      "A short burst sideways. You cannot be hit through the middle of it, but the recovery is real: it is not a free cancel.",
+    description:
+      "The dodge. Costs stamina, has a recovery, and only cancels out of moves that list an evade.",
+  },
+  {
+    id: "defense.block.raise",
+    displayName: "Raise guard",
+    kind: "light",
+    startupTicks: 2,
+    activeTicks: 1,
+    recoveryTicks: 8,
+    turnAuthority: 0.8,
+    movement: { forwardMps: 0, fromTick: 0, toTick: 0 },
+    armor: "light",
+    cancelInto: ["light", "heavy", "grapple"],
+    cancelFromTick: 3,
+    cancelToTick: 11,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "guard.none",
+        heightFraction: 0.6,
+        fromForwardMeters: 0,
+        toForwardMeters: 0,
+        lateralMeters: 0,
+        radiusMeters: 0.1,
+        activeFromTick: 0,
+        activeToTick: 1,
+      },
+    ],
+    damage: {
+      amount: 1,
+      kind: "impact",
+      poise: 0,
+      guardDamage: 0,
+      knockbackMps: 0,
+      componentShock: 0,
+      reaction: "none",
+    },
+    defense: {
+      kind: "block",
+      invulnerableFromTick: 0,
+      invulnerableToTick: 0,
+      perfectFromTick: 0,
+      perfectToTick: 7,
+      counterMoveId: null,
+      travelMeters: 0,
+    },
+    staminaCost: 4,
+    heatCost: 0,
+    tag: "guard",
+    cues: { windUp: "servo.guard", impact: "impact.guard", whiff: "servo.guard" },
+    coaching:
+      "Raise your arms. Blocking at the last moment turns it into a perfect guard, which costs you nothing and leaves them open.",
+    description: "The block, with a seven tick perfect window at the front of it.",
+  },
+  {
+    id: "defense.counter.parry",
+    displayName: "Parry",
+    kind: "light",
+    startupTicks: 2,
+    activeTicks: 1,
+    recoveryTicks: 22,
+    turnAuthority: 0.7,
+    movement: { forwardMps: 0, fromTick: 0, toTick: 0 },
+    armor: "none",
+    cancelInto: [],
+    cancelFromTick: 0,
+    cancelToTick: 0,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "parry.none",
+        heightFraction: 0.6,
+        fromForwardMeters: 0,
+        toForwardMeters: 0,
+        lateralMeters: 0,
+        radiusMeters: 0.1,
+        activeFromTick: 0,
+        activeToTick: 1,
+      },
+    ],
+    damage: {
+      amount: 1,
+      kind: "impact",
+      poise: 0,
+      guardDamage: 0,
+      knockbackMps: 0,
+      componentShock: 0,
+      reaction: "none",
+    },
+    defense: {
+      kind: "parry",
+      invulnerableFromTick: 0,
+      invulnerableToTick: 0,
+      perfectFromTick: 0,
+      perfectToTick: 9,
+      counterMoveId: "melee.light.cross",
+      travelMeters: 0,
+    },
+    staminaCost: 10,
+    heatCost: 3,
+    tag: "guard",
+    cues: { windUp: "servo.parry", impact: "impact.parry", whiff: "whiff.parry" },
+    coaching:
+      "Time it against an incoming swing and you turn it around for free. Miss the timing and you are wide open for a long moment.",
+    description:
+      "A nine tick window that answers with a free cross. The recovery is punishing when it misses.",
+  },
+  // ---------------------------------------------------------------- grapples
+  {
+    id: "grapple.clinch",
+    displayName: "Seize",
+    kind: "grapple",
+    startupTicks: 14,
+    activeTicks: 5,
+    recoveryTicks: 24,
+    turnAuthority: 0.35,
+    movement: { forwardMps: 8, fromTick: 8, toTick: 18 },
+    armor: "light",
+    cancelInto: [],
+    cancelFromTick: 0,
+    cancelToTick: 0,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "hands",
+        heightFraction: 0.62,
+        fromForwardMeters: 8,
+        toForwardMeters: 22,
+        lateralMeters: 0,
+        radiusMeters: 7,
+        activeFromTick: 0,
+        activeToTick: 5,
+      },
+    ],
+    damage: {
+      amount: 40,
+      kind: "impact",
+      poise: 20,
+      guardDamage: 30,
+      knockbackMps: 0,
+      componentShock: 0.05,
+      reaction: "none",
+    },
+    grapple: {
+      reachMeters: 34,
+      holdTicks: 150,
+      escapeDifficulty: 140,
+      clearanceMeters: 70,
+      throwDistanceMeters: 60,
+    },
+    staminaCost: 16,
+    heatCost: 6,
+    tag: "grapple",
+    cues: { windUp: "servo.grab", impact: "impact.grab", whiff: "whiff.grab" },
+    coaching:
+      "Take hold of them. While you have them you can throw, slam or keep hitting, and they will be fighting to get loose.",
+    description: "The grapple initiator. Everything a hold can become is decided after it lands, not here.",
+  },
+  // --------------------------------------------------------- environmental
+  {
+    id: "env.swing.prop",
+    displayName: "Swing what you are holding",
+    kind: "heavy",
+    requiresPropTag: "any",
+    startupTicks: 18,
+    activeTicks: 7,
+    recoveryTicks: 34,
+    turnAuthority: 0.2,
+    movement: { forwardMps: 5, fromTick: 12, toTick: 26 },
+    armor: "light",
+    cancelInto: ["finisher"],
+    cancelFromTick: 26,
+    cancelToTick: 46,
+    cancelRequiresHit: true,
+    volumes: [
+      {
+        id: "prop.head",
+        heightFraction: 0.7,
+        fromForwardMeters: 14,
+        toForwardMeters: 40,
+        lateralMeters: -6,
+        radiusMeters: 10,
+        activeFromTick: 0,
+        activeToTick: 7,
+      },
+    ],
+    damage: {
+      amount: 220,
+      kind: "crush",
+      poise: 65,
+      guardDamage: 60,
+      knockbackMps: 13,
+      componentShock: 0.18,
+      reaction: "stagger",
+    },
+    staminaCost: 20,
+    heatCost: 8,
+    tag: "heavy",
+    cues: { windUp: "prop.lift", impact: "impact.prop", whiff: "whiff.prop" },
+    coaching:
+      "Swing whatever you picked up. The heavier it is the slower it comes round, and it will not last many hits.",
+    description: "One move for every prop. What changes is the prop's own mass, reach and damage scale.",
+  },
+  // ---------------------------------------------------------------- finisher
+  {
+    id: "finisher.grapple.tear",
+    displayName: "Tear down",
+    kind: "finisher",
+    startupTicks: 12,
+    activeTicks: 4,
+    recoveryTicks: 30,
+    turnAuthority: 0.05,
+    movement: { forwardMps: 0, fromTick: 0, toTick: 0 },
+    armor: "super",
+    cancelInto: [],
+    cancelFromTick: 0,
+    cancelToTick: 0,
+    cancelRequiresHit: false,
+    volumes: [
+      {
+        id: "tear",
+        heightFraction: 0.6,
+        fromForwardMeters: 6,
+        toForwardMeters: 20,
+        lateralMeters: 0,
+        radiusMeters: 9,
+        activeFromTick: 0,
+        activeToTick: 4,
+      },
+    ],
+    damage: {
+      amount: 700,
+      kind: "crush",
+      poise: 130,
+      guardDamage: 150,
+      knockbackMps: 6,
+      componentShock: 0.7,
+      reaction: "knockdown",
+    },
+    finisher: {
+      beats: [
+        { id: "seize", durationTicks: 30, camera: "close", requiresHold: true },
+        { id: "lift", durationTicks: 36, camera: "low", requiresHold: true },
+        { id: "tear", durationTicks: 42, camera: "orbit", requiresHold: false },
+        { id: "release", durationTicks: 24, camera: "wide", requiresHold: false },
+      ],
+      guaranteedDamage: 1_400,
+      interruptible: true,
+      clearanceMeters: 60,
+    },
+    staminaCost: 35,
+    heatCost: 30,
+    tag: "finisher",
+    cues: { windUp: "servo.tear", impact: "impact.tear", whiff: "whiff.tear" },
+    coaching:
+      "Available out of a hold when the target is nearly finished. Keep holding through the first half or it lets go.",
+    description:
+      "The grapple finisher: four beats, two of which need the input held, and it can be interrupted.",
   },
 ];
 
@@ -516,7 +1061,92 @@ export function validateMove(entry: MoveDefinition): string[] {
     errors.push("every move needs wind-up, impact and whiff cues so presentation has something to resolve");
   }
   if (!entry.description) errors.push("description required");
+  // The move list is written from this, so a move without it would appear in the
+  // interface as a blank line.
+  if (!entry.coaching) errors.push("coaching line required: the move list is written from it");
+
+  if (entry.direction !== undefined && !MOVE_DIRECTIONS.includes(entry.direction)) {
+    errors.push(`unknown direction "${entry.direction}"`);
+  }
+  if (entry.chargeTicks !== undefined) {
+    if (!Number.isInteger(entry.chargeTicks) || entry.chargeTicks < 0) {
+      errors.push("chargeTicks must be a whole number of ticks");
+    }
+    // A charge that adds nothing is a hold the player is punished for.
+    if (entry.chargeTicks > 0 && (entry.chargedDamageScale ?? 1) <= 1) {
+      errors.push("a chargeable move must be worth charging: chargedDamageScale has to exceed 1");
+    }
+  }
+
+  const defense = entry.defense;
+  if (defense) {
+    if (!["dodge", "block", "parry"].includes(defense.kind)) {
+      errors.push(`unknown defense kind "${defense.kind}"`);
+    }
+    if (defense.invulnerableToTick < defense.invulnerableFromTick) {
+      errors.push("invulnerable window must not end before it starts");
+    }
+    if (defense.perfectToTick < defense.perfectFromTick) {
+      errors.push("perfect window must not end before it starts");
+    }
+    // A dodge with no invulnerability is a sidestep that gets hit anyway, and a
+    // block with no perfect window has nothing to time.
+    if (defense.kind === "dodge" && defense.invulnerableToTick <= defense.invulnerableFromTick) {
+      errors.push("a dodge needs invulnerable frames, or it is only a step");
+    }
+    if (defense.kind !== "dodge" && defense.perfectToTick <= defense.perfectFromTick) {
+      errors.push("a block or parry needs a perfect window, or there is nothing to time");
+    }
+    if (defense.kind === "parry" && !defense.counterMoveId) {
+      errors.push("a parry needs a counter move to answer with");
+    }
+    if (defense.travelMeters < 0) errors.push("travelMeters must not be negative");
+  }
+
+  const grapple = entry.grapple;
+  if (grapple) {
+    for (const key of ["reachMeters", "holdTicks", "escapeDifficulty", "clearanceMeters"] as const) {
+      if (!Number.isFinite(grapple[key]) || grapple[key] <= 0) {
+        errors.push(`grapple.${key} must be positive`);
+      }
+    }
+    if (grapple.throwDistanceMeters <= 0) errors.push("a throw has to move the target somewhere");
+    // A grapple that needs less room than the throw covers would put the victim
+    // through whatever was standing there.
+    if (grapple.clearanceMeters < grapple.throwDistanceMeters) {
+      errors.push("grapple clearance must cover the distance the throw carries");
+    }
+  }
+
+  const finisher = entry.finisher;
+  if (finisher) {
+    if (finisher.beats.length === 0) errors.push("a finisher with no beats is not a sequence");
+    for (const beat of finisher.beats) {
+      if (!beat.id) errors.push("every finisher beat needs an id");
+      if (!Number.isInteger(beat.durationTicks) || beat.durationTicks <= 0) {
+        errors.push(`finisher beat "${beat.id}" needs a positive length`);
+      }
+    }
+    if (finisher.guaranteedDamage <= 0) {
+      errors.push("a finisher must guarantee damage, or it is a cutscene with no outcome");
+    }
+    if (finisher.clearanceMeters <= 0) errors.push("a finisher needs room, so clearance must be positive");
+  }
+
+  // Only a finisher row may carry a finisher script, and only a grapple row a
+  // grapple. Otherwise the resolver would have to guess what a move is.
+  if (entry.finisher && entry.kind !== "finisher") errors.push("only a finisher move may carry a finisher");
+  if (entry.grapple && entry.kind !== "grapple") errors.push("only a grapple move may carry a grapple");
   return errors;
+}
+
+/** Full charge multiplier for a move held this long. One when it does not charge. */
+export function chargeScale(move: MoveDefinition, heldTicks: number): number {
+  const ticks = move.chargeTicks ?? 0;
+  if (ticks <= 0) return 1;
+  const full = move.chargedDamageScale ?? 1;
+  const progress = Math.min(1, Math.max(0, heldTicks / ticks));
+  return 1 + (full - 1) * progress;
 }
 
 export function createMoveRegistry(): ContentRegistry<MoveDefinition> {

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-24, Milestone 11: Melee combos, defence, counters, grapples and finishers
+
+There is a fight here now rather than a set of attacks. Walk into range, throw a jab into a cross into a heavy, and watch the combo counter climb. Or stand your ground and parry, or take hold of the thing and put it through a building.
+
+- Directional attacks: the heavy is a different move depending on which way you are pushing. Forward is a smash that closes the distance, sideways is a spinning backhand that answers something that circled you.
+- One charged attack. Hold it and the damage more than doubles, and nothing interrupts you while you wind it up, which cuts both ways.
+- Dodging that does not erase everything. The invulnerable moment is in the middle of the step rather than at the start, it costs stamina, it has a recovery you can be punished during, and it only comes out of moves that allow it. A dodge is an answer, not an escape hatch.
+- Blocking, perfect guards and parries. Hold guard and you take a quarter. Raise it as the hit lands and you take nothing and they are left open. Time a parry and you get a free counter, but miss the window and it is worse than not trying at all.
+- Grapples that both sides are involved in. Seize them and there is a struggle: they push to get loose, you push to hold on, and the hold runs out on its own if neither of you wins. While you have them they cannot swing at you.
+- Throws and wall slams, with the space checked first. A throw that would put them through a tower does not happen; you let go instead and it says so. A slam needs something solid behind them, and a slam with nothing there leaves you still holding on rather than costing you the whole grapple.
+- Environmental weapons. Pick up a gantry crane, a bridge section, a fuel tanker or a slab of roadway and swing it. One move covers all of them; what changes is how heavy it is, how far it reaches, how hard it hits and how many swings it survives. A container ship gets exactly one.
+- Finishers that are a short sequence rather than a cutscene. Four beats with their own camera framings, two of which need you to keep holding the input. Anything that hits you stops it, and you keep the damage you had earned rather than all of it or none of it. They are rare on purpose: the target has to be nearly finished and either reeling or already in your hands.
+- Three accessibility settings, all producing the same damage. Reduced motion flattens every finisher framing to one wide shot. Hold to complete, which is on by default, turns repeated presses into a held input. Skip sequences applies the whole outcome at once.
+- A move list written from the game's own move table, so it can never describe a move that does not exist or miss one that does. Every entry has the key you press, a speed in words, and a line of coaching. There is not a frame count anywhere in it. Under the readout there is a coaching line that says what just happened: why the dodge missed, that the hold is slipping, why the throw became a release.
+
+Six problems, all found before anybody had to look at a screen.
+
+A parry promised a free counter and then the arena refused it, because the parry was technically still running and a parry cancels into nothing.
+
+A seize took hold the moment it was thrown rather than when it connected, which meant a finisher out of a grapple was refused as an illegal cancel out of a move that had not finished.
+
+A failed slam silently dropped the hold, so trying to slam somebody in open ground cost you the whole grapple for nothing.
+
+Grapple impacts reduced a creature's core health without going through the check that notices a creature has died, so a fight could carry on with the thing already at zero.
+
+The struggle numbers were so far out that a hold lasted eight ticks, which is not a grapple, it is a nudge.
+
+And a zone that was already destroyed carried on absorbing hits, so taking a creature's armour apart was decorative. Hits now fall through to what is behind.
+
 ## 2026-08-24, Milestone 10: Combat targeting, input buffer, and attack framework
 
 There is something to fight, and a language every fight will be written in. Take a machine out, press spawn test kaiju, walk into range, and throw a jab into a cross into an overhead hammer.

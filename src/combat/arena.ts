@@ -19,6 +19,43 @@ import {
   type TargetSphere,
 } from "./hitVolumes";
 import { resolveReaction, type ReactionDefinition } from "./reactions";
+import {
+  NO_COMBO,
+  NO_DEFENSE,
+  OPENING_TICKS,
+  advanceDefense,
+  beginDefense,
+  expireCombo,
+  isInvulnerable,
+  registerHit,
+  resolveDefense,
+  type ComboState,
+  type DefenseState,
+} from "./defense";
+import {
+  NO_GRAPPLE,
+  advanceGrapple,
+  beginGrapple,
+  checkGrapple,
+  describeGrapple,
+  releaseGrapple,
+  slamTarget,
+  throwTarget,
+  type GrappleState,
+} from "./grapple";
+import {
+  DEFAULT_FINISHER_SETTINGS,
+  NO_FINISHER,
+  OPEN_GROUND,
+  advanceFinisher,
+  beginFinisher,
+  checkFinisher,
+  type FinisherSettings,
+  type FinisherState,
+  type SpaceQuery,
+} from "./finisher";
+import { chargeScale } from "../data/moves";
+import type { PropDefinition, PropInstance } from "../data/props";
 import { zoneAtPoint, zonePosition, type TargetingPose } from "./targeting";
 
 /**
@@ -138,6 +175,23 @@ interface FighterState extends FighterSpec {
   aimZoneId: string | null;
   knockbackMps: number;
   knockbackDirectionDeg: number;
+  /** Defensive move running now: a dodge, a block or a parry. */
+  defense: DefenseState;
+  /** Hits landed in a row, for the interface and for nothing else. */
+  combo: ComboState;
+  /** A charge being held, with the ticks it has been held for. */
+  charge: { readonly moveId: string; ticks: number } | null;
+  /** Ticks this fighter is left open for after somebody timed a guard on them. */
+  openingTicksLeft: number;
+  /** Prop in hand, with what is left of it. */
+  wielding: { readonly definition: PropDefinition; readonly instance: PropInstance } | null;
+  grapple: GrappleState;
+  finisher: FinisherState;
+  finisherSettings: FinisherSettings;
+  /** True while the player is holding the finisher input. */
+  finisherHolding: boolean;
+  /** Set for one tick when this fighter was hit, so a finisher can be interrupted. */
+  hitThisTick: boolean;
 }
 
 export const COMBAT_EVENT_TYPES = [
@@ -147,6 +201,17 @@ export const COMBAT_EVENT_TYPES = [
   "hit",
   "guarded",
   "whiffed",
+  "evaded",
+  "perfect-guard",
+  "parried",
+  "combo",
+  "grapple-started",
+  "grapple-ended",
+  "finisher-started",
+  "finisher-beat",
+  "finisher-ended",
+  "prop-taken",
+  "prop-broken",
   "reaction",
   "zone-destroyed",
   "defeated",
@@ -178,6 +243,9 @@ export interface CombatEvent {
 }
 
 export type AttackRejection =
+  | "grapple-refused"
+  | "no-prop"
+  | "no-space"
   | "already-attacking"
   | "not-cancellable"
   | "cancel-window-closed"
@@ -196,6 +264,11 @@ export type AttackRequest =
 export interface ArenaOptions {
   readonly moves: ContentRegistry<MoveDefinition>;
   readonly fighters: readonly FighterSpec[];
+  /**
+   * Where a body may legally stand. Injected, so the arena never reads terrain,
+   * a city layout or a scene, and a test can hand it open ground.
+   */
+  readonly space?: SpaceQuery;
 }
 
 /** Turns a kaiju definition into fighter zones. */
@@ -237,12 +310,14 @@ export function jaegerZones(jaeger: JaegerDefinition): ZoneState[] {
 
 export class CombatArena {
   private readonly moves: ContentRegistry<MoveDefinition>;
+  private readonly space: SpaceQuery;
   private readonly fighters = new Map<string, FighterState>();
   private tickValue = 0;
   private readonly events: CombatEvent[] = [];
 
   constructor(options: ArenaOptions) {
     this.moves = options.moves;
+    this.space = options.space ?? OPEN_GROUND;
     for (const spec of options.fighters) this.add(spec);
   }
 
@@ -269,6 +344,16 @@ export class CombatArena {
       aimZoneId: null,
       knockbackMps: 0,
       knockbackDirectionDeg: 0,
+      defense: NO_DEFENSE,
+      combo: NO_COMBO,
+      charge: null,
+      openingTicksLeft: 0,
+      wielding: null,
+      grapple: NO_GRAPPLE,
+      finisher: NO_FINISHER,
+      finisherSettings: DEFAULT_FINISHER_SETTINGS,
+      finisherHolding: false,
+      hitThisTick: false,
     });
   }
 
@@ -316,6 +401,112 @@ export class CombatArena {
     if (fighter) fighter.aimZoneId = zoneId;
   }
 
+  /**
+   * Starts holding a charge.
+   *
+   * The move does not come out until it is released, and the damage it does
+   * scales with how long it was held. Charging is the only way a heavy attack
+   * gets better rather than only slower.
+   */
+  beginCharge(fighterId: string, moveId: string): AttackRequest {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return reject("unknown-move", `No fighter "${fighterId}".`);
+    const move = this.moves.get(moveId);
+    if (!move || !(move.chargeTicks ?? 0)) {
+      return reject("unknown-move", `"${moveId}" is not a move that can be charged.`);
+    }
+    const request = this.request(fighterId, moveId);
+    if (!request.ok) return request;
+    fighter.charge = { moveId, ticks: 0 };
+    return request;
+  }
+
+  /** Releases a held charge, throwing the move at whatever charge it reached. */
+  releaseCharge(fighterId: string): AttackRequest | null {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || !fighter.charge) return null;
+    const { moveId } = fighter.charge;
+    const outcome = this.start(fighterId, moveId);
+    fighter.charge = null;
+    return outcome;
+  }
+
+  /** How far through a charge the fighter is, 0 to 1. */
+  chargeProgress(fighterId: string): number {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter?.charge) return 0;
+    const move = this.moves.get(fighter.charge.moveId);
+    const ticks = move?.chargeTicks ?? 0;
+    return ticks <= 0 ? 0 : Math.min(1, fighter.charge.ticks / ticks);
+  }
+
+  /** Picks up a prop lying nearby. Refuses when it is already held or out of reach. */
+  takeProp(
+    fighterId: string,
+    definition: PropDefinition,
+    instance: PropInstance,
+    distanceMeters: number,
+  ): AttackRequest {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return reject("unknown-move", `No fighter "${fighterId}".`);
+    if (instance.heldBy !== null) return reject("no-prop", "Something else already has that.");
+    if (distanceMeters > definition.reachMeters + fighter.heightMeters * 0.5) {
+      return reject("no-prop", `Too far from the ${definition.displayName.toLowerCase()} to pick it up.`);
+    }
+    if (this.clearanceAt(fighter) < definition.clearanceMeters) {
+      return reject("no-space", `No room to swing a ${definition.displayName.toLowerCase()} here.`);
+    }
+    instance.heldBy = fighterId;
+    fighter.wielding = { definition, instance };
+    this.pushEvent({ type: "prop-taken", actorId: fighterId, reason: definition.displayName });
+    return { ok: true, move: this.moves.getOrThrow("env.swing.prop"), cancelled: null };
+  }
+
+  dropProp(fighterId: string): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter?.wielding) return;
+    fighter.wielding.instance.heldBy = null;
+    fighter.wielding = null;
+  }
+
+  /** Throws whoever is being held, if there is room for it. */
+  grappleThrow(fighterId: string): string {
+    return this.resolveGrapple(fighterId, throwTarget);
+  }
+
+  /** Slams whoever is being held into whatever is behind them. */
+  grappleSlam(fighterId: string): string {
+    return this.resolveGrapple(fighterId, slamTarget);
+  }
+
+  grappleRelease(fighterId: string): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || fighter.grapple.phase !== "held") return;
+    const victim = fighter.grapple.victimId ? this.fighters.get(fighter.grapple.victimId) : undefined;
+    fighter.grapple = releaseGrapple(fighter.grapple);
+    if (victim) victim.grapple = NO_GRAPPLE;
+    this.pushEvent({
+      type: "grapple-ended",
+      actorId: fighterId,
+      targetId: victim?.id ?? null,
+      reason: describeGrapple(fighter.grapple),
+    });
+    fighter.grapple = NO_GRAPPLE;
+  }
+
+  setFinisherSettings(fighterId: string, settings: Partial<FinisherSettings>): FinisherSettings {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return DEFAULT_FINISHER_SETTINGS;
+    fighter.finisherSettings = { ...fighter.finisherSettings, ...settings };
+    return fighter.finisherSettings;
+  }
+
+  /** Whether the player is holding the finisher input. Checked every beat that asks. */
+  setFinisherHold(fighterId: string, holding: boolean): void {
+    const fighter = this.fighters.get(fighterId);
+    if (fighter) fighter.finisherHolding = holding;
+  }
+
   moveTo(fighterId: string, pose: Partial<TargetingPose>): void {
     const fighter = this.fighters.get(fighterId);
     if (!fighter) return;
@@ -337,6 +528,11 @@ export class CombatArena {
     if (fighter.reaction && fighter.reaction.losesControl && fighter.reactionTicksLeft > 0) {
       return reject("no-control", `${fighter.displayName} is ${fighter.reaction.displayName.toLowerCase()}.`);
     }
+    // Something being held cannot swing. That is what being held means, and it
+    // is what makes a grapple worth the commitment rather than a slow punch.
+    if (fighter.grapple.phase === "held" && fighter.grapple.victimId === fighter.id) {
+      return reject("no-control", `${fighter.displayName} is being held.`);
+    }
     if (fighter.overheated) {
       return reject("overheated", `${fighter.displayName} is over temperature and cannot commit to a move.`);
     }
@@ -349,9 +545,64 @@ export class CombatArena {
 
     if (move.kind === "finisher") {
       const target = this.firstOpponent(fighter.id);
-      if (!target || !this.finisherOpen(target)) {
+      // A hold counts as an opening in its own right: something being held is
+      // exactly as available as something reeling.
+      const held = fighter.grapple.phase === "held" && fighter.grapple.victimId === target?.id;
+      if (
+        !target ||
+        (!this.finisherOpen(target) && !(held && this.coreFraction(target) <= target.finisherThreshold))
+      ) {
         return reject("finisher-not-open", `${move.displayName} needs a target that is already finished.`);
       }
+      if (target) {
+        const check = checkFinisher(
+          move,
+          fighter.finisher,
+          {
+            attackerEast: fighter.pose.east,
+            attackerNorth: fighter.pose.north,
+            targetEast: target.pose.east,
+            targetNorth: target.pose.north,
+          },
+          this.space,
+          fighter.heightMeters * 0.25,
+        );
+        if (!check.ok) return reject("no-space", check.message);
+      }
+    }
+
+    // A move that needs something in hand is refused when there is nothing in
+    // hand, rather than swinging an invisible crane.
+    if (move.requiresPropTag) {
+      const held = fighter.wielding;
+      if (!held) {
+        return reject("no-prop", `${move.displayName} needs something in hand. Pick something up first.`);
+      }
+      if (move.requiresPropTag !== "any" && held.definition.tag !== move.requiresPropTag) {
+        return reject(
+          "no-prop",
+          `${move.displayName} needs a ${move.requiresPropTag}, and you are holding a ${held.definition.tag}.`,
+        );
+      }
+    }
+
+    if (move.grapple) {
+      const target = this.firstOpponent(fighter.id);
+      if (!target) return reject("grapple-refused", "Nothing to take hold of.");
+      const check = checkGrapple({
+        holderId: fighter.id,
+        victimId: target.id,
+        spec: move.grapple,
+        distanceMeters: Math.hypot(
+          target.pose.east - fighter.pose.east,
+          target.pose.north - fighter.pose.north,
+        ),
+        victimHeld: target.grapple.phase === "held",
+        victimDown: target.reaction?.id === "knockdown" && target.reactionTicksLeft > 0,
+        massRatio: fighter.heightMeters / Math.max(1, target.heightMeters),
+        clearanceMeters: this.clearanceAt(fighter),
+      });
+      if (!check.ok) return reject("grapple-refused", check.message);
     }
 
     let cancelled: string | null = null;
@@ -411,6 +662,35 @@ export class CombatArena {
       history: new OverlapHistory(),
       lastPlacement: new Map(),
     };
+    // A defensive move puts the fighter into its own window rather than being
+    // resolved as an attack that happens to do nothing.
+    fighter.defense = outcome.move.defense ? beginDefense(outcome.move) : NO_DEFENSE;
+    if (outcome.move.defense?.kind === "dodge") {
+      // The step carries the machine sideways, which is the whole move.
+      const radians = ((fighter.pose.yawDeg + 90) * Math.PI) / 180;
+      const distance = outcome.move.defense.travelMeters;
+      const east = fighter.pose.east + Math.sin(radians) * distance;
+      const north = fighter.pose.north + Math.cos(radians) * distance;
+      // A dodge into a building is a dodge that does not move: the frames still
+      // happen, the travel does not.
+      if (this.space.isClear(east, north, fighter.heightMeters * 0.25)) {
+        fighter.pose = { ...fighter.pose, east, north };
+      }
+    }
+    if (outcome.move.finisher) {
+      const target = this.firstOpponent(fighter.id);
+      if (target) {
+        fighter.finisher = beginFinisher(outcome.move, fighter.id, target.id, fighter.finisherSettings);
+        this.pushEvent({
+          type: "finisher-started",
+          actorId: fighter.id,
+          targetId: target.id,
+          moveId: outcome.move.id,
+          reason: fighter.finisherSettings.skipSequences ? "skipped" : "running",
+        });
+        if (fighter.finisher.phase === "skipped") this.settleFinisher(fighter);
+      }
+    }
     fighter.guarding = false;
     fighter.stamina -= outcome.move.staminaCost;
     fighter.heat = Math.min(fighter.profile.heatMax, fighter.heat + outcome.move.heatCost);
@@ -432,9 +712,11 @@ export class CombatArena {
   step(): readonly CombatEvent[] {
     const start = this.events.length;
 
+    for (const fighter of this.fighters.values()) fighter.hitThisTick = false;
     for (const fighter of this.fighters.values()) this.consumeBuffer(fighter);
     for (const fighter of this.fighters.values()) this.advanceMovement(fighter);
     for (const fighter of this.fighters.values()) this.resolveHits(fighter);
+    for (const fighter of this.fighters.values()) this.advanceHolds(fighter);
     for (const fighter of this.fighters.values()) this.advanceResources(fighter);
 
     this.tickValue += 1;
@@ -598,7 +880,31 @@ export class CombatArena {
         if (reach <= allowance) zoneId = aimed.id;
       }
     }
-    const zone = target.zones.find((entry) => entry.id === zoneId) ?? target.zones[0];
+    let zone = target.zones.find((entry) => entry.id === zoneId) ?? target.zones[0];
+    // A zone that is already gone cannot absorb anything. Hits fall through to
+    // whatever is behind it, which is why taking a creature's armour apart is
+    // worth doing rather than only cosmetic: once the plate is off, everything
+    // lands on the thing that matters.
+    if (zone && zone.health <= 0) {
+      const core = target.zones.find((entry) => entry.onDestroyed === "kill" && entry.health > 0);
+      zone = core ?? zone;
+    }
+
+    // Defence first. A dodge with live frames means nothing happened at all,
+    // which is the only outcome in the game that produces no damage anywhere.
+    const defence = resolveDefense(target.defense, target.guarding);
+    if (defence.outcome === "evaded" || isInvulnerable(target.defense)) {
+      this.pushEvent({
+        type: "evaded",
+        actorId: target.id,
+        targetId: attacker.id,
+        moveId: attack.move.id,
+        volumeId,
+        reason: defence.coaching || "Clean evade.",
+        contact,
+      });
+      return;
+    }
 
     const outcome = resolveReaction(packet, {
       poiseAccumulated: target.poise,
@@ -615,14 +921,110 @@ export class CombatArena {
 
     // Guarded damage still hurts, it just hurts much less. A guard that made a
     // fighter invulnerable would end the fight rather than shape it.
-    const guardFactor = target.guarding && !outcome.guardBroken ? 0.25 : 1;
+    // Guarding, blocking and a perfect answer are three different things. The
+    // defence resolution owns the difference; the guard flag is only the fallback.
+    const perfect = defence.outcome === "perfect" || defence.outcome === "parried";
+    const guardFactor = perfect
+      ? 0
+      : defence.outcome === "blocked"
+        ? defence.damageScale
+        : target.guarding && !outcome.guardBroken
+          ? 0.25
+          : defence.damageScale;
+
+    // A prop in hand and a held charge both scale what lands. Both are the
+    // attacker's own doing, so they multiply the packet rather than the target's
+    // armour.
+    const propScale = attacker.wielding?.definition.damageScale ?? 1;
+    const chargeHeld = attacker.charge?.ticks ?? 0;
+    const chargeMultiplier = chargeScale(attack.move, chargeHeld);
     let dealt = 0;
     const wasIntact = zone ? zone.health > 0 : false;
     if (zone) {
-      const throughArmor = packet.amount * (1 - zone.armor) * zone.damageMultiplier * guardFactor;
+      const throughArmor =
+        packet.amount * (1 - zone.armor) * zone.damageMultiplier * guardFactor * propScale * chargeMultiplier;
       dealt = Math.max(0, throughArmor);
       zone.health = Math.max(0, zone.health - dealt);
       zone.shock = Math.min(1, zone.shock + packet.componentShock * guardFactor);
+    }
+
+    if (perfect) {
+      // Whoever timed it gets the opening, and the attacker eats the recovery.
+      attacker.openingTicksLeft = OPENING_TICKS;
+      attacker.attack = null;
+      this.pushEvent({
+        type: defence.outcome === "parried" ? "parried" : "perfect-guard",
+        actorId: target.id,
+        targetId: attacker.id,
+        moveId: attack.move.id,
+        volumeId,
+        reason: defence.coaching,
+        contact,
+      });
+      target.defense = NO_DEFENSE;
+      if (defence.counterMoveId) {
+        // A parry answers for free, so the counter steps outside the cancel
+        // rules: the parry's own recovery is cleared first. Leaving it in place
+        // meant the arena refused the counter the parry had just promised.
+        target.attack = null;
+        this.start(target.id, defence.counterMoveId);
+      }
+      return;
+    }
+
+    target.hitThisTick = true;
+    attacker.combo = registerHit(attacker.combo, this.tickValue);
+
+    // A seize takes hold when it connects, not when it is thrown. The attack is
+    // over at that point and the hold takes its place, which is what lets a
+    // finisher come straight out of a grapple rather than being refused as a
+    // cancel out of a move that is technically still running.
+    if (attack.move.grapple && target.grapple.phase !== "held") {
+      attacker.grapple = beginGrapple(
+        {
+          holderId: attacker.id,
+          victimId: target.id,
+          spec: attack.move.grapple,
+          distanceMeters: 0,
+          victimHeld: false,
+          victimDown: false,
+          massRatio: 1,
+          clearanceMeters: this.clearanceAt(attacker),
+        },
+        attack.move.id,
+      );
+      target.grapple = { ...attacker.grapple };
+      attacker.attack = null;
+      this.pushEvent({
+        type: "grapple-started",
+        actorId: attacker.id,
+        targetId: target.id,
+        moveId: attack.move.id,
+        reason: describeGrapple(attacker.grapple),
+      });
+    }
+    if (attacker.combo.hits > 1) {
+      this.pushEvent({
+        type: "combo",
+        actorId: attacker.id,
+        targetId: target.id,
+        damage: attacker.combo.hits,
+        reason: `${attacker.combo.hits} in a row`,
+      });
+    }
+
+    // A prop wears out on the swings that connect, not on the ones that miss.
+    if (attacker.wielding && attacker.wielding.definition.swingsBeforeBreaking > 0) {
+      attacker.wielding.instance.swingsLeft -= 1;
+      if (attacker.wielding.instance.swingsLeft <= 0) {
+        this.pushEvent({
+          type: "prop-broken",
+          actorId: attacker.id,
+          reason: attacker.wielding.definition.displayName,
+        });
+        attacker.wielding.instance.heldBy = null;
+        attacker.wielding = null;
+      }
     }
 
     this.pushEvent({
@@ -672,6 +1074,217 @@ export class CombatArena {
         this.pushEvent({ type: "defeated", actorId: target.id, targetId: attacker.id });
       }
     }
+  }
+
+  /**
+   * Everything that runs alongside an attack: defensive windows, charges, holds
+   * and finisher beats. Split out so `step` reads as an order of operations
+   * rather than as one long function.
+   */
+  private advanceHolds(fighter: FighterState): void {
+    if (fighter.defense.spec) {
+      fighter.defense = advanceDefense(fighter.defense);
+      // A defensive window closes when its move ends; the recovery is the
+      // attack state's business, which is what stops a dodge being free.
+      if (!fighter.attack) fighter.defense = NO_DEFENSE;
+    }
+    fighter.combo = expireCombo(fighter.combo, this.tickValue);
+    if (fighter.openingTicksLeft > 0) fighter.openingTicksLeft -= 1;
+    if (fighter.charge) fighter.charge.ticks += 1;
+
+    if (fighter.grapple.phase === "held" && fighter.grapple.holderId === fighter.id) {
+      const victim = fighter.grapple.victimId ? this.fighters.get(fighter.grapple.victimId) : undefined;
+      const before = fighter.grapple;
+      fighter.grapple = advanceGrapple(fighter.grapple, {
+        // A victim with poise left fights harder; one that is reeling barely does.
+        victimEffort: victim ? (victim.reactionTicksLeft > 0 ? 0.25 : 0.85) : 0,
+        holderGrip: fighter.reactionTicksLeft > 0 ? 0.3 : 1,
+        holderInterrupted: fighter.hitThisTick && fighter.reactionTicksLeft > 0,
+      });
+      if (victim) victim.grapple = { ...fighter.grapple };
+      if (before.phase === "held" && fighter.grapple.phase !== "held") {
+        this.pushEvent({
+          type: "grapple-ended",
+          actorId: fighter.id,
+          targetId: victim?.id ?? null,
+          reason: describeGrapple(fighter.grapple),
+        });
+        fighter.grapple = NO_GRAPPLE;
+        if (victim) victim.grapple = NO_GRAPPLE;
+      }
+    }
+
+    if (fighter.finisher.phase === "running") {
+      const step = advanceFinisher(fighter.finisher, {
+        holding: fighter.finisherSettings.holdToComplete ? fighter.finisherHolding : fighter.finisherHolding,
+        attackerHit: fighter.hitThisTick,
+        settings: fighter.finisherSettings,
+      });
+      const beatChanged = step.state.beatIndex !== fighter.finisher.beatIndex;
+      fighter.finisher = step.state;
+      if (beatChanged && !step.finished) {
+        this.pushEvent({
+          type: "finisher-beat",
+          actorId: fighter.id,
+          targetId: fighter.finisher.targetId,
+          reason: fighter.finisher.camera ?? "",
+        });
+      }
+      if (step.damage > 0) this.applyGuaranteedDamage(fighter, Math.round(step.damage));
+      if (step.finished) {
+        this.pushEvent({
+          type: "finisher-ended",
+          actorId: fighter.id,
+          targetId: fighter.finisher.targetId,
+          reason: step.coaching || fighter.finisher.phase,
+        });
+        fighter.finisher = NO_FINISHER;
+      }
+    }
+  }
+
+  /**
+   * Damage a finisher promised, applied to the zone that decides the fight.
+   *
+   * Guaranteed means guaranteed: it does not go through armour, a guard or a
+   * reaction, because the sequence that earned it already answered all three.
+   */
+  private applyGuaranteedDamage(attacker: FighterState, amount: number): void {
+    const targetId = attacker.finisher.targetId;
+    const target = targetId ? this.fighters.get(targetId) : undefined;
+    if (!target) return;
+    this.damageKillZone(attacker, target, amount, attacker.finisher.moveId, "finisher");
+  }
+
+  /**
+   * Damage straight to the zone that decides the fight, with the bookkeeping.
+   *
+   * Finishers and grapple impacts both bypass armour and reactions, and both
+   * have to go through the same destruction and defeat checks. Reducing a zone's
+   * health without them left a creature at zero core health still fighting.
+   */
+  private damageKillZone(
+    attacker: FighterState,
+    target: FighterState,
+    amount: number,
+    moveId: string | null,
+    reason: string,
+  ): void {
+    if (amount <= 0) return;
+    const zone = target.zones.find((entry) => entry.onDestroyed === "kill") ?? target.zones[0];
+    if (!zone) return;
+    const wasIntact = zone.health > 0;
+    zone.health = Math.max(0, zone.health - amount);
+    this.pushEvent({
+      type: "hit",
+      actorId: attacker.id,
+      targetId: target.id,
+      moveId,
+      zoneId: zone.id,
+      damage: amount,
+      reaction: "none",
+      reason,
+    });
+    if (wasIntact && zone.health <= 0) {
+      this.pushEvent({
+        type: "zone-destroyed",
+        actorId: target.id,
+        targetId: attacker.id,
+        zoneId: zone.id,
+        reason: zone.onDestroyed,
+      });
+      if (zone.onDestroyed === "kill") {
+        target.defeated = true;
+        target.attack = null;
+        this.pushEvent({ type: "defeated", actorId: target.id, targetId: attacker.id });
+      }
+    }
+  }
+
+  /** Applies a skipped finisher's outcome at once. */
+  private settleFinisher(fighter: FighterState): void {
+    const damage = Math.round(fighter.finisher.earnedDamage);
+    this.applyGuaranteedDamage(fighter, damage);
+    this.pushEvent({
+      type: "finisher-ended",
+      actorId: fighter.id,
+      targetId: fighter.finisher.targetId,
+      damage,
+      reason: "skipped",
+    });
+    fighter.finisher = NO_FINISHER;
+  }
+
+  /** Shared body for a throw and a slam: both resolve a hold into a position. */
+  private resolveGrapple(fighterId: string, resolver: typeof throwTarget): string {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || fighter.grapple.phase !== "held") return "Nothing in hand.";
+    const victim = fighter.grapple.victimId ? this.fighters.get(fighter.grapple.victimId) : undefined;
+    if (!victim) return "Nothing in hand.";
+
+    const result = resolver({
+      state: fighter.grapple,
+      holderEast: fighter.pose.east,
+      holderNorth: fighter.pose.north,
+      holderYawDeg: fighter.pose.yawDeg,
+      isClear: (east, north, radius) => this.space.isClear(east, north, radius),
+      victimRadiusMeters: victim.heightMeters * 0.25,
+    });
+
+    if (result.thrown) {
+      victim.pose = { ...victim.pose, east: result.east, north: result.north };
+      // A throw or a slam is a knockdown wherever it lands.
+      const reaction = reactionFor(result.state.outcome);
+      victim.reaction = null;
+      victim.reactionTicksLeft = 0;
+      const zone = victim.zones.find((entry) => entry.onDestroyed === "kill") ?? victim.zones[0];
+      // A slam into a standing structure is the single hardest thing in the game,
+      // and a throw is not far behind: both are the machine's whole mass arriving
+      // at once, which is why a grapple route is worth taking at all.
+      const impact = result.state.outcome === "slammed" ? 900 : 620;
+      void zone;
+      this.damageKillZone(fighter, victim, impact, fighter.grapple.moveId, result.message);
+      this.pushEvent({
+        type: "reaction",
+        actorId: victim.id,
+        targetId: fighter.id,
+        moveId: fighter.grapple.moveId,
+        reaction,
+        reason: result.message,
+      });
+    }
+
+    // A refusal is not an ending. A slam with nothing solid behind the victim
+    // fails safely and leaves the hold exactly as it was, so the player can
+    // throw instead; dropping the hold on a refused slam threw away the whole
+    // commitment for free.
+    if (!result.thrown && result.state.outcome === null) return result.message;
+
+    this.pushEvent({
+      type: "grapple-ended",
+      actorId: fighter.id,
+      targetId: victim.id,
+      reason: result.message,
+    });
+    fighter.grapple = NO_GRAPPLE;
+    victim.grapple = NO_GRAPPLE;
+    return result.message;
+  }
+
+  private clearanceAt(fighter: FighterState): number {
+    // Probe outward until something is in the way. Cheap, deterministic, and it
+    // answers the only question a grapple or a prop swing actually has.
+    const steps = [20, 40, 60, 80, 110];
+    let clear = 0;
+    for (const distance of steps) {
+      const radians = (fighter.pose.yawDeg * Math.PI) / 180;
+      const east = fighter.pose.east + Math.sin(radians) * distance;
+      const north = fighter.pose.north + Math.cos(radians) * distance;
+      if (!this.space.isClear(east, north, fighter.heightMeters * 0.25)) break;
+      if (!this.space.inLoadedWorld(east, north)) break;
+      clear = distance;
+    }
+    return clear;
   }
 
   private advanceResources(fighter: FighterState): void {
@@ -769,6 +1382,17 @@ export class CombatArena {
         reaction: fighter.reaction?.id ?? null,
         reactionTicksLeft: fighter.reactionTicksLeft,
         aimZoneId: fighter.aimZoneId,
+        comboHits: fighter.combo.hits,
+        bestCombo: fighter.combo.bestHits,
+        chargeProgress: this.chargeProgress(fighter.id),
+        wieldingPropId: fighter.wielding?.definition.id ?? null,
+        wieldingSwingsLeft: fighter.wielding?.instance.swingsLeft ?? 0,
+        grapplePhase: fighter.grapple.phase,
+        grappleStruggle: fighter.grapple.struggle,
+        finisherPhase: fighter.finisher.phase,
+        finisherBeat: fighter.finisher.beatIndex,
+        finisherCamera: fighter.finisher.camera,
+        openingTicksLeft: fighter.openingTicksLeft,
         activeMove: fighter.attack?.move.id ?? null,
         activeMoveTick: fighter.attack?.tick ?? 0,
         activePhase: fighter.attack ? phaseAt(fighter.attack.move, fighter.attack.tick) : null,
@@ -848,6 +1472,17 @@ export interface ArenaFighterView {
   readonly reaction: string | null;
   readonly reactionTicksLeft: number;
   readonly aimZoneId: string | null;
+  readonly comboHits: number;
+  readonly bestCombo: number;
+  readonly chargeProgress: number;
+  readonly wieldingPropId: string | null;
+  readonly wieldingSwingsLeft: number;
+  readonly grapplePhase: string;
+  readonly grappleStruggle: number;
+  readonly finisherPhase: string;
+  readonly finisherBeat: number;
+  readonly finisherCamera: string | null;
+  readonly openingTicksLeft: number;
   readonly activeMove: string | null;
   readonly activeMoveTick: number;
   readonly activePhase: string | null;
@@ -859,6 +1494,11 @@ export interface ArenaFighterView {
 export interface ArenaSnapshot {
   readonly tick: number;
   readonly fighters: readonly ArenaFighterView[];
+}
+
+/** What a throw or a slam leaves the victim in. */
+function reactionFor(outcome: string | null): string {
+  return outcome === "slammed" ? "wall-impact" : "knockdown";
 }
 
 function reject(reason: AttackRejection, message: string): AttackRequest {

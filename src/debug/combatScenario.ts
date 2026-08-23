@@ -23,6 +23,16 @@ import {
 
 export const COMBAT_SCENARIO_TICKS = 900;
 
+/**
+ * The four ways a fight can be won.
+ *
+ * Each is a different script through the same arena, which is how "an encounter
+ * can be won through offense, defence, grapples or mixed play" becomes four
+ * assertions rather than an opinion.
+ */
+export const COMBAT_ROUTES = ["offense", "defense", "grapple", "mixed"] as const;
+export type CombatRoute = (typeof COMBAT_ROUTES)[number];
+
 export interface CombatScenarioOptions {
   readonly jaegerId?: string;
   readonly kaijuId?: string;
@@ -39,6 +49,8 @@ export interface CombatScenarioOptions {
   readonly separationMeters?: number;
   /** Body zone the machine aims for. Null fights the silhouette rather than the creature. */
   readonly aimZoneId?: string | null;
+  /** Which way the fight is fought. Defaults to plain offense. */
+  readonly route?: CombatRoute;
 }
 
 export interface CombatScenarioResult {
@@ -51,6 +63,13 @@ export interface CombatScenarioResult {
   readonly rejected: number;
   readonly cancels: number;
   readonly whiffs: number;
+  readonly route: CombatRoute;
+  readonly evades: number;
+  readonly perfectGuards: number;
+  readonly parries: number;
+  readonly grapples: number;
+  readonly finishers: number;
+  readonly bestCombo: number;
   readonly reactions: readonly string[];
   readonly damageToKaiju: number;
   readonly damageToJaeger: number;
@@ -79,6 +98,63 @@ function defaultScript(ticks: number): { tick: number; moveId: string }[] {
     index += 1;
   }
   return script;
+}
+
+/**
+ * A defensive route: block and parry what comes, and answer the openings.
+ *
+ * The creature attacks on its own cadence, so the script times its guards
+ * against that cadence rather than against a clock of its own.
+ */
+function defenseScript(ticks: number, cadence: number): { tick: number; moveId: string }[] {
+  const script: { tick: number; moveId: string }[] = [];
+  for (let tick = cadence; tick < ticks; tick += cadence) {
+    // The creature's claw takes 26 ticks to come out, so the parry goes up as
+    // the swing starts rather than when it lands.
+    script.push({ tick: tick + 20, moveId: "defense.counter.parry" });
+    script.push({ tick: tick + 40, moveId: "melee.light.cross" });
+    script.push({ tick: tick + 56, moveId: "melee.heavy.overhead" });
+  }
+  return script;
+}
+
+/** A grappling route: seize, and let the arena's throws and slams do the work. */
+function grappleScript(ticks: number): { tick: number; moveId: string }[] {
+  const script: { tick: number; moveId: string }[] = [];
+  for (let tick = 40; tick < ticks; tick += 190) {
+    script.push({ tick, moveId: "melee.heavy.smash.forward" });
+    script.push({ tick: tick + 60, moveId: "grapple.clinch" });
+  }
+  return script;
+}
+
+/** Everything: combos, a charge, a dodge, a grapple, and a finisher when it opens. */
+function mixedScript(ticks: number): { tick: number; moveId: string }[] {
+  const script: { tick: number; moveId: string }[] = [];
+  let index = 0;
+  for (let tick = 30; tick < ticks; tick += 150) {
+    script.push({ tick, moveId: "melee.light.jab" });
+    script.push({ tick: tick + 10, moveId: "melee.light.cross" });
+    script.push({
+      tick: tick + 24,
+      moveId: index % 2 === 0 ? "melee.heavy.smash.forward" : "melee.heavy.spin.side",
+    });
+    script.push({ tick: tick + 70, moveId: "defense.dodge.step" });
+    script.push({ tick: tick + 96, moveId: "grapple.clinch" });
+    script.push({ tick: tick + 130, moveId: "melee.finisher.plasma-drop" });
+    index += 1;
+  }
+  return script;
+}
+
+function scriptFor(route: CombatRoute, ticks: number, cadence: number): { tick: number; moveId: string }[] {
+  const table: Readonly<Record<CombatRoute, () => { tick: number; moveId: string }[]>> = {
+    offense: () => defaultScript(ticks),
+    defense: () => defenseScript(ticks, cadence),
+    grapple: () => grappleScript(ticks),
+    mixed: () => mixedScript(ticks),
+  };
+  return table[route]();
 }
 
 export function runCombatScenario(options: CombatScenarioOptions = {}): CombatScenarioResult {
@@ -124,7 +200,8 @@ export function runCombatScenario(options: CombatScenarioOptions = {}): CombatSc
   // between a long exchange and a finished fight.
   arena.setAim("jaeger", options.aimZoneId === undefined ? "core" : options.aimZoneId);
 
-  const script = options.script ?? defaultScript(ticks);
+  const route = options.route ?? "offense";
+  const script = options.script ?? scriptFor(route, ticks, cadence);
   const pressesByTick = new Map<number, string[]>();
   for (const entry of script) {
     const list = pressesByTick.get(entry.tick) ?? [];
@@ -143,6 +220,36 @@ export function runCombatScenario(options: CombatScenarioOptions = {}): CombatSc
     // Both keep facing each other, at the turn authority their current move allows.
     arena.faceToward("jaeger", "kaiju", 2.2);
     arena.faceToward("kaiju", "jaeger", 1.4);
+
+    // And both close the distance when they are out of reach. A player walks
+    // back into range after a dodge; a script that did not would spend the whole
+    // fight swinging at air, which is what the mixed route did before this.
+    const spacing = arena.snapshot().fighters;
+    const one = spacing.find((fighter) => fighter.id === "jaeger");
+    const two = spacing.find((fighter) => fighter.id === "kaiju");
+    if (one && two) {
+      const gap = Math.hypot(two.east - one.east, two.north - one.north);
+      if (gap > 34) {
+        const step = 0.35;
+        const scale = step / Math.max(1, gap);
+        arena.moveTo("jaeger", {
+          east: one.east + (two.east - one.east) * scale,
+          north: one.north + (two.north - one.north) * scale,
+        });
+      }
+    }
+
+    // A hold is not an outcome on its own: the script decides what to do with
+    // it, the same way a player would.
+    const holding = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (holding?.grapplePhase === "held" && holding.grappleStruggle > 0.4) {
+      if (tick % 2 === 0) arena.grappleSlam("jaeger");
+      else arena.grappleThrow("jaeger");
+    }
+    // The finisher input is held throughout, which is what the hold-to-complete
+    // accessibility setting expects.
+    arena.setFinisherHold("jaeger", true);
+
     arena.step();
   }
 
@@ -156,6 +263,13 @@ export function runCombatScenario(options: CombatScenarioOptions = {}): CombatSc
     events,
     snapshot,
     digest: arena.digest(),
+    route,
+    evades: events.filter((event) => event.type === "evaded").length,
+    perfectGuards: events.filter((event) => event.type === "perfect-guard").length,
+    parries: events.filter((event) => event.type === "parried").length,
+    grapples: events.filter((event) => event.type === "grapple-started").length,
+    finishers: events.filter((event) => event.type === "finisher-started").length,
+    bestCombo: Math.max(0, ...events.filter((event) => event.type === "combo").map((event) => event.damage)),
     hits: events.filter((event) => event.type === "hit").length,
     guarded: events.filter((event) => event.type === "guarded").length,
     rejected: events.filter((event) => event.type === "attack-rejected").length,

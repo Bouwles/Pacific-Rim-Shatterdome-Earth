@@ -26,7 +26,18 @@ export interface PilotInputCallbacks {
   /** An attack press. The slot is what the player pressed, not what will run. */
   readonly onAttack?: (slot: number) => void;
   readonly onAimModeToggle?: () => void;
+  /** The melee row: grapple, dodge, parry, prop swing and pick up. */
+  readonly onMelee?: (code: string) => void;
+  readonly onChargeStart?: () => void;
+  readonly onChargeRelease?: () => void;
+  /** Whether the finisher input is being held, checked every beat that asks. */
+  readonly onFinisherHold?: (holding: boolean) => void;
 }
+
+/** Keys the melee row answers to. */
+export const MELEE_KEY_CODES = ["KeyG", "KeyV", "KeyB", "KeyN", "KeyP"] as const;
+/** Held to wind up a charge, released to throw it. */
+export const CHARGE_KEY_CODE = "KeyH";
 
 /** Attack slots, in the order they sit on the number row. */
 export const ATTACK_SLOT_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"] as const;
@@ -54,6 +65,7 @@ export class PilotInputSource {
   private enabledValue = true;
   private disposed = false;
   private sensitivityValue = 0.11;
+  private chargingValue = false;
   private readonly listeners: Array<() => void> = [];
 
   constructor(
@@ -73,6 +85,32 @@ export class PilotInputSource {
 
   get enabled(): boolean {
     return this.enabledValue;
+  }
+
+  /** True while a charge is being wound up. */
+  get charging(): boolean {
+    return this.chargingValue;
+  }
+
+  /**
+   * Which way the stick is pushed, for directional variants.
+   *
+   * A move with a direction is the same button with a different answer, so the
+   * direction has to be readable at the moment the button is pressed rather than
+   * only inside the movement sample.
+   */
+  get moveDirection(): "neutral" | "forward" | "back" | "side" {
+    if (LEFT_KEYS.some((code) => this.held.has(code)) || RIGHT_KEYS.some((code) => this.held.has(code))) {
+      return "side";
+    }
+    if (FORWARD_KEYS.some((code) => this.held.has(code))) return "forward";
+    if (BACK_KEYS.some((code) => this.held.has(code))) return "back";
+    return "neutral";
+  }
+
+  /** True while the guard key is down, which is also the finisher hold. */
+  get finisherHeld(): boolean {
+    return this.held.has("KeyF");
   }
 
   setEnabled(enabled: boolean): void {
@@ -149,6 +187,13 @@ export class PilotInputSource {
     ATTACK_SLOT_KEYS.forEach((code, index) => {
       actions[code] = () => this.callbacks.onAttack?.(index);
     });
+    for (const code of MELEE_KEY_CODES) {
+      actions[code] = () => this.callbacks.onMelee?.(code);
+    }
+    actions[CHARGE_KEY_CODE] = () => {
+      this.chargingValue = true;
+      this.callbacks.onChargeStart?.();
+    };
     const action = actions[event.code];
     if (action) {
       action();
@@ -158,6 +203,11 @@ export class PilotInputSource {
 
   private onKeyUp(event: KeyboardEvent): void {
     this.held.delete(event.code);
+    if (event.code === CHARGE_KEY_CODE && this.chargingValue) {
+      this.chargingValue = false;
+      this.callbacks.onChargeRelease?.();
+    }
+    if (event.code === "KeyF") this.callbacks.onFinisherHold?.(false);
   }
 
   private onMouseMove(event: MouseEvent): void {

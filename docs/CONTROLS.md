@@ -281,6 +281,40 @@ believes they are, sized by how much health each has left.
 | Buffer         | Presses waiting for a legal moment                                                           |
 | Hit log        | The last six events: tick, attacker, move, volume, zone and damage                           |
 
+### Melee, defence and grapples (Milestone 11)
+
+| Input           | Action                                                                              |
+| --------------- | ----------------------------------------------------------------------------------- |
+| 3               | Overhead hammer. Hold forward for a forward smash, sideways for a spinning backhand |
+| H hold, release | Charged haymaker. A full charge more than doubles the damage                        |
+| F hold          | Guard. Raising it as the hit lands is a perfect guard                               |
+| B               | Parry. A narrow window that answers with a free counter                             |
+| V               | Evasive step. Invulnerable through the middle, with a real recovery                 |
+| G               | Seize. Takes hold of the target if there is reach and room                          |
+| P               | Pick up or drop the nearest environmental weapon                                    |
+| N               | Swing whatever is in hand                                                           |
+| Moves           | Opens the move list, written from the game's own move table                         |
+
+The move list groups everything into Attacks, Defence, Grapples, Environment,
+Finishers and what the creature does to you. Each row gives the input, a speed in
+words rather than numbers, and a line of coaching. Nothing in it mentions ticks
+or frames.
+
+The coaching row under the combat readout says what just happened in the same
+language: what a mistimed dodge did wrong, that a hold is slipping, why a throw
+became a release, or why a move was refused.
+
+### Accessibility
+
+| Setting                 | Effect                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Reduced motion          | Flattens camera sway, roll and speed pull-back, and every finisher framing becomes one wide shot |
+| Hold to complete        | A held input satisfies the beats that ask for one, rather than repeated presses. On by default   |
+| Skip finisher sequences | Applies a finisher's whole outcome at once, with no choreography                                 |
+
+All three produce the same damage. None of them removes the information that
+tells you what is happening.
+
 ### City readout
 
 Shown wherever the player is standing in a region that has a city plan, which is

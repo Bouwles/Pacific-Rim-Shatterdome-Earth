@@ -294,3 +294,33 @@ Eight rows in `src/combat/reactions.ts`: absorbed, flinch, stagger, guard break,
 launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
+
+## Melee, defence and grapple moves (Milestone 11)
+
+Ten rows joined the move table. Times are in ticks at sixty ticks a second.
+
+| id                        | Kind     | Input                  | Notes                                           |
+| ------------------------- | -------- | ---------------------- | ----------------------------------------------- |
+| melee.heavy.smash.forward | heavy    | hold forward, press 3  | More travel and knockback; leads into a grapple |
+| melee.heavy.spin.side     | heavy    | hold sideways, press 3 | Two volumes, one either side                    |
+| melee.charge.haymaker     | heavy    | hold H, release        | Super armour, 2.3x damage at full charge        |
+| defense.dodge.step        | light    | V                      | Invulnerable ticks 2 to 12, 34 m of travel      |
+| defense.block.raise       | light    | F                      | Seven tick perfect window                       |
+| defense.counter.parry     | light    | B                      | Nine tick window, free cross on success         |
+| grapple.clinch            | grapple  | G                      | 34 m reach, 150 tick hold, 60 m throw           |
+| env.swing.prop            | heavy    | N                      | Works with any prop in hand                     |
+| finisher.grapple.tear     | finisher | out of a hold          | Four beats, two of which need the hold          |
+| kaiju rows                | -        | -                      | Unchanged from Milestone 10                     |
+
+## Environmental weapons (Milestone 11)
+
+Five rows in `src/data/props.ts`. One move swings all of them; the differences
+are entirely in the data.
+
+| id                  | Tag    | Mass     | Damage scale | Startup penalty | Swings | Clearance |
+| ------------------- | ------ | -------- | ------------ | --------------- | ------ | --------- |
+| prop.gantry-crane   | crane  | 900 t    | 1.9x         | 8               | 3      | 55 m      |
+| prop.container-ship | ship   | 24,000 t | 3.4x         | 22              | 1      | 110 m     |
+| prop.bridge-section | bridge | 4,200 t  | 2.4x         | 14              | 2      | 80 m      |
+| prop.fuel-tanker    | tanker | 600 t    | 1.5x         | 4               | 1      | 30 m      |
+| prop.rubble-slab    | debris | 180 t    | 1.2x         | 2               | 2      | 20 m      |

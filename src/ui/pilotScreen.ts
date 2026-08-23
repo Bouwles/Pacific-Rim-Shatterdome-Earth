@@ -43,6 +43,29 @@ export interface PilotCombatState {
   /** Newest first: tick, what connected, where, and for how much. */
   readonly hitLog: readonly string[];
   readonly debugVolumes: boolean;
+  /** Combo, grapple and finisher state, in words. */
+  readonly training: string;
+  readonly comboHits: number;
+  readonly bestCombo: number;
+  readonly chargeProgress: number;
+  readonly grapplePhase: string;
+  readonly grappleStruggle: number;
+  readonly finisherPhase: string;
+  readonly holdingProp: string | null;
+  readonly propSwingsLeft: number;
+}
+
+/** One row of the move list. Written from the move table, never hand-authored. */
+export interface MoveListEntry {
+  readonly id: string;
+  readonly displayName: string;
+  readonly group: string;
+  /** How the player performs it, in the game's own control language. */
+  readonly input: string;
+  /** Plain language. No frame data, no jargon. */
+  readonly coaching: string;
+  /** Speed as a word rather than a tick count. */
+  readonly speed: string;
 }
 
 export interface PilotScreenState {
@@ -64,6 +87,9 @@ export interface PilotScreenCallbacks {
   readonly onSpawnTarget: () => void;
   readonly onClearTarget: () => void;
   readonly onDebugVolumes: (enabled: boolean) => void;
+  readonly onMoveList: (open: boolean) => void;
+  readonly onHoldToComplete: (enabled: boolean) => void;
+  readonly onSkipSequences: (enabled: boolean) => void;
   readonly onExit: () => void;
 }
 
@@ -86,6 +112,7 @@ const CAMERA_LABELS: Readonly<Record<CameraMode, string>> = {
 export function renderPilotScreen(
   container: HTMLElement,
   roster: readonly PilotRosterEntry[],
+  moveList: readonly MoveListEntry[],
   callbacks: PilotScreenCallbacks,
 ): PilotScreenHandle {
   // Appended, never replacing: the world panel is still live behind this one and
@@ -177,7 +204,24 @@ export function renderPilotScreen(
   invert.addEventListener("change", () => callbacks.onInvertPitch(invert.checked));
   invertLabel.append(invert, document.createTextNode(" Invert look"));
 
-  comfortRow.append(shakeLabel, reducedLabel, invertLabel);
+  // Two accessibility settings that belong next to the camera ones, because
+  // they answer the same question: how much of this do you want to have to do.
+  const holdLabel = document.createElement("label");
+  const hold = document.createElement("input");
+  hold.type = "checkbox";
+  hold.checked = true;
+  hold.dataset["action"] = "hold-to-complete";
+  hold.addEventListener("change", () => callbacks.onHoldToComplete(hold.checked));
+  holdLabel.append(hold, document.createTextNode(" Hold to complete"));
+
+  const skipLabel = document.createElement("label");
+  const skip = document.createElement("input");
+  skip.type = "checkbox";
+  skip.dataset["action"] = "skip-sequences";
+  skip.addEventListener("change", () => callbacks.onSkipSequences(skip.checked));
+  skipLabel.append(skip, document.createTextNode(" Skip finisher sequences"));
+
+  comfortRow.append(shakeLabel, reducedLabel, invertLabel, holdLabel, skipLabel);
 
   const readout = document.createElement("div");
   readout.className = "world-readout pilot-readout";
@@ -257,11 +301,60 @@ export function renderPilotScreen(
   addCombatRow("resources", "Resources");
   addCombatRow("move", "Move");
   addCombatRow("combat-buffer", "Buffer");
+  addCombatRow("melee", "Melee");
+  addCombatRow("training", "Coaching");
 
   const hitLog = document.createElement("ul");
   hitLog.className = "pilot-hitlog";
   hitLog.dataset["field"] = "hit-log";
   combat.appendChild(hitLog);
+
+  // The move list. Built from the move table, so it can never describe a move
+  // the game does not have, or miss one it does.
+  const movesButton = document.createElement("button");
+  movesButton.type = "button";
+  movesButton.className = "secondary-button";
+  movesButton.dataset["action"] = "move-list";
+  movesButton.textContent = "Moves";
+  combatRow.appendChild(movesButton);
+
+  const moves = document.createElement("div");
+  moves.className = "pilot-movelist";
+  moves.dataset["section"] = "move-list";
+  moves.hidden = true;
+  let movesOpen = false;
+  movesButton.addEventListener("click", () => {
+    movesOpen = !movesOpen;
+    moves.hidden = !movesOpen;
+    movesButton.classList.toggle("is-active", movesOpen);
+    callbacks.onMoveList(movesOpen);
+  });
+
+  const groups = new Map<string, MoveListEntry[]>();
+  for (const entry of moveList) {
+    const list = groups.get(entry.group) ?? [];
+    list.push(entry);
+    groups.set(entry.group, list);
+  }
+  for (const [group, entries] of groups) {
+    const heading = document.createElement("h3");
+    heading.textContent = group;
+    moves.appendChild(heading);
+    const list = document.createElement("ul");
+    for (const entry of entries) {
+      const item = document.createElement("li");
+      item.dataset["move"] = entry.id;
+      const name = document.createElement("span");
+      name.className = "pilot-move-name";
+      name.textContent = `${entry.displayName} · ${entry.input} · ${entry.speed}`;
+      const coaching = document.createElement("span");
+      coaching.className = "pilot-move-coaching";
+      coaching.textContent = entry.coaching;
+      item.append(name, coaching);
+      list.appendChild(item);
+    }
+    moves.appendChild(list);
+  }
 
   const hint = document.createElement("p");
   hint.className = "pilot-hint";
@@ -269,7 +362,7 @@ export function renderPilotScreen(
     "WASD drive · Shift run · Space booster · Q/E turn · Mouse or arrows look · C camera · T lock · M reduced motion · Esc leave. " +
     "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode";
 
-  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, hint);
+  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, moves, hint);
   container.appendChild(panel);
 
   let lastMode: CameraMode | null = null;
@@ -371,6 +464,26 @@ export function renderPilotScreen(
           "combat-buffer",
           combatState.buffered.length === 0 ? "empty" : combatState.buffered.join(", "),
         );
+        setCombat(
+          "melee",
+          [
+            combatState.comboHits > 1 ? `${combatState.comboHits} in a row` : "no combo",
+            `best ${combatState.bestCombo}`,
+            combatState.chargeProgress > 0
+              ? `charging ${Math.round(combatState.chargeProgress * 100)}%`
+              : null,
+            combatState.grapplePhase === "held"
+              ? `holding, ${Math.round(combatState.grappleStruggle * 100)}% loose`
+              : null,
+            combatState.finisherPhase !== "idle" ? `finisher ${combatState.finisherPhase}` : null,
+            combatState.holdingProp
+              ? `${combatState.holdingProp}, ${combatState.propSwingsLeft} swings left`
+              : null,
+          ]
+            .filter((part) => part !== null)
+            .join(" · "),
+        );
+        setCombat("training", combatState.training || "-");
         hitLog.replaceChildren();
         for (const line of combatState.hitLog) {
           const item = document.createElement("li");
