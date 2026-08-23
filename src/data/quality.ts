@@ -29,6 +29,7 @@ export const REQUIRED_TELEGRAPHS = [
   "water-entry-spray",
   "fog-visibility-cue",
   "wave-surface-motion",
+  "city-alert-state",
 ] as const;
 export type Telegraph = (typeof REQUIRED_TELEGRAPHS)[number];
 
@@ -52,6 +53,12 @@ export interface QualityPreset extends RegistryEntry {
   readonly animatedWaterSectors: number;
   /** Multiplier on scene fog density, so Low is not blinded by cheap fog. */
   readonly fogQuality: number;
+  /** Ceiling on city blocks drawn at once, across every destruction group. */
+  readonly maxCityBlocks: number;
+  /** Ceiling on pooled agent instances: vehicles, ships, aircraft and crowds combined. */
+  readonly maxCityAgents: number;
+  /** Destruction groups kept resident, nearest first. Beyond this the city fades out. */
+  readonly maxCityGroups: number;
   readonly telegraphs: readonly Telegraph[];
   readonly notes: string;
 }
@@ -68,8 +75,11 @@ const PRESETS: readonly QualityPreset[] = [
     waterWaveOctaves: 1,
     animatedWaterSectors: 1,
     fogQuality: 0.75,
+    maxCityBlocks: 260,
+    maxCityAgents: 220,
+    maxCityGroups: 30,
     telegraphs: [...REQUIRED_TELEGRAPHS],
-    notes: "No shadows or reflections, one wave octave. Every telegraph is still drawn.",
+    notes: "No shadows or reflections, one wave octave, a thinner city. Every telegraph is still drawn.",
   },
   {
     id: "medium",
@@ -82,6 +92,9 @@ const PRESETS: readonly QualityPreset[] = [
     waterWaveOctaves: 2,
     animatedWaterSectors: 3,
     fogQuality: 0.9,
+    maxCityBlocks: 620,
+    maxCityAgents: 620,
+    maxCityGroups: 70,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "Shadows on, cheap reflections, two wave octaves.",
   },
@@ -96,6 +109,9 @@ const PRESETS: readonly QualityPreset[] = [
     waterWaveOctaves: 3,
     animatedWaterSectors: 5,
     fogQuality: 1,
+    maxCityBlocks: 1200,
+    maxCityAgents: 1500,
+    maxCityGroups: 130,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "The default. Full wave detail and a full-resolution shadow map.",
   },
@@ -110,6 +126,9 @@ const PRESETS: readonly QualityPreset[] = [
     waterWaveOctaves: 3,
     animatedWaterSectors: 9,
     fogQuality: 1.15,
+    maxCityBlocks: 2200,
+    maxCityAgents: 3600,
+    maxCityGroups: 240,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "For capture rather than play. Not expected to hold 60 fps in a heavy fight.",
   },
@@ -130,6 +149,9 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
     "waterWaveOctaves",
     "animatedWaterSectors",
     "fogQuality",
+    "maxCityBlocks",
+    "maxCityAgents",
+    "maxCityGroups",
   ] as const) {
     const value = preset[key];
     if (!Number.isFinite(value) || value < 0) errors.push(`${key} must be a non-negative finite number`);
@@ -138,6 +160,10 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
   // the sector centre where the player usually is.
   if (preset.waterGridResolution < 3) errors.push("waterGridResolution must be at least 3");
   if (preset.waterWaveOctaves < 1) errors.push("waterWaveOctaves must be at least 1");
+  // A city with no blocks or no groups is not a lower quality city, it is an
+  // absent one, and absence is information rather than detail.
+  if (preset.maxCityBlocks < 1) errors.push("maxCityBlocks must be at least 1");
+  if (preset.maxCityGroups < 1) errors.push("maxCityGroups must be at least 1");
 
   const missing = REQUIRED_TELEGRAPHS.filter((telegraph) => !preset.telegraphs.includes(telegraph));
   if (missing.length > 0) {

@@ -61,7 +61,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a synthesised ambient audio bed filtered by water state, which reports whether the browser actually let it start;
   - an environment query surface for AI and combat that imports no render code and returns visibility, traction, movement, wind push and ranged accuracy penalty;
   - Low through Cinematic quality presets with explicit particle, reflection, shadow and water budgets, and a registry that refuses a preset which drops a required telegraph.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (437 unit+integration), `smoke` (59 Playwright), `build` all pass.
+- **A living Hong Kong**, built from a district grammar and running in the ground view:
+  - seven districts placed as wedges from the region's seaward bearing, so the plan rotates with the coast rather than being pinned to north;
+  - 710 blocks and 1,480 towers, with a real skyline: downtown is the tallest district, the slums stack four small towers to a block, the docks are low and regular;
+  - fourteen landmark slots, roads, harbour lanes, air corridors, evacuation zones with muster points on the high ground, seventeen defence positions, and walking and Jaeger deployment routes;
+  - 135 destruction groups, one mesh each, so the city is streamable and damageable in pieces rather than being one mesh;
+  - five alert levels driving civilian, vehicle, shipping, aircraft and military activity, sirens, and an evacuation that fills muster points and empties again during recovery;
+  - activity expressed as densities per district rather than as agents, so a district of ninety thousand people costs one sample;
+  - pooled thin-instance agents whose count comes from those densities and a quality budget, with per-kind counts reported because a total hides what an alert actually changes;
+  - alert level and evacuation progress saved per region, with the layout itself derived from the seed and never stored.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (511 unit+integration), `smoke` (68 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -74,7 +83,14 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - Terrain is broad-strokes landform, not geography. The generator knows a sample's latitude, a seeded moisture field and the authored region anchors, and nothing else. Real coastlines, mountain ranges, rivers and city footprints are not reproduced and no accuracy is claimed.
-- City cells are instanced boxes standing in for buildings. They are not the asset pipeline, carry no manifest, and have no interiors, damage states or structural zones.
+- City blocks are instanced boxes standing in for buildings. They carry a destruction group id and a landmark slot names a manifest id, but nothing resolves an asset yet, and there are no interiors or damage states.
+- Only Hong Kong has a city. Every other region has `cityPlanId: null` and stays a strategic record, which the panel says plainly rather than showing an empty city.
+- Nothing raises an alert on its own. The alert buttons are debug controls; the attack director that would drive them does not exist.
+- Destruction groups are grouped and drawn separately but nothing damages them yet. The structure is in place; the damage model is not.
+- Agents are boxes on polylines with no collision, no avoidance and no destination. They read as traffic at distance and would not survive close inspection.
+- The city is sparse at a distance on Medium: 620 towers spread over a twelve kilometre region reads as a scattered skyline rather than a dense one. Raising the budget fills it in and costs frame time; the layout is right and the fill is thin.
+- Groups are drawn nearest-first from the region centre rather than from the player, so walking to the edge of the city does not shift the budget toward where you are looking.
+- The region centre itself is open ground: the district plan starts at a tenth of the radius, so a player spawning at the centre stands in the harbour mouth rather than among towers.
 - Traffic is a static representation: markers spaced along generated lanes. Nothing moves, routes or reacts. There is no traffic simulation.
 - Collision detail is a height field the player settles onto. There is still no physics backend, so nothing collides with anything except the ground, and only through direct height sampling.
 - Streamed sectors are visual and navigational only. No gameplay system reads them: no spawning, no line of sight, no cover, no destruction.
@@ -114,6 +130,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Asset gallery: [src/debug/gallery.ts](src/debug/gallery.ts), [src/ui/galleryScreen.ts](src/ui/galleryScreen.ts), [src/app/galleryOverrides.ts](src/app/galleryOverrides.ts)
 - World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
 - World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
+- City: [src/world/cityLayout.ts](src/world/cityLayout.ts), [cityActivity.ts](src/world/cityActivity.ts), [src/data/districts.ts](src/data/districts.ts), [src/engine/cityView.ts](src/engine/cityView.ts)
 - Environment: [src/world/worldClock.ts](src/world/worldClock.ts), [weather.ts](src/world/weather.ts), [ocean.ts](src/world/ocean.ts), [environment.ts](src/world/environment.ts)
 - Environment content: [src/data/climates.ts](src/data/climates.ts), [src/data/quality.ts](src/data/quality.ts)
 - Environment rendering and audio: [src/engine/skyView.ts](src/engine/skyView.ts), [weatherView.ts](src/engine/weatherView.ts), [ambientAudio.ts](src/engine/ambientAudio.ts)
@@ -136,6 +153,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - The GLB load path has never run against a real GLB file, because no model exists to test with. Its validation logic is unit tested against synthetic inspection data, and its failure path is exercised constantly, but the success path is unverified. First real model installed will be the real test of it.
 - The gallery borrows the boot scene rather than owning one. Fine for two environments; a real scene lifecycle will be needed once the Shatterdome interior and a combat map both exist.
 - Quota exhaustion and a genuinely blocked IndexedDB (real private window) are implemented and unit tested through the repository interface, but neither has been reproduced in a live browser.
+- City density and district proportions are tuned by measurement and by looking at the result, not by art direction. They will want a proper pass once someone judges how the city should read.
 - The sun and moon model ignores the equation of time and assumes a circular orbit, so it is a few minutes off a real almanac. Fine for "the sun is lower in winter"; not fine if anything ever needs real astronomical time.
 - Terrain shape is tuned by measurement, not by art direction. The land-mask target was picked by sweeping values and reading city elevation and water fraction across all eight regions; it will want a proper pass once anyone judges how the world should look.
 - Streaming has only been measured on one machine, on WebGPU, at 144 fps with a frame budget the work never came close to filling. Generation at 0.4 ms and upload at 0.2 ms leave no evidence about behaviour on a slow machine, and the one-upload-per-frame pacing has never actually been the constraint.
@@ -147,4 +165,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set.
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set, and walk the
+`walking` deployment route the city layout already produces rather than inventing a path. The
+Shatterdome landmark slot already names `shatterdome.jaeger-bay`, so binding that manifest to a real
+entity is the first thing the milestone should do.

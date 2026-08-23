@@ -182,6 +182,51 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## City cost (Milestone 07)
+
+The Hong Kong layout at seed 20260823, six kilometre region radius:
+
+| Quantity                | Value   | Note                                                   |
+| ----------------------- | ------- | ------------------------------------------------------ |
+| Blocks                  | 710     | Across seven districts                                 |
+| Towers                  | 1,480   | What is actually drawn; slums stack four to a block    |
+| Landmark slots          | 14      | Each naming an asset manifest id for a future model    |
+| Roads and harbour lanes | 9 and 4 | Polylines agents travel, not carved geometry           |
+| Defence positions       | 17      | Missile batteries, sea wall, checkpoints, a Jaeger pad |
+| Destruction groups      | 135     | 480 m cells; one mesh each, never one city mesh        |
+| Evacuation capacity     | 1,398k  | Summed from district area and population density       |
+| Layout in a save        | 0 bytes | Derived from the region and the seed, so never stored  |
+
+Measured in the browser on WebGPU at Medium, standing at the region centre at
+midday:
+
+| Measurement  | Calm                                        | Attack                                    |
+| ------------ | ------------------------------------------- | ----------------------------------------- |
+| Towers drawn | 620 in 31/135 groups                        | same                                      |
+| City meshes  | 53                                          | 53                                        |
+| City GPU     | 0.09 MB                                     | 0.09 MB                                   |
+| Live agents  | 199 of 618                                  | 222 of 618                                |
+| Agent mix    | 107 vehicle, 45 crowd, 27 ship, 20 aircraft | 196 vehicle, 7 crowd, 1 ship, 18 aircraft |
+| Draw calls   | 74                                          | 74                                        |
+| Frame time   | 1.0 ms                                      | 0.5 ms                                    |
+| Frame rate   | 143 fps                                     | 144 fps                                   |
+
+The agent mix is the interesting column: the total barely moves while every kind
+moves a long way, which is why counts are reported per kind rather than summed.
+
+Frame rate is not asserted in the browser tests. Playwright's Chromium falls back
+to a software rasteriser, so an fps reading from it measures the test runner
+rather than this code; the figures above are taken by hand on the real renderer.
+What the tests assert instead is draw calls under budget and the simulation still
+ticking, which proves the city is not blocking the main thread.
+
+Two costs were found by measurement and fixed. Agents asked the streamer for a
+ground height every frame, which is a geodetic conversion, a tangent basis and a
+sector lookup each: the terrain is now sampled once into a 65 by 65 grid and
+interpolated. And a 320 m destruction grid produced 233 groups over a twelve
+kilometre city, so a mid-range preset covering its group budget drew a patch
+rather than a city; 480 m cells bring it to 135.
+
 ## Environment cost (Milestone 06)
 
 | Quantity                    | Value              | Note                                                   |

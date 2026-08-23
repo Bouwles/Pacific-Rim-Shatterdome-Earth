@@ -74,6 +74,7 @@ backup can still be loaded.
 | **06:00 to 00:00**   | Skip forward to that clock time; never backwards                 |
 | **Dive / Surface**   | Walk the seabed instead of floating. Ground view only            |
 | Quality              | Low, Medium, High or Cinematic                                   |
+| **Calm to Recovery** | Set the alert in the region you are standing in. City view only  |
 | **Fly route**        | Run the deterministic stress route; press again to stop          |
 | Left-drag / wheel    | Orbit and zoom                                                   |
 
@@ -142,6 +143,31 @@ the things that draw them belong to the ground view.
 | Waves            | Surface height at this point and the amplitude the wind justifies   |
 | Audio            | Surface, partial or underwater, and whether audio actually started  |
 | Quality budgets  | Live particles against the ceiling, shadow, reflections, telegraphs |
+
+### City readout
+
+Shown wherever the player is standing in a region that has a city plan, which is
+Hong Kong today. Elsewhere the block is hidden rather than showing zeroes, because
+no city has been built there.
+
+| Readout            | Meaning                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| City               | Which region, and how many districts it is made of                  |
+| Alert              | Current level, and whether sirens are sounding                      |
+| Evacuation         | How much of the population is clear, how much is moving, capacity   |
+| Streets            | Civilian and vehicle density, 0 to 100 percent of the district norm |
+| Harbour / military | Shipping and military density                                       |
+| Layout             | Blocks, towers and landmark slots the layout produced               |
+| Defence / routes   | Defence positions, roads, harbour lanes and deployment routes       |
+| Drawn              | Towers actually drawn, resident groups, meshes and GPU cost         |
+| Agents             | Live pooled instances against the pool, broken down by kind         |
+
+The Drawn and Agents rows describe rendering, so they are hidden on the globe
+where nothing is being drawn. The rest stays, because the layout and the alert are
+real wherever the player is.
+
+Alert buttons are debug controls. Nothing in the game raises an alert on its own
+yet; the attack director that will do so arrives with a later milestone.
 
 Audio reports its real state. Browsers refuse to start audio outside a user
 gesture, so it says `blocked` rather than pretending to be running.

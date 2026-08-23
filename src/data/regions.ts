@@ -5,6 +5,15 @@ import { LAND_MASK_TARGET, OCEAN_MASK_TARGET, type TerrainAnchor } from "../worl
 /**
  * Strategic regions.
  *
+ * `seawardBearingDeg` is the direction open water lies from the region centre.
+ * It is authored rather than derived, because terrain is generated and the
+ * generator has no notion of which way a coast faces; the city plan rotates with
+ * this so a harbour district ends up on the water.
+ *
+ * `cityPlanId` is null everywhere except Hong Kong. Only a region with a plan
+ * gets blocks, roads, lanes and evacuation zones; the rest remain strategic
+ * records, which is the honest state for a region nobody has built yet.
+ *
  * radiusMeters is the dense core that receives combat-grade geometry, not the
  * full metropolitan sprawl. On a globe shrunk to 1/50 the cities sit only tens
  * of kilometres apart, so a sprawl-sized radius would make neighbouring regions
@@ -26,6 +35,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 6_000,
     populationThousands: 7_500,
     deploymentPoint: true,
+    seawardBearingDeg: 196,
+    cityPlanId: "hong-kong",
     notes: "Home Shatterdome and the Bone Slums grown up around it.",
   },
   {
@@ -37,6 +48,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 7_000,
     populationThousands: 13_900,
     deploymentPoint: true,
+    seawardBearingDeg: 150,
+    cityPlanId: null,
     notes: "Dense bay-side sprawl; heavy civilian pressure in any breach.",
   },
   {
@@ -48,6 +61,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 5_000,
     populationThousands: 5_300,
     deploymentPoint: true,
+    seawardBearingDeg: 110,
+    cityPlanId: null,
     notes: "Harbour approach gives kaiju a sheltered run at the centre.",
   },
   {
@@ -59,6 +74,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 5_000,
     populationThousands: 13_500,
     deploymentPoint: true,
+    seawardBearingDeg: 250,
+    cityPlanId: null,
     notes: "Closest major population centre to the Breach approach lanes.",
   },
   {
@@ -70,6 +87,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 3_500,
     populationThousands: 290,
     deploymentPoint: true,
+    seawardBearingDeg: 200,
+    cityPlanId: null,
     notes: "Cold-weather operations and the northern Pacific watch line.",
   },
   {
@@ -81,6 +100,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 5_000,
     populationThousands: 9_700,
     deploymentPoint: true,
+    seawardBearingDeg: 240,
+    cityPlanId: null,
     notes: "Eastern Pacific coverage.",
   },
   {
@@ -92,6 +113,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 3_000,
     populationThousands: 600,
     deploymentPoint: true,
+    seawardBearingDeg: 140,
+    cityPlanId: null,
     notes: "Northwest Pacific watch line.",
   },
   {
@@ -103,6 +126,8 @@ const REGIONS: readonly RegionDefinition[] = [
     radiusMeters: 25_000,
     populationThousands: 0,
     deploymentPoint: false,
+    seawardBearingDeg: 0,
+    cityPlanId: null,
     notes: "Open ocean over the deepest part of the trench. No civilians, no cover.",
   },
 ];

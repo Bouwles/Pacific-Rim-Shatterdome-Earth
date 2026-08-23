@@ -146,3 +146,25 @@ and the world opened in total darkness while a migrated save opened at dawn.
 Only wetness is stored from the weather. Everything else is a function of the
 world seed and the tick, so a loaded save regenerates the same fronts, the same
 storm at the same minute, and the same sky.
+
+## Milestone 07: version 4 adds region alerts
+
+`ROOT_SAVE_VERSION` is now 4 and `WORLD_SCHEMA_VERSION` is 3. Every region record
+gained an `alert` block holding the alert level, the tick it was entered, and how
+far the evacuation has progressed.
+
+A version 3 save has no alert anywhere, because no region could be alerted. Every
+record therefore migrates to calm with nobody evacuated, which is exactly the
+state a fresh world begins in and the only honest reading of a file that never
+recorded one. Integrity, safety rating, tier and last visited tick all survive
+untouched.
+
+The city layout itself is not saved and never will be. It is a pure function of
+the region and the world seed, so it is cached in memory and rebuilt on demand.
+Saving it would make save size grow with how much of the world had been visited
+and would freeze old saves against future changes to the district grammar.
+
+One thing worth recording about the chain: each migration writes the world schema
+version as it stood at that step, not the current constant. Writing today's number
+into an older step would make a migrated file claim a shape it does not have, and
+the next step in the chain would have nothing to recognise.

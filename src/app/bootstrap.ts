@@ -27,6 +27,7 @@ import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
 import { probeStorageHealth } from "../saves/storageHealth";
 import {
   renderWorldScreen,
+  type CityReadout,
   type EnvironmentReadout,
   type StreamingReadout,
   type WorldScreenHandle,
@@ -54,6 +55,17 @@ import { WeatherView } from "../engine/weatherView";
 import { AmbientAudio } from "../engine/ambientAudio";
 import { resolveFeetHeight, sampleWaveHeight, waveFieldCoordinates } from "../world/ocean";
 import type { EnvironmentSample } from "../world/environment";
+import { createDistrictRegistry, HONG_KONG_DISTRICT_PLAN, type DistrictKind } from "../data/districts";
+import { generateCityLayout, type CityLayout } from "../world/cityLayout";
+import {
+  ALERT_LEVELS,
+  ALERT_PROFILES,
+  sampleActivity,
+  type ActivitySample,
+  type AlertLevel,
+} from "../world/cityActivity";
+import { CityView } from "../engine/cityView";
+import { localToGeo } from "../world/coordinates";
 
 export interface AppHandle {
   dispose(): void;
@@ -387,7 +399,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // Injected as a function so the world layer never imports the content layer.
     climateProfileFor: (climate) => climateRegistry.getOrThrow(climate),
   });
-  advanceWorldTime = (ticks) => worldState.advanceEnvironment(ticks);
+  advanceWorldTime = (ticks) => {
+    worldState.advanceEnvironment(ticks);
+    // Evacuation moves with world time too, so a city cleared while the player
+    // was elsewhere is still cleared when they arrive.
+    worldState.advanceAlerts(ticks);
+  };
   const floatingOrigin = new FloatingOrigin({ anchor: worldState.playerPosition });
   let globeView: GlobeView | undefined;
   let worldScreen: WorldScreenHandle | undefined;
@@ -402,7 +419,73 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let skyView: SkyView | undefined;
   let weatherView: WeatherView | undefined;
   let ambientAudio: AmbientAudio | undefined;
+  let cityView: CityView | undefined;
+  let cityRegionId: string | null = null;
   let diving = false;
+
+  const districtRegistry = createDistrictRegistry();
+  const districtsById = new Map<DistrictKind, ReturnType<typeof districtRegistry.getOrThrow>>(
+    districtRegistry.all().map((district) => [district.id, district]),
+  );
+
+  /**
+   * City layouts, built once per region and kept.
+   *
+   * A layout is a pure function of the region and the seed, so it is cached
+   * rather than saved: rebuilding it gives the same city, and keeping it means
+   * walking back into Hong Kong does not lay it out again.
+   */
+  const cityLayouts = new Map<string, CityLayout>();
+  const layoutFor = (regionId: string): CityLayout | null => {
+    const region = regionRegistry.get(regionId);
+    if (!region || region.cityPlanId === null) return null;
+    const existing = cityLayouts.get(regionId);
+    if (existing) return existing;
+    const layout = generateCityLayout({
+      regionId: region.id,
+      seed: kernel?.seed ?? 0,
+      radiusMeters: region.radiusMeters,
+      seawardBearingDeg: region.seawardBearingDeg,
+      plan: HONG_KONG_DISTRICT_PLAN,
+      districts: districtsById,
+      maxBlocks: 1_400,
+    });
+    cityLayouts.set(regionId, layout);
+    return layout;
+  };
+
+  /**
+   * Activity per district for the region the player is in.
+   *
+   * One sample per district, never per civilian. A district that houses ninety
+   * thousand people costs exactly one of these.
+   */
+  const sampleCityActivity = (layout: CityLayout, sample: EnvironmentSample): Map<string, ActivitySample> => {
+    const record = worldState.recordFor(layout.regionId);
+    const alert = record?.alert;
+    const activity = new Map<string, ActivitySample>();
+    if (!alert) return activity;
+
+    for (const districtId of layout.districts) {
+      const district = districtsById.get(districtId);
+      if (!district) continue;
+      activity.set(
+        districtId,
+        sampleActivity({
+          districtId,
+          populationDensityThousands: district.populationDensityThousands,
+          coastal: district.coastal,
+          alert,
+          tick: worldState.environment.clock.elapsedTicks,
+          dayFraction: sample.dayFraction,
+          precipitation: sample.weather.precipitation,
+          windSpeedMps: sample.weather.windSpeedMps,
+          integrity: record?.integrity ?? 1,
+        }),
+      );
+    }
+    return activity;
+  };
 
   /**
    * The one environment sample per frame. Presentation and any future gameplay
@@ -452,7 +535,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   /** Moves the player and keeps the origin, renderer and streamer in step. */
   const movePlayerTo = (position: GeoPosition): void => {
     worldState.moveTo(groundedPosition(position), kernel?.tick ?? 0);
-    if (floatingOrigin.update(worldState.playerPosition)) sectorRenderer?.rebase();
+    if (floatingOrigin.update(worldState.playerPosition)) {
+      sectorRenderer?.rebase();
+      cityView?.rebase();
+    }
     streamer?.update({ position: worldState.playerPosition, velocity: lastVelocity });
   };
 
@@ -494,6 +580,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     streamer = undefined;
     sectorRenderer?.dispose();
     sectorRenderer = undefined;
+    cityView?.dispose();
+    cityView = undefined;
     weatherView?.dispose();
     weatherView = undefined;
     // Sky last: it restores the scene's clear colour, fog and sun, so anything
@@ -517,6 +605,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       quality,
     });
     weatherView = new WeatherView({ scene: bootScene.scene, quality });
+    rebuildCityView();
     ambientAudio = new AmbientAudio(kernel?.seed ?? 0);
     // Browsers refuse audio outside a user gesture. Entering the ground view is
     // one, so this is the earliest honest place to try.
@@ -546,6 +635,40 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     streamer.update({ position: worldState.playerPosition, velocity: lastVelocity });
   };
 
+  /**
+   * Builds the city for whichever region the player is standing in, or tears it
+   * down when they leave one. Only a region with an authored plan has a city;
+   * everywhere else the ground stays as the terrain generator made it.
+   */
+  const rebuildCityView = (): void => {
+    cityView?.dispose();
+    cityView = undefined;
+    cityRegionId = null;
+    if (viewMode !== "ground") return;
+
+    const regionId = worldState.activeRegionId;
+    const layout = regionId ? layoutFor(regionId) : null;
+    const region = regionId ? regionRegistry.get(regionId) : undefined;
+    if (!layout || !region) return;
+
+    cityRegionId = regionId;
+    cityView = new CityView({
+      scene: bootScene.scene,
+      layout,
+      regionCentre: region.centre,
+      anchor: () => floatingOrigin.anchor,
+      // Ground height comes from the streamed collision field through the same
+      // call the player uses, so the city stands on the terrain rather than on
+      // an assumed plane.
+      groundHeightAt: (east, north) => {
+        const position = localToGeo(region.centre, { east, north, up: 0 });
+        return streamer?.sampleGroundHeight(position) ?? null;
+      },
+      districts: districtsById,
+      quality,
+    });
+  };
+
   const closeWorld = (): void => {
     frameHook = null;
     closeGroundView();
@@ -558,13 +681,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   const refreshWorld = (): void => {
     if (!worldScreen) return;
+    const environmentSample = sampleEnvironment();
     const local = floatingOrigin.toLocal(worldState.playerPosition);
     const activeRegion = worldState.activeRegionId;
     const records = worldState.records();
 
     worldScreen.update({
       viewMode,
-      environment: environmentReadout(sampleEnvironment()),
+      environment: environmentReadout(environmentSample),
+      city: cityReadout(environmentSample),
       streaming: streamer && sectorRenderer ? streamingReadout(streamer, sectorRenderer) : null,
       position: worldState.playerPosition,
       localEast: local.east,
@@ -579,6 +704,68 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       anchor: floatingOrigin.anchor,
     });
     globeView?.refresh();
+  };
+
+  /**
+   * Flattens the city for the panel.
+   *
+   * Returns null outside a region with a layout, because there is genuinely no
+   * city there: showing zeroes would imply one that has not been built.
+   */
+  const cityReadout = (sample: EnvironmentSample): CityReadout | null => {
+    const regionId = worldState.activeRegionId;
+    const layout = regionId ? (cityLayouts.get(regionId) ?? layoutFor(regionId)) : null;
+    const record = regionId ? worldState.recordFor(regionId) : undefined;
+    if (!layout || !record) return null;
+
+    const activity = sampleCityActivity(layout, sample);
+    let civilian = 0;
+    let vehicle = 0;
+    let shipping = 0;
+    let military = 0;
+    let flow = 0;
+    let sirens = false;
+    for (const entry of activity.values()) {
+      civilian += entry.civilianDensity;
+      vehicle += entry.vehicleDensity;
+      shipping += entry.shippingDensity;
+      military += entry.militaryDensity;
+      flow += entry.evacuationFlow;
+      sirens = sirens || entry.sirens;
+    }
+    const count = Math.max(1, activity.size);
+    const view = cityView?.stats();
+
+    return {
+      regionId: layout.regionId,
+      districtCount: layout.districts.length,
+      blockCount: layout.stats.blockCount,
+      towerCount: layout.stats.towerCount,
+      landmarkCount: layout.stats.landmarkCount,
+      roadCount: layout.stats.roadCount,
+      harborLaneCount: layout.stats.harborLaneCount,
+      defenseCount: layout.stats.defenseCount,
+      destructionGroupCount: layout.stats.destructionGroupCount,
+      evacuationCapacityThousands: layout.stats.evacuationCapacityThousands,
+      routeCount: layout.routes.length,
+      alertLevel: record.alert.level,
+      evacuationProgress: record.alert.evacuationProgress,
+      civilianDensity: civilian / count,
+      vehicleDensity: vehicle / count,
+      shippingDensity: shipping / count,
+      militaryDensity: military / count,
+      evacuationFlow: flow / count,
+      sirens,
+      drawnBlocks: view?.drawnBlocks ?? 0,
+      residentGroups: view?.residentGroups ?? 0,
+      totalGroups: view?.totalGroups ?? layout.stats.destructionGroupCount,
+      agents: view?.agents ?? 0,
+      agentCapacity: view?.agentCapacity ?? 0,
+      agentsByKind: view?.agentsByKind ?? {},
+      rendered: view !== undefined,
+      cityMeshes: view?.meshes ?? 0,
+      cityGpuBytes: view?.estimatedGpuBytes ?? 0,
+    };
   };
 
   /** Flattens the environment sample for the panel. Every figure is read back, not requested. */
@@ -750,6 +937,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       uiRoot,
       regionRegistry.all(),
       qualityRegistry.all().map((preset) => ({ id: preset.id, label: preset.displayName })),
+      ALERT_LEVELS.map((level) => ({ id: level, label: ALERT_PROFILES[level].displayName })),
       {
         onTeleport: (regionId: string) => {
           routeRunning = false;
@@ -797,6 +985,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshWorld();
         },
         onQualityChange: (level: string) => applyQuality(level as QualityLevel),
+        onAlertChange: (level: string) => {
+          const regionId = worldState.activeRegionId;
+          if (!regionId) return;
+          worldState.setRegionAlert(regionId, level as AlertLevel, kernel?.tick ?? 0);
+          refreshWorld();
+        },
         onExit: () => stateMachine.transition(AppState.MainMenu),
       },
     );
@@ -839,6 +1033,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       weatherView?.update(sample, bootScene.scene.activeCamera);
       sectorRenderer.updateWater(sample, local);
       ambientAudio?.update(sample.audio);
+
+      // Walking into or out of a region swaps the city under the player.
+      if (cityRegionId !== worldState.activeRegionId) rebuildCityView();
+      if (cityView) {
+        const layout = cityLayouts.get(cityRegionId ?? "");
+        if (layout) cityView.update(sample.tick, sampleCityActivity(layout, sample));
+      }
 
       // The streamer runs every frame; the panel does not. A 144 Hz DOM write is
       // both wasteful and unreadable.
@@ -910,6 +1111,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       saveScreen?.dispose();
       streamer?.dispose();
       sectorRenderer?.dispose();
+      cityView?.dispose();
       weatherView?.dispose();
       skyView?.dispose();
       ambientAudio?.dispose();

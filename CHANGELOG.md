@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-23, Milestone 07: Hong Kong vertical slice and living city layer
+
+Hong Kong exists. Not a region record with a name on it, an actual city with districts, a skyline, a harbour, roads, a Shatterdome precinct and slums grown against its wall, and a population that reacts when something is coming.
+
+- The city is grown from a grammar rather than placed by hand. A district is a rule: how big the blocks are, how tall, how densely packed, how regular, how many people live there and how early they get evacuated. Seven of those rules, arranged as wedges measured from whichever way the water lies, produce 710 blocks and 1,480 towers.
+- Because the plan is measured from the coast rather than from north, the harbour ends up on the water wherever the region happens to sit on the globe.
+- It is a stylised original. It takes the shapes a dense harbour city has, towers along the front, a ridge behind, docks down the shore, an improvised district pressed against the Shatterdome wall, and arranges them from a seed. No real street plan or map geometry is copied and none is claimed.
+- Roads, shipping lanes, ferry routes, patrol lanes, air corridors, evacuation zones with muster points up on the high ground, seventeen defence positions facing the right way, and two deployment routes: one at walking scale off the Shatterdome apron, one at Jaeger scale straight through the waterfront to open water.
+- Every block belongs to a destruction group, and every group is its own mesh. That is what makes the city something you can stream in pieces and eventually knock down in pieces, rather than one enormous model that can only exist or not exist.
+- Nobody simulates a civilian. A district is a handful of numbers saying how much is moving and of what kind, and the renderer turns that into a bounded pool of instances travelling fixed lanes. A district of ninety thousand people costs exactly as much to think about as an empty one.
+- Five alert levels, and they change the city rather than changing a label. Going to attack at Hong Kong took the streets from 26 percent busy to 4, cleared the harbour from 31 percent to 2, took the military from 15 percent to 100, sounded the sirens and started moving people to muster points. The vehicle pool went from 107 civilian cars to 196 mostly military ones.
+- The response ramps rather than snapping, because a city does not empty the instant a siren starts, and evacuation flow peaks in the middle of an evacuation because nobody is moving before it begins and nobody is left once it is done.
+- Time of day, rain, wind and damage all move the same numbers. A levelled district is empty whatever the hour says.
+- Saves moved to version 4 to carry the alert level and how far the evacuation got. The city layout itself is never saved: it comes back identical from the seed, so storing it would only make saves grow with how much of the world you had visited.
+
+Five defects were found and fixed. Three of them only showed up once there was something to look at.
+
+The muster point for the ridge district ended up along the coast instead of inland. Each district offset its muster point by a fraction of its own bearing to stop them all piling on one spot, and for a district on the far side of the city that fraction swung it right round to the shoreline. The fan is now bounded, so a muster point is always somewhere away from the water.
+
+Recovery kept the sirens going. Its own description said sirens off, and its number said fifteen percent, which is not off. The all clear is a thing that happens, and a siren that never quite stops is a siren nobody listens to.
+
+The city ran at nineteen frames a second in the test browser. Six hundred agents were each asking the terrain streamer for a ground height every frame, which is a geodetic conversion and a sector lookup each time. The terrain is now sampled once into a grid when the city is built.
+
+That turned out not to be the whole story, because the real browser was already running at 144. The frame rate the test was reading came from Playwright's software renderer, not from this code. That assertion is gone; the tests now check draw calls and that the simulation keeps ticking, which travel between machines, and the real numbers are recorded by hand.
+
+The landmarks were half a kilometre wide. At up to twice a block across and nearly twice the district height, the tallest came out as a cone that read as terrain rather than as a building. They are slimmer now, and look like spires.
+
+Two more things were adjusted after looking at the result. Splitting a twelve kilometre city into 320 metre destruction cells produced 233 groups, which meant a mid-range machine drawing its budget of groups covered a patch of city rather than a city; 480 metre cells bring it to 135. And the panel was reporting how much of the city was drawn while standing on the globe, where nothing is drawn at all, so those two rows now disappear when there is no city view to report on.
+
 ## 2026-08-23, Milestone 06: day, weather, atmosphere, and ocean foundation
 
 The world got a sky and a sea. Time passes, weather arrives and leaves, and the ocean is something you can wade into, stand in, swim on and sink under.

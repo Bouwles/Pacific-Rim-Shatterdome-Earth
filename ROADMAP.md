@@ -165,6 +165,31 @@ budgets. Created `src/world/worldClock.ts`, `weather.ts`, `ocean.ts`, `environme
 - `npm run typecheck`, `lint`, `format:check`, `test` (437), `smoke` (59), `build` all pass.
   **Next action:** none - complete. Proceed to Phase 2.
 
+## Phase 1.99 / Milestone 07 - Hong Kong vertical slice and living city layer
+
+**Depends on:** Milestone 05 (streamed terrain and collision heights), Milestone 06 (time, weather,
+quality presets).
+**Status:** done.
+**Scope:** an original stylised Hong Kong built from a district grammar, with city blocks, landmark
+slots, roads, harbour lanes, air corridors, evacuation zones, defence positions, destruction groups
+and two deployment routes; civilian, shipping, aircraft and military activity that responds to time,
+weather, alert level, evacuation, damage and recovery; pooled agent instances rather than AI
+civilians; and alert state saved per region. Created `src/data/districts.ts`,
+`src/world/cityLayout.ts`, `src/world/cityActivity.ts`, `src/engine/cityView.ts`,
+`src/debug/cityScenario.ts`. Raised the save envelope to version 4 with a real migration.
+**Acceptance tests:**
+
+- Recognisable by silhouette and activity: 710 blocks and 1,480 towers across seven districts, with
+  downtown asserted to be the tallest and the slums asserted to stack more, smaller towers. Fourteen
+  landmark slots, each naming the asset manifest id it will host.
+- An alert changes the city: at Hong Kong on Medium, going from calm to attack took civilians from
+  26 percent to 4, shipping from 31 to 2, military from 15 to 100, sounded the sirens, and started
+  the evacuation. The agent pool rebalanced from 107 vehicle and 45 crowd to 196 vehicle and 7 crowd.
+- Within budgets on Medium: 620 towers in 31 of 135 destruction groups, 53 city meshes, 0.09 MB, 74
+  draw calls, 1.0 ms frames at 143 fps.
+- `npm run typecheck`, `lint`, `format:check`, `test` (511), `smoke` (68), `build` all pass.
+  **Next action:** none - complete. Proceed to Phase 2.
+
 ## Phase 2 - Shatterdome walkable hub (vertical slice)
 
 **Depends on:** Phase 1.

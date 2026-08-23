@@ -340,6 +340,73 @@ gameplay bands, not oceanography.
 `water-entry-spray`, `fog-visibility-cue` or `wave-surface-motion`. Lowering
 quality may remove detail; it may never remove information.
 
+## City schemas (Milestone 07)
+
+### `DistrictDefinition` (src/data/districts.ts)
+
+A rule for making blocks, not a set of them.
+
+| Field                        | Type           | Constraint                                   |
+| ---------------------------- | -------------- | -------------------------------------------- |
+| `id`                         | `DistrictKind` | one of the seven district kinds              |
+| `blockSizeMeters`            | `number`       | positive                                     |
+| `streetWidthMeters`          | `number`       | non-negative                                 |
+| `minHeightMeters`            | `number`       | non-negative                                 |
+| `maxHeightMeters`            | `number`       | not below `minHeightMeters`                  |
+| `coverage`                   | `number`       | 0 to 1; fraction of the wedge actually built |
+| `towersPerBlock`             | `number`       | positive integer                             |
+| `irregularity`               | `number`       | 0 to 1; zero is a perfect grid               |
+| `colour`                     | `[n,n,n]`      | three channels within 0 to 1                 |
+| `neonDensity`                | `number`       | 0 to 1                                       |
+| `populationDensityThousands` | `number`       | non-negative; per square kilometre           |
+| `evacuationPriority`         | `number`       | positive integer; 1 clears first             |
+| `coastal`                    | `boolean`      | true where harbour lanes can reach           |
+
+`DistrictPlacement` positions one district as a wedge: inner and outer radius as
+fractions of the region radius, a bearing offset measured from the seaward
+bearing, and an arc width. Offsets are relative to the water so the plan rotates
+with the coast instead of being pinned to north.
+
+### `CityAlertState` (`CITY_ACTIVITY_SCHEMA_VERSION = 1`)
+
+`{ schemaVersion, level, sinceTick, evacuationProgress }`, carried on every
+region record. The only authoritative city state; everything else about the city
+is derived from it plus the layout, the clock and the weather.
+
+`level` is one of `calm`, `watch`, `warning`, `attack`, `recovery`. `sinceTick`
+is when that level was entered and drives the response ramp. `evacuationProgress`
+runs 0 to 1 and falls back during recovery, so a cleared city repopulates.
+
+### `AlertProfile` (src/world/cityActivity.ts)
+
+One row per level: multipliers for civilian, vehicle, shipping, aircraft and
+military activity, a siren intensity, an evacuation rate per tick, and whether the
+level is evacuating at all. A table rather than a branch, so every consumer reads
+the same numbers.
+
+### `CityLayout` (`CITY_LAYOUT_SCHEMA_VERSION = 1`)
+
+Generated, never authored and never saved. Contains blocks, landmark slots,
+roads, harbour lanes, air corridors, evacuation zones, defence positions,
+destruction groups, deployment routes, summary stats and a content digest.
+
+Every element carries a stable id derived from the region id. Blocks carry a
+`groupId` naming their destruction group, and each block belongs to exactly one
+group, so damage cannot double-count.
+
+`LandmarkSlot.assetSlot` names the asset manifest id the slot will host once a
+real model exists. Nothing resolves it yet; it is the named slot the asset
+pipeline was built for, and the Shatterdome landmark points at
+`shatterdome.jaeger-bay`.
+
+### Quality city budgets
+
+`QualityPreset` gained `maxCityBlocks`, `maxCityAgents` and `maxCityGroups`. A
+preset with fewer than one block or one group is refused: a city with no blocks
+is not a lower quality city, it is an absent one, and absence is information
+rather than detail. `city-alert-state` joined the required telegraph list, so no
+preset may stop showing what the alert level is.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

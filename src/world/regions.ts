@@ -1,5 +1,6 @@
 import { ContentRegistry, type RegistryEntry } from "../data/registry";
 import { validateGeoPosition, type GeoPosition } from "./coordinates";
+import { initialAlertState, validateAlertState, type CityAlertState } from "./cityActivity";
 
 /**
  * Strategic region records.
@@ -40,6 +41,17 @@ export interface RegionDefinition extends RegistryEntry {
   readonly populationThousands: number;
   /** True when the region can be deployed to directly. */
   readonly deploymentPoint: boolean;
+  /**
+   * Compass bearing, degrees, from the region centre toward open water. The
+   * whole city plan rotates with this rather than being pinned to north.
+   */
+  readonly seawardBearingDeg: number;
+  /**
+   * Id of the district plan this region is built from, or null where no city
+   * layout exists yet. Only regions with a plan get blocks, roads and lanes;
+   * the rest stay strategic records, which is the honest state for them.
+   */
+  readonly cityPlanId: string | null;
   readonly notes: string;
 }
 
@@ -59,6 +71,12 @@ export function validateRegion(region: RegionDefinition): string[] {
   }
   if (!Number.isFinite(region.populationThousands) || region.populationThousands < 0) {
     errors.push("populationThousands must be a non-negative number");
+  }
+  if (!Number.isFinite(region.seawardBearingDeg)) {
+    errors.push("seawardBearingDeg must be a finite number");
+  }
+  if (region.cityPlanId !== null && typeof region.cityPlanId !== "string") {
+    errors.push("cityPlanId must be a string or null");
   }
   return errors;
 }
@@ -80,10 +98,19 @@ export interface RegionRecord {
   /** Tick at which this region was last visited or resolved. */
   readonly lastVisitedTick: number;
   readonly tier: SimulationTier;
+  /** Alert level and evacuation progress. Authoritative, so it is saved. */
+  readonly alert: CityAlertState;
 }
 
 export function initialRecord(regionId: string): RegionRecord {
-  return { regionId, integrity: 1, safetyRating: 1, lastVisitedTick: 0, tier: "strategic" };
+  return {
+    regionId,
+    integrity: 1,
+    safetyRating: 1,
+    lastVisitedTick: 0,
+    tier: "strategic",
+    alert: initialAlertState(),
+  };
 }
 
 export function validateRegionRecord(record: RegionRecord, knownIds: ReadonlySet<string>): string[] {
@@ -100,6 +127,11 @@ export function validateRegionRecord(record: RegionRecord, knownIds: ReadonlySet
   }
   if (!SIMULATION_TIERS.includes(record.tier)) {
     errors.push(`${record.regionId}.tier must be one of: ${SIMULATION_TIERS.join(", ")}`);
+  }
+  if (typeof record.alert !== "object" || record.alert === null) {
+    errors.push(`${record.regionId}.alert must be an object`);
+  } else {
+    errors.push(...validateAlertState(record.alert).map((error) => `${record.regionId}.${error}`));
   }
   return errors;
 }

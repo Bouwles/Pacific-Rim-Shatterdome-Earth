@@ -6,7 +6,7 @@ import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 3;
+export const ROOT_SAVE_VERSION = 4;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;

@@ -81,9 +81,50 @@ export interface EnvironmentReadout {
   readonly telegraphs: number;
 }
 
+/**
+ * Live city instrumentation. Null outside a region with a layout, because there
+ * genuinely is no city there and zeroes would imply one that has not been built.
+ */
+export interface CityReadout {
+  readonly regionId: string;
+  readonly districtCount: number;
+  readonly blockCount: number;
+  readonly towerCount: number;
+  readonly landmarkCount: number;
+  readonly roadCount: number;
+  readonly harborLaneCount: number;
+  readonly defenseCount: number;
+  readonly destructionGroupCount: number;
+  readonly evacuationCapacityThousands: number;
+  readonly routeCount: number;
+  readonly alertLevel: string;
+  readonly evacuationProgress: number;
+  readonly civilianDensity: number;
+  readonly vehicleDensity: number;
+  readonly shippingDensity: number;
+  readonly militaryDensity: number;
+  readonly evacuationFlow: number;
+  readonly sirens: boolean;
+  readonly drawnBlocks: number;
+  readonly residentGroups: number;
+  readonly totalGroups: number;
+  readonly agents: number;
+  readonly agentCapacity: number;
+  readonly agentsByKind: Readonly<Record<string, number>>;
+  readonly cityMeshes: number;
+  readonly cityGpuBytes: number;
+  /**
+   * True when a city view exists to report on. The layout and the alert are real
+   * wherever the player is, but "drawn" and "agents" describe rendering, and
+   * reporting zeroes for them on the globe would imply a city that is not there.
+   */
+  readonly rendered: boolean;
+}
+
 export interface WorldReadout {
   readonly viewMode: WorldViewMode;
   readonly environment: EnvironmentReadout;
+  readonly city: CityReadout | null;
   readonly streaming: StreamingReadout | null;
   readonly position: GeoPosition;
   readonly localEast: number;
@@ -109,6 +150,8 @@ export interface WorldScreenCallbacks {
   onAdvanceHours(hours: number): void;
   onDiveToggle(): void;
   onQualityChange(level: string): void;
+  /** Raises or lowers the alert in the region the player is standing in. */
+  onAlertChange(level: string): void;
   onExit(): void;
 }
 
@@ -152,6 +195,7 @@ export function renderWorldScreen(
   container: HTMLElement,
   regions: readonly RegionDefinition[],
   qualityLevels: readonly { readonly id: string; readonly label: string }[],
+  alertLevels: readonly { readonly id: string; readonly label: string }[],
   callbacks: WorldScreenCallbacks,
 ): WorldScreenHandle {
   container.replaceChildren();
@@ -310,6 +354,45 @@ export function renderWorldScreen(
   qualityLabel.appendChild(qualitySelect);
   qualityRow.appendChild(qualityLabel);
 
+  // Alert controls sit with the other controls, above the readouts, and are
+  // hidden outside a region with a city because there would be nothing to alert.
+  const alertRow = document.createElement("div");
+  alertRow.className = "world-walk";
+  alertRow.dataset.section = "alert";
+  alertRow.hidden = true;
+  const alertLabel = document.createElement("span");
+  alertLabel.className = "world-walk-label";
+  alertLabel.textContent = "Alert";
+  alertRow.appendChild(alertLabel);
+
+  const alertButtons = new Map<string, HTMLButtonElement>();
+  for (const level of alertLevels) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary-button";
+    button.dataset.action = `alert-${level.id}`;
+    button.textContent = level.label;
+    button.addEventListener("click", () => callbacks.onAlertChange(level.id));
+    alertRow.appendChild(button);
+    alertButtons.set(level.id, button);
+  }
+
+  const city = document.createElement("div");
+  city.className = "world-readout world-city";
+  city.dataset.section = "city";
+  city.hidden = true;
+  city.append(
+    row("City", "city-region"),
+    row("Alert", "city-alert"),
+    row("Evacuation", "city-evacuation"),
+    row("Streets", "city-streets"),
+    row("Harbour / military", "city-harbour"),
+    row("Layout", "city-layout"),
+    row("Defence / routes", "city-defence"),
+    row("Drawn", "city-drawn"),
+    row("Agents", "city-agents"),
+  );
+
   const environment = document.createElement("div");
   environment.className = "world-readout world-environment";
   environment.dataset.section = "environment";
@@ -412,8 +495,10 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    alertRow,
     qualityRow,
     readout,
+    city,
     environment,
     streaming,
   );
@@ -510,6 +595,55 @@ export function renderWorldScreen(
       diveButton.textContent = env.diving ? "Surface" : "Dive";
       diveButton.classList.toggle("is-active", env.diving);
       if (qualitySelect.value !== env.qualityId) qualitySelect.value = env.qualityId;
+
+      const town = state.city;
+      city.hidden = town === null;
+      alertRow.hidden = town === null;
+      if (town) {
+        set("city-region", `${town.regionId}, ${town.districtCount} districts`);
+        set("city-alert", `${town.alertLevel}${town.sirens ? ", sirens" : ""}`);
+        set(
+          "city-evacuation",
+          `${percent(town.evacuationProgress)} clear, ${percent(town.evacuationFlow)} moving, ` +
+            `${town.evacuationCapacityThousands.toLocaleString()}k capacity`,
+        );
+        set(
+          "city-streets",
+          `${percent(town.civilianDensity)} civilians, ${percent(town.vehicleDensity)} traffic`,
+        );
+        set(
+          "city-harbour",
+          `${percent(town.shippingDensity)} shipping, ${percent(town.militaryDensity)} military`,
+        );
+        set(
+          "city-layout",
+          `${town.blockCount.toLocaleString()} blocks, ${town.towerCount.toLocaleString()} towers, ` +
+            `${town.landmarkCount} landmarks`,
+        );
+        set(
+          "city-defence",
+          `${town.defenseCount} positions, ${town.roadCount} roads, ` +
+            `${town.harborLaneCount} lanes, ${town.routeCount} routes`,
+        );
+        const drawnRow = city.querySelector<HTMLElement>('[data-field="city-drawn"]')?.parentElement;
+        const agentRow = city.querySelector<HTMLElement>('[data-field="city-agents"]')?.parentElement;
+        if (drawnRow) drawnRow.hidden = !town.rendered;
+        if (agentRow) agentRow.hidden = !town.rendered;
+        set(
+          "city-drawn",
+          `${town.drawnBlocks.toLocaleString()} towers in ${town.residentGroups}/${town.totalGroups} groups, ` +
+            `${town.cityMeshes} meshes, ${megabytes(town.cityGpuBytes)}`,
+        );
+        const kinds = Object.entries(town.agentsByKind)
+          .map(([kind, count]) => `${count} ${kind}`)
+          .join(", ");
+        set("city-agents", `${town.agents}/${town.agentCapacity} pooled${kinds ? ` (${kinds})` : ""}`);
+
+        for (const [level, button] of alertButtons) {
+          button.classList.toggle("is-active", level === town.alertLevel);
+          button.setAttribute("aria-pressed", String(level === town.alertLevel));
+        }
+      }
 
       const stream = state.streaming;
       streaming.hidden = stream === null;

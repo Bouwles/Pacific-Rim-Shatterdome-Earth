@@ -4,6 +4,7 @@ import { LEGACY_UNWRAPPED_VERSION, ROOT_SAVE_VERSION, detectSaveVersion, type Ro
 import { sectorIdAt } from "../world/cubeSphere";
 import { WORLD_SCHEMA_VERSION } from "../world/worldState";
 import { emptyEnvironmentSnapshot } from "../world/environment";
+import { initialAlertState } from "../world/cityActivity";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 
 /**
@@ -119,8 +120,41 @@ const addEnvironmentSection: MigrationStep = {
       schemaVersion: 3,
       world: {
         ...world,
-        schemaVersion: WORLD_SCHEMA_VERSION,
+        // The world schema version as it stood at this step, not the current
+        // constant: writing today's number here would make a migrated file claim
+        // a shape it does not have and the next step would skip it.
+        schemaVersion: 2,
         environment: emptyEnvironmentSnapshot(),
+      },
+    };
+  },
+};
+
+/**
+ * Adds alert state to every region record, introduced by Milestone 07.
+ *
+ * A version 3 save has no alert anywhere, because no region could be alerted.
+ * Every record therefore starts calm with nobody evacuated, which is exactly the
+ * state a fresh world begins in and the only honest reading of a file that never
+ * recorded one. Integrity, safety and tier are untouched.
+ */
+const addRegionAlerts: MigrationStep = {
+  id: "3",
+  fromVersion: 3,
+  toVersion: 4,
+  description: "Add alert level and evacuation progress to every region record.",
+  apply: (document) => {
+    const world = (
+      typeof document["world"] === "object" && document["world"] !== null ? document["world"] : {}
+    ) as Record<string, unknown>;
+    const regions = Array.isArray(world["regions"]) ? (world["regions"] as Record<string, unknown>[]) : [];
+    return {
+      ...document,
+      schemaVersion: 4,
+      world: {
+        ...world,
+        schemaVersion: WORLD_SCHEMA_VERSION,
+        regions: regions.map((record) => ({ ...record, alert: initialAlertState() })),
       },
     };
   },
@@ -143,6 +177,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(wrapBareSnapshot);
   registry.register(addWorldSection);
   registry.register(addEnvironmentSection);
+  registry.register(addRegionAlerts);
   return registry;
 }
 

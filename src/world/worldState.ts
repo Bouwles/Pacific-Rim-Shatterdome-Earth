@@ -12,9 +12,10 @@ import {
 import { EnvironmentSystem, validateEnvironmentSnapshot, type EnvironmentSnapshot } from "./environment";
 import type { ClimateWeatherProfile } from "./weather";
 import type { WorldClockOptions } from "./worldClock";
+import { advanceAlert, setAlertLevel, type AlertLevel } from "./cityActivity";
 
-/** Raised to 2 by Milestone 06, which added the environment section. */
-export const WORLD_SCHEMA_VERSION = 2;
+/** Raised to 3 by Milestone 07, which added alert state to every region record. */
+export const WORLD_SCHEMA_VERSION = 3;
 
 /**
  * Climate for anywhere the player is not inside a named region. Open water is
@@ -94,6 +95,39 @@ export class WorldState {
   /** Advances the world clock and weather. The only thing that moves time forward. */
   advanceEnvironment(ticks: number): void {
     this.environment.advance(ticks, this.position.latitudeDeg);
+  }
+
+  /**
+   * Advances every region's evacuation. Cheap by construction: a region is one
+   * alert record, not a crowd, so this is a few arithmetic operations per region
+   * however large the city is.
+   */
+  advanceAlerts(ticks: number): void {
+    if (ticks <= 0) return;
+    for (const [regionId, record] of this.recordsById) {
+      const alert = advanceAlert(record.alert, ticks);
+      if (alert !== record.alert) this.recordsById.set(regionId, { ...record, alert });
+    }
+  }
+
+  /** Raises or lowers a region's alert. Throws on an unknown region rather than doing nothing. */
+  setRegionAlert(regionId: string, level: AlertLevel, tick: number): RegionRecord {
+    const record = this.recordsById.get(regionId);
+    if (!record) {
+      throw new Error(
+        `Unknown region "${regionId}". Known regions: ${this.regionRegistry
+          .all()
+          .map((entry) => entry.id)
+          .join(", ")}`,
+      );
+    }
+    const updated: RegionRecord = { ...record, alert: setAlertLevel(record.alert, level, tick) };
+    this.recordsById.set(regionId, updated);
+    return updated;
+  }
+
+  alertFor(regionId: string): RegionRecord["alert"] | undefined {
+    return this.recordsById.get(regionId)?.alert;
   }
 
   get playerPosition(): GeoPosition {

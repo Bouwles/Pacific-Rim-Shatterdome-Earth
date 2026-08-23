@@ -149,3 +149,46 @@ Five bands in `src/world/ocean.ts`, shallowest first: shoreline, shallows, shelf
 deep and abyssal. Each carries underwater visibility, a darkness fraction and
 whether a body can stand there. These are gameplay bands rather than oceanography
 and are not registry entries, because nothing authors them.
+
+## Districts (Milestone 07)
+
+Seven entries in `src/data/districts.ts`, registered through
+`ContentRegistry<DistrictDefinition>`. A district is a rule for making blocks, so
+these numbers are a grammar rather than a set of buildings.
+
+| id          | Display name         | Block size | Heights     | Towers | Density | Evac |
+| ----------- | -------------------- | ---------- | ----------- | ------ | ------- | ---- |
+| downtown    | Central towers       | 110 m      | 90 to 420 m | 2      | 42k/km2 | 2    |
+| waterfront  | Harbour front        | 130 m      | 40 to 240 m | 1      | 28k/km2 | 1    |
+| docks       | Container docks      | 190 m      | 12 to 46 m  | 1      | 4k/km2  | 3    |
+| slums       | Bone Slums           | 58 m       | 8 to 54 m   | 4      | 96k/km2 | 1    |
+| shatterdome | Shatterdome precinct | 240 m      | 30 to 110 m | 1      | 3k/km2  | 5    |
+| hillside    | Ridge terraces       | 96 m       | 24 to 120 m | 2      | 18k/km2 | 4    |
+| industrial  | Works and yards      | 160 m      | 16 to 72 m  | 1      | 9k/km2  | 3    |
+
+`HONG_KONG_DISTRICT_PLAN` places all seven as wedges measured from the region's
+seaward bearing. It is an original stylised arrangement of the shapes a dense
+harbour city has. No real street plan or map geometry is reproduced.
+
+Only Hong Kong has a plan. Every other region carries `cityPlanId: null` and
+remains a strategic record.
+
+## Landmark slots (Milestone 07)
+
+Fourteen slots are generated for Hong Kong, each naming the asset manifest id it
+will host once a real model exists: `shatterdome.jaeger-bay`,
+`shatterdome.launch-gantry`, `shatterdome.dry-dock`, `building.signature-tower`,
+`building.ferry-terminal`, and props for comms spires, gantry cranes, container
+stacks, broadcast masts, harbour arches, water towers, salvage rigs, ridge beacons
+and foundry stacks.
+
+Nothing resolves these yet. They are named slots, not registered assets, and only
+`shatterdome.jaeger-bay` corresponds to a manifest that already ships.
+
+## Alert levels (Milestone 07)
+
+Five profiles in `src/world/cityActivity.ts`: calm, watch, warning, attack and
+recovery. Each declares multipliers for civilian, vehicle, shipping, aircraft and
+military activity, a siren intensity, and an evacuation rate. They are world-layer
+tables rather than registry entries, because they describe behaviour rather than
+authored content.

@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 06. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 07. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -21,6 +21,7 @@ src/
     skyView.ts         sun, moon, ambient, sky colour and fog, all driven from one environment sample
     weatherView.ts     rain, snow, spray, lightning and cloud, capacity-capped by quality preset
     ambientAudio.ts    synthesised ambience filtered by the world layer's audio environment
+    cityView.ts        the city drawn: one mesh per destruction group, pooled agents on lanes
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
     clock.ts           FixedStepClock — accumulator-pattern fixed timestep, epsilon-guarded, substep-capped
     loop.ts             SimulationLoop — render-delta → ticks, pause/resume/single-step/time scale,
@@ -54,6 +55,8 @@ src/
     weather.ts          seeded weather fronts, per-kind effects, transitions, wetness
     ocean.ts            wave sampling, depth zones, water states, buoyancy, audio environment
     environment.ts      the query surface AI and combat read; composes clock, weather and ocean
+    cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
+    cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
   workers/             ← the only code that runs off the main thread
     protocol.ts         versioned, validated terrain request/response messages
     terrainWorker.ts    worker entry: queued generation, cancellation, buffer transfer
@@ -72,6 +75,7 @@ src/
     regions.ts           the shipped strategic regions and the terrain anchors they produce
     biomes.ts            biome table, surface classes, climate bands
     climates.ts          what weather each climate zone produces
+    districts.ts         district grammar rows and the Hong Kong placement plan
     quality.ts           Low to Cinematic presets with explicit particle, shadow and water budgets
   debug/
     overlay.ts          DOM readout + transport controls (pause / step / time scale), F3 toggle
@@ -373,11 +377,70 @@ sees and what the simulation believes cannot drift apart. `WeatherView` caps eve
 emitter at construction from the active quality preset. `AmbientAudio` is a
 synthesised noise bed filtered by the world layer's decision, not a sound system.
 
+## The city
+
+Three modules, split the same way the environment is: a grammar, a state model,
+and a renderer that reads both and owns nothing.
+
+**`data/districts.ts`** is a district grammar. A district is a rule for making
+blocks, not a set of them: block size, street width, height range, coverage,
+towers per block, irregularity, colour, neon density, population density and
+evacuation priority. Adding a district is a row. The Hong Kong plan places seven
+of them as wedges measured from the region's seaward bearing, so the whole plan
+rotates with the coast rather than being pinned to compass north.
+
+The layout is original and stylised. It takes the shapes a dense harbour city
+has, towers on the waterfront with a ridge behind, docks along the shore, an
+improvised district grown against the Shatterdome wall, and arranges them from a
+seed. No real street plan or map geometry is reproduced, and none is claimed.
+
+**`world/cityLayout.ts`** turns that plan into blocks, landmark slots, roads,
+harbour lanes, air corridors, evacuation zones, defence positions, destruction
+groups and two deployment routes. Pure and deterministic, so a layout is cached
+rather than saved: rebuilding gives the same city.
+
+Positions are metres east and north of the region centre, never geodetic and
+never in the floating-origin frame. The region centre does not move, so a rebase
+moves one transform rather than every instance. Layout is deliberately not
+terrain-aware; heights are read from the streamed collision field at render time,
+because a layout must not depend on which sectors happen to be loaded.
+
+Every block carries a destruction group id. That is what makes the city
+streamable and damageable at the same time, and it is the structural answer to
+the failure mode of a single city mesh.
+
+**`world/cityActivity.ts`** is a density field, not a crowd. It answers how much
+is moving in a district and of what kind, and nothing in it knows where any
+individual vehicle is. That is the structural answer to the other failure mode:
+there is no per-civilian state anywhere, and nowhere for it to live.
+
+Alert level and evacuation progress are the only authoritative parts, carried on
+each region record and saved. Alert profiles are a table, so sirens, traffic,
+shipping and the military cannot disagree about what "warning" means. Response
+ramps over about fifteen in-game seconds rather than switching, and evacuation
+flow peaks in the middle of an evacuation because nobody is moving before it
+starts and nobody is left once it is done.
+
+**`engine/cityView.ts`** draws it. One mesh per destruction group, capped by the
+quality preset nearest-first so a lower preset draws a smaller city rather than a
+blurrier one. Agents are pooled thin instances allocated once at the budget;
+only `thinInstanceCount` changes as activity rises and falls, and each agent's
+position is a function of its index, its lane and the tick. Ground heights are
+sampled once into a grid at build time, because asking the streamer per agent per
+frame cost a geodetic conversion and a sector lookup each time.
+
+Military traffic rides the same pool as civilian traffic rather than getting its
+own mesh: what an alert changes is how many vehicles there are, not how many
+kinds of mesh exist. Counts are reported per kind as well as in total, because a
+total hides the thing that matters - under attack the crowds vanish while
+military traffic fills the roads, so the total barely moves.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads
 directly: particle ceiling and rate, reflection mode, shadow map size, water grid
-resolution, wave octaves, how many water sheets animate, and a fog multiplier.
+resolution, wave octaves, how many water sheets animate, a fog multiplier, and
+ceilings on city blocks, city agents and resident destruction groups.
 
 The rule the table exists to enforce is that **lowering quality removes detail,
 never information**. Each preset lists the telegraphs it draws, and the registry

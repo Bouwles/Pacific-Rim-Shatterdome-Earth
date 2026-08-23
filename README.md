@@ -31,9 +31,12 @@ The project is built in numbered milestones. Everything listed here actually run
 - Weather that matters rather than decorates. Fog and darkness cut how far you can see, wet ground is slippery and ice is much worse, wind and rain spoil your aim, and lightning briefly lights the whole world back up
 - An ocean you can wade into, stand and fight in chest deep, swim on, and dive under, with waves that move, depth zones that get darker and murkier the further down you go, and sound that loses all its treble the moment you go below the surface
 - Low, Medium, High and Cinematic quality settings where every setting is a real budget. Turning quality down removes detail and never removes information: the lightning, the spray and the fog you need to read a fight are drawn at every level
+- A Hong Kong you can stand in, grown from a district grammar: towers along the harbour front, a ridge terraced behind them, container docks down the shore, the Shatterdome precinct, and the Bone Slums pressed against its wall. Roads, shipping lanes, air corridors, evacuation muster points, defence positions and a Jaeger deployment corridor down to the water
+- A city that reacts. Raise the alert and the sirens go up, the streets empty, the harbour clears, the military fills the roads and people start moving to muster points. Drop it back to recovery and the city comes home
+- Traffic, ships, aircraft and crowds drawn as pooled instances on real lanes rather than as thousands of simulated people, so a district of ninety thousand costs the same to run as an empty one
 - Offline saves in IndexedDB with named slots, thumbnails, play time, rotating autosaves and backups, export and import, corruption recovery from the last good backup, versioned save migrations, and a storage panel that reports usage and warns when the browser may evict data
 
-Not built yet: the walkable Shatterdome, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons, and nothing yet reads the weather numbers because there is no AI or combat to slow down or blind. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
+Not built yet: the walkable Shatterdome interior, Jaeger combat, kaiju behaviour, the economy, copilots, and everything else in the list below. Only Hong Kong has a city; the other regions are still records on a map. Nothing raises an alert on its own yet, so you raise it yourself from the panel, and nothing knocks the city down yet even though it is built in pieces ready for it. The terrain is broad strokes rather than real geography, the buildings are placeholder blocks, and the traffic markers do not move. There is no player controller yet, so you move around with teleport and walk buttons, and nothing yet reads the weather numbers because there is no AI or combat to slow down or blind. Those arrive milestone by milestone. See ROADMAP.md for the order and IMPLEMENTATION\_STATE.md for exactly where things stand.
 
 ### Using your own models
 
@@ -123,7 +126,7 @@ npm run smoke         Playwright browser tests
 src/simulation   fixed step clock, loop, kernel, commands, events, seeded RNG, state hashing
 src/entities     entity ids, lifecycle, components
 src/assets       asset manifests, procedural generators, model validation, resolver
-src/world        globe coordinates, cube sphere sectors, floating origin, regions, terrain, streaming, clock, weather, ocean
+src/world        globe coordinates, sectors, floating origin, regions, terrain, streaming, clock, weather, ocean, city
 src/workers      terrain generation off the main thread
 src/saves        save schema, migrations, IndexedDB storage, backups and recovery
 src/engine       Babylon engine selection and the boot scene

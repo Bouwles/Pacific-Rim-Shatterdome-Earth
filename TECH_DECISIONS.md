@@ -440,3 +440,77 @@ across half the CPUs, and every test now starts a WebGPU context, a terrain work
 and a set of particle systems. Eight at once thrashed the GPU and timed each other
 out, failing a different test on every run for no real reason. A serial suite is
 slower and gives the same answer twice, which is the only property a gate needs.
+
+## 2026-08-23, Milestone 07
+
+**The city is a grammar, not a model.** A district row says how to make blocks;
+`generateCityLayout` makes them. Adding a district is a row rather than a branch,
+and the whole city is a pure function of the region, the seed and the plan, so it
+is cached rather than saved and rebuilds identically.
+
+**The plan is measured from the seaward bearing, not from north.** Region content
+declares which way open water lies, and every district offset is relative to it,
+so the harbour lands on the water wherever a region sits on the globe. The
+bearing is authored because the terrain generator has no notion of which way a
+coast faces.
+
+**Layout is in the region-centre frame and is not terrain-aware.** The region
+centre never moves, so a floating origin rebase moves one transform rather than
+every instance, and a layout cannot depend on which sectors happen to be loaded.
+Heights come from the streamed collision field at render time.
+
+**Every block carries a destruction group id.** One mesh per group is the
+structural answer to the "one monolithic city mesh" failure mode: the city can be
+streamed and later damaged in pieces because it was never assembled into one
+thing. A block belongs to exactly one group, so damage cannot double-count.
+
+**Activity is a density field, not a crowd.** A district is one `ActivitySample`,
+and there is no per-civilian state anywhere in the codebase. That is the
+structural answer to the "thousands of full AI civilians" failure mode: it is not
+a budget that could be exceeded, it is a shape that has nowhere to put them.
+
+**Agent pools are allocated once at the quality budget.** Only
+`thinInstanceCount` changes as activity rises and falls, so a busy city allocates
+nothing. Positions are a function of index, lane and tick, which means an agent
+has no state to update or to save.
+
+**Military traffic shares the civilian pool.** What an alert changes is how many
+vehicles are on the roads, not how many kinds of mesh exist. Counts are reported
+per kind as well as in total, because the total barely moves during an alert while
+every kind moves a long way, and reporting only the total would hide exactly the
+thing the milestone claims to do.
+
+**Alert profiles are a table.** Sirens, traffic, shipping, aircraft and the
+military all read the same row, so they cannot disagree about what "warning"
+means. Adding a level is a row.
+
+**Only alert level and evacuation progress are saved.** They are the only city
+state that is genuinely history. The layout is derived from the seed; saving it
+would make save size grow with how much of the world had been visited and would
+freeze old saves against future changes to the grammar.
+
+**Each migration writes the world schema version as it stood at that step.**
+Writing today's constant into an older step makes a migrated file claim a shape it
+does not have, and the next step in the chain has nothing to recognise. This was
+corrected in the version 1 to 2 step while adding the version 3 to 4 one.
+
+**Ground heights are sampled once into a grid.** Asking the streamer per agent per
+frame costs a geodetic conversion, a tangent basis and a sector lookup each time.
+Sampling the terrain once into a 65 by 65 field at build time turns the same query
+into four array reads.
+
+**Frame rate is not asserted in browser tests.** Playwright's Chromium falls back
+to a software rasteriser, so an fps reading from it measures the test runner
+rather than this code: the same scene read 19 fps there and 144 in a real browser.
+The tests assert draw calls and that the simulation keeps ticking, which are
+portable; frame rates are measured by hand and recorded in PERFORMANCE_BUDGETS.md.
+
+**The panel hides rendering figures where nothing is rendered.** The layout and the
+alert are real wherever the player stands, so those rows stay on the globe. "How
+much of the city is drawn" is not, so it goes. Reporting zeroes would imply a city
+that is not there, which is the fake-UI rule applied to a readout rather than to a
+button.
+
+**Lower quality draws a smaller city, not a blurrier one.** Groups are taken
+nearest-first from the region centre and capped, so what survives on Low is the
+centre, which is the part that carries the silhouette.
