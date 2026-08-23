@@ -453,6 +453,76 @@
       #uiRoot .sd-pause h2 {
         margin: 0 0 6px;
       }
+      /* The pilot layer sits opposite the world panel so both can be read at once. */
+      #uiRoot .screen-pilot {
+        max-width: none;
+        width: min(360px, 32vw);
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 13px;
+        max-height: calc(100vh - 140px);
+        overflow-y: auto;
+      }
+      #uiRoot .pilot-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      #uiRoot .pilot-header h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      #uiRoot .pilot-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 12px;
+      }
+      #uiRoot .pilot-row-label {
+        color: #6f97b0;
+      }
+      #uiRoot .pilot-row button {
+        padding: 3px 10px;
+        font-size: 12px;
+      }
+      #uiRoot .pilot-row button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
+      }
+      #uiRoot .pilot-row select {
+        font: inherit;
+        padding: 3px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .pilot-comfort label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #a9c3d6;
+      }
+      #uiRoot .pilot-comfort input[type="range"] {
+        width: 90px;
+      }
+      #uiRoot .pilot-readout {
+        border-top: 1px solid #1d3244;
+        padding-top: 6px;
+      }
+      #uiRoot .pilot-hint {
+        margin: 0;
+        font-size: 11px;
+        color: #7f9fb4;
+      }
+
       /* The save panel is a working list, not a dialog. */
       #uiRoot .screen-saves {
         max-width: none;

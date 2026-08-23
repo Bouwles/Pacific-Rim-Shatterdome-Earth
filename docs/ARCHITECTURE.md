@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 08. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 09. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -23,6 +23,8 @@ src/
     ambientAudio.ts    synthesised ambience filtered by the world layer's audio environment
     cityView.ts        the city drawn: one mesh per destruction group, pooled agents on lanes
     interiorView.ts    one Shatterdome room at a time: shell, fixtures, pooled staff, its own camera
+    jaegerView.ts      the piloted machine: model, footstep decals, dust, scale references, its camera
+    pilotInput.ts      keyboard and mouse for a piloted machine, as two plain snapshots
     onFootInput.ts     the only file that touches a key or a mouse event, turned into an input snapshot
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
     clock.ts           FixedStepClock — accumulator-pattern fixed timestep, epsilon-guarded, substep-capped
@@ -59,6 +61,11 @@ src/
     environment.ts      the query surface AI and combat read; composes clock, weather and ocean
     cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
     cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
+  jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
+    locomotion.ts      states, acceleration, turn authority, ground queries, footfalls, reactions
+    camera.ts          three rigs, comfort settings, impulse, obstruction, lossless rig switching
+    inputBuffer.ts     short queue of presses waiting for a legal moment
+    pilotSession.ts    one piloted machine: pose, camera, comfort and buffer in one object
   shatterdome/         ← the complex: authoritative state, rooms, movement; no Babylon, no DOM
     facilityState.ts   facilities, tiers, construction orders, power and crews, the saved snapshot
     interiorLayout.ts  facility records to rooms: fixtures, doorways, spawn points, the Conn-Pod
@@ -99,6 +106,7 @@ src/
     saveScreen.ts        save/load panel with storage health
     worldScreen.ts       globe readouts, teleport and walk controls
     shatterdomeScreen.ts heads-up layer, terminal and berth panels, Conn-Pod instruments, pause menu
+    pilotScreen.ts       pilot heads-up layer: state, speed, heading lag, camera and comfort controls
 tests/
   unit/                clock, rng, rngStreams, hash, entity, events, loop, registry, jaegers,
                         assetManifest, assetInspection, saveSchema, saveMigrations,
@@ -498,6 +506,75 @@ filled from live facility state, so nobody can claim a tier the complex is not a
 they are at, what is being built and how far along it is, where the player was
 standing and which machine they had selected. The rooms are laid out again from
 those records on load.
+
+## Jaeger locomotion and cameras
+
+Four modules in `src/jaegers/`, none of which import Babylon or the DOM, plus a
+view, an input source and a heads-up layer that read what they produce.
+
+**One controller, many machines.** Every difference between a heavy tank and an
+agile frame is a row in `LocomotionProfile`: speeds, acceleration, braking, turn
+rates, step height, slope limit, stride, booster and get-up time. `stepJaeger`
+has no idea which machine it is driving. Three profiles ship, and the tests run
+the same courses with all three.
+
+**Mass is acceleration, not shake.** A Jaeger takes seconds to reach a walk,
+keeps rolling after the stick is released, turns badly at a run and well when
+planted, and covers a fixed stride per footfall. Camera shake is the smallest
+part of it and the first thing a player can switch off.
+
+**States are a table and transitions are an ordered list of predicates.** Twenty
+states, from `idle` through `wade`, `swim` and `booster` to `knockdown` and
+`death`, each carrying its own speed factor, turn authority, whether it listens
+to the player at all, and a minimum length. The resolver walks the list in
+priority order: death outranks a reaction, a reaction outranks the water, the
+water outranks the stick. Adding a state is a row in the right place, never a
+branch.
+
+**The animation contract is distance, not time.** The controller emits a stride
+phase and a footfall event every `strideMeters` of ground actually covered, with
+the foot that landed. An animation system reads those. Nothing in the controller
+knows what a clip is called, and the tests assert measured stride against
+declared stride, which is what skating would break.
+
+**The ground is queried before it is stood on.** A probe reaches at least half a
+stride ahead, in the direction of travel, and further at speed. Rise under
+`LEDGE_THRESHOLD_METERS` is ground texture that a 75 m machine walks over; rise
+inside `stepUpMeters` is a ledge it steps onto; anything steeper than the slope
+limit is a wall that stops it. The probe has a floor rather than being purely
+velocity scaled, because a stopped machine that probes zero metres reads clear
+ground and creeps into a cliff face.
+
+**The body is never snapped to the camera.** Where the player looks is an
+intent. The body turns toward it at `turnRate * turnFactor` and no faster, so a
+machine at a run swings wide and a planted one comes round quickly. The heading
+lag is on the panel, in degrees.
+
+**Three rigs, one state.** Exploration, combat and cockpit differ only in
+geometry, and every rig is expressed as a multiple of the machine's own height,
+so a 68 m frame and an 82 m frame are both framed correctly with no per-machine
+camera table. Switching rigs preserves heading intent, pitch, target lock,
+comfort and the input buffer: the eye moves and nothing else does.
+
+**Comfort is a first-class setting.** Shake scale, reduced motion, field of view
+offset, invert look and sensitivity. Reduced motion removes sway, roll and the
+speed-driven pull-back; the framing that communicates scale stays.
+
+**Scale is shown, not asserted.** `jaegerView` puts eight-metre street lights
+along the machine's path, aircraft and birds crossing at altitude, footstep
+decals that stay on the ground behind it, dust sized by how hard a foot landed,
+and sound that arrives late from far away at 343 m/s. The panel reports how many
+of each are drawn.
+
+**Buffered input.** A press is queued with a window and expires on its own. The
+buffer takes the oldest press the caller says is legal, so the same queue serves
+locomotion now and combat later, and a press made while the machine was knocked
+down expires unused rather than firing when it stands up.
+
+**Nothing new is saved.** A piloted machine is a live session, not a record: the
+world position it drives to is already saved through `WorldState`, and the
+roster machine it uses is already saved by the Shatterdome. No migration was
+needed.
 
 ## Quality presets
 

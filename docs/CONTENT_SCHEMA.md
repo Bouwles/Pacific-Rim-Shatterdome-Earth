@@ -469,6 +469,54 @@ stable and derived from the facility id.
 room draws. A preset below one is refused, because an empty room is not a cheaper
 room, it is an abandoned one.
 
+## Locomotion schemas (Milestone 09)
+
+### `LocomotionProfile` (src/data/jaegers.ts)
+
+Every field is positive and validated; the ones with a relationship are checked
+against each other rather than only for sanity.
+
+| Field                                                             | Meaning                                                               | Constraint             |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
+| `heightMeters`                                                    | Machine height; drives camera framing, water states and stride limits | > 0                    |
+| `walkSpeedMps` / `runSpeedMps`                                    | Cruise and committed pace                                             | run > walk             |
+| `strafeSpeedMps` / `guardSpeedMps`                                | Sidestep and guarded pace                                             | both <= walk           |
+| `accelerationMps2` / `brakingMps2`                                | How long mass takes to gather and to shed                             | > 0                    |
+| `turnRateDegPerSecond`                                            | Turn authority while moving                                           | < turn-in-place        |
+| `turnInPlaceRateDegPerSecond`                                     | Turn authority while planted                                          | > 0                    |
+| `stepUpMeters`                                                    | Ledge height it walks onto                                            | <= a quarter of height |
+| `maxSlopeDeg`                                                     | Steepest climbable ground                                             | < 90                   |
+| `strideMeters`                                                    | Metres per footfall; the animation contract                           | <= height              |
+| `boosterImpulseMps` / `boosterSeconds` / `boosterRechargeSeconds` | Burst thrust                                                          | > 0                    |
+| `landingImpulseScale`                                             | Camera impulse per metre per second of fall                           | > 0                    |
+| `getUpSeconds`                                                    | How long it takes to stand back up                                    | > 0                    |
+
+### `JaegerStateDefinition` (src/jaegers/locomotion.ts)
+
+`{ id, speedFactor, turnFactor, acceptsInput, minSeconds, planted, reaction,
+description }` for each of the twenty states. Validation rejects a state that
+ignores the player while keeping full turn authority, and every state needs a
+description, because the table is the documentation.
+
+### `CameraRig` and `CameraComfort` (src/jaegers/camera.ts)
+
+Rig geometry is expressed in multiples of machine height (`distanceMeters: 2.6`
+means 2.6 body heights back). `validateComfort` rejects a shake scale outside 0
+to 1, a field of view offset beyond 25 degrees either way, and a sensitivity of
+zero.
+
+### Quality budgets added
+
+`maxFootstepDecals` and `maxScaleReferences` join the preset table.
+`maxScaleReferences` has a floor of 8 and `maxFootstepDecals` a floor of 4: how
+big the machine is counts as information rather than detail, so no preset may
+drop it to nothing.
+
+### Nothing new is saved
+
+A pilot session is live state. `ROOT_SAVE_VERSION` is unchanged at 5 and no
+migration was added.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

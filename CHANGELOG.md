@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-08-24, Milestone 09: Jaeger locomotion, scale, and camera foundation
+
+You can take a machine out and drive it. Pick one from the world map's ground view, press take the machine out, and the roster entry you were inspecting in a Shatterdome berth is standing in Hong Kong under your control.
+
+- One controller for every machine. Everything that separates a heavy tank from an agile frame is a row of numbers: speeds, acceleration, braking, turn rates, step height, slope limit, stride length, booster, and how long it takes to get back up. The code driving them has no idea which one it is driving, and three machines ship to prove it.
+- Mass is acceleration, not camera shake. A Jaeger takes a couple of seconds to reach a walk, keeps rolling for a long moment after you let go, turns badly while running and well while planted, and puts a foot down every twenty seven metres of ground it actually covers.
+- Twenty states, from standing and starting through walking, running, strafing, guarded movement, turning on the spot and stopping, to stepping up, falling, landing, wading, swimming, walking the seabed, boosting, being knocked back, being knocked down, getting up, limping on a dead leg, and dying.
+- The ground is checked before it is stood on. Wrecked cars and rubble are walked straight over, a loading ramp is stepped onto, a cliff face stops the machine rather than being climbed, and walking off a shelf is a real fall with a real landing.
+- Three cameras: a wide chase camera for exploring, a tighter one for fighting, and one inside the Conn-Pod. Switching between them changes where your eye is and nothing else. Where you were looking, what you had locked, your comfort settings and the controls all survive the swap.
+- Comfort controls sit on the pilot panel rather than in a settings menu, because that is where you want them when a camera is making you ill. A motion slider, reduced motion, invert look. Turning all of it off does not turn off what tells you how big the thing is.
+- Scale is shown rather than claimed. Eight metre street lights go past the ankles, aircraft and birds cross overhead, footprints stay on the ground behind you, dust rises where a foot landed, and a footfall a kilometre away is heard three quarters of a second after it is seen.
+- Buffered input. A booster press made slightly too early still fires when the machine can act on it, and one made while the machine was flat on its back expires instead of going off when it stands up.
+- Nothing new is saved, because nothing new is history. A machine out on the ground is a live session, and where it walked is already saved by the world.
+
+Three defects were found, two of them only by looking at it.
+
+The machine was invisible. The streamer draws a white box where the player is when nothing else represents them, and it was standing in exactly the same spot as the Jaeger, at exactly the same height, hiding it completely. It is switched off while a machine is being driven.
+
+The pilot panel wiped the world panel. It cleared the container it was rendering into, which took the streaming readout down with it. It appends now.
+
+And the heading lag on the panel read zero whenever the stick was released, because it was measuring against the steering intent, which is null when nobody is steering. It measures against where the player is looking instead, which is a number that means something at all times.
+
 ## 2026-08-24, Milestone 08: Explorable Shatterdome and on-foot player
 
 New Game no longer lands on a screen that says the Shatterdome is not implemented. It puts you on the command floor, at eye height, with six people on shift around you and the Marshal telling you how much power is on the board.

@@ -72,6 +72,9 @@ function fillNoise(buffer: AudioBuffer, seed: number): void {
   }
 }
 
+/** Metres per second. What makes a distant footfall arrive late. */
+export const SPEED_OF_SOUND_MPS = 343;
+
 export class AmbientAudio {
   private context: AudioContext | null = null;
   private airGain: GainNode | null = null;
@@ -181,6 +184,56 @@ export class AmbientAudio {
     this.masterGain.gain.linearRampToValueAtTime(Math.min(0.28, environment.ambientLevel * 0.28), at);
     this.airGain.gain.linearRampToValueAtTime(1 - environment.waterMix, at);
     this.waterGain.gain.linearRampToValueAtTime(environment.waterMix, at);
+  }
+
+  /**
+   * A footfall, a landing or a burst, heard from where the camera is.
+   *
+   * Sound travels at 343 m/s, and a 75 m machine is heard from far enough away
+   * for that to be perceptible: a step a kilometre off lands three seconds after
+   * it is seen. The delay is scheduled on the audio clock rather than with a
+   * timer, so it survives a stalled frame, and the whole layer is silent rather
+   * than fabricated when the browser has refused audio.
+   */
+  impact(intensity: number, distanceMeters: number, lowPassHz = 900): void {
+    const context = this.context;
+    const master = this.masterGain;
+    if (this.disposed || !context || !master || this.status !== "running") return;
+    const strength = Math.min(1, Math.max(0, intensity));
+    if (strength <= 0.01) return;
+
+    const delaySeconds = Math.min(4, Math.max(0, distanceMeters) / SPEED_OF_SOUND_MPS);
+    const startAt = context.currentTime + delaySeconds;
+    // Distance also costs level and treble, which is most of why something far
+    // away sounds far away.
+    const attenuation = 1 / (1 + distanceMeters / 400);
+
+    const oscillator = context.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(38 + strength * 26, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(22, startAt + 0.45);
+
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(Math.max(120, lowPassHz * attenuation), startAt);
+
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0, startAt);
+    gain.gain.linearRampToValueAtTime(0.5 * strength * attenuation, startAt + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.55);
+
+    oscillator.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + 0.6);
+    // Every node created here releases itself, so a long session cannot
+    // accumulate a graph of finished thuds.
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
   }
 
   stats(): AmbientAudioStats {

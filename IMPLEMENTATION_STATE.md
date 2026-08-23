@@ -81,7 +81,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - berths that resolve roster machines through the asset pipeline, and a Conn-Pod whose instruments read the live world outside;
   - staff as one number per facility outside the active room and as pooled instances inside it, with named crew whose lines are filled from real facility state;
   - facilities, construction progress, interior position and the selected machine saved at envelope version 5.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (636 unit+integration), `smoke` (78 Playwright), `build` all pass.
+- **A Jaeger you can drive**, taken out from the world map's ground view:
+  - one controller shared by every machine, with all the difference between a heavy tank and an agile frame expressed as a profile of speeds, acceleration, braking, turn rates, step height, slope limit, stride, booster and get-up time;
+  - twenty locomotion states as a table, resolved in priority order rather than by a switch: idle, start, walk, run, strafe, guard, turn in place, stop, step up, fall, land, wade, swim, underwater, booster, knockback, knockdown, get up, disabled leg and death;
+  - mass communicated by acceleration, braking, turn authority and stride rather than by camera shake: a machine takes seconds to reach a walk, keeps rolling when the stick is released, and turns badly at a run;
+  - footfalls spaced by ground actually covered, which is the animation contract an animation system will read, and the measurement that proves the feet are not skating;
+  - predictive ground queries that step over debris, climb a ledge inside the frame's step height, refuse a cliff face and fall off an edge, with the landing impulse handed to the camera;
+  - three camera rigs, chase, combat and Conn-Pod, framed from the machine's own height, with comfort controls for motion, reduced motion, field of view, invert look and sensitivity, and a rig switch that keeps heading, pitch, lock and comfort;
+  - buffered input, so a press made slightly too early still fires and one made while knocked down expires unused;
+  - scale communicated in the world: eight-metre street lights along the path, aircraft and birds crossing, footprints that stay on the ground, dust sized by the landing, and sound that arrives late at 343 m/s.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (710 unit+integration), `smoke` (86 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -94,6 +103,10 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - Terrain is broad-strokes landform, not geography. The generator knows a sample's latitude, a seeded moisture field and the authored region anchors, and nothing else. Real coastlines, mountain ranges, rivers and city footprints are not reproduced and no accuracy is claimed.
+- A piloted machine has no animation: the controller emits a stride phase and footfalls, and the model is moved as one rigid body. Binding a skeleton to that contract is a later milestone.
+- Nothing to fight and nothing to hit. Target lock exists on the camera and reports honestly that there is nothing in range, because kaiju and attacks arrive with the combat milestone.
+- The Conn-Pod camera sits inside the head and looks out; there is no cockpit interior geometry around it yet.
+- A piloted machine is a live session and is not saved. Leaving the machine puts the player back where it stood, which the world already saves, but the machine's own state does not survive a reload.
 - The interior is boxes: rooms are shells, fixtures and crew are instanced blocks, and there are no interior models yet. Only the Jaeger bay resolves real assets, and those are the procedural placeholders.
 - Staff have no collision, so a player can walk through a crew member. They also do not react to being spoken to beyond a line of radio.
 - Facility benefits are sentences, not systems. A tier changes power, crews, staff and fixtures; nothing yet reads "shortens every repair" because repair, research and manufacture have no mechanics behind them.
@@ -148,6 +161,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
 - World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
 - City: [src/world/cityLayout.ts](src/world/cityLayout.ts), [cityActivity.ts](src/world/cityActivity.ts), [src/data/districts.ts](src/data/districts.ts), [src/engine/cityView.ts](src/engine/cityView.ts)
+- Jaegers: [src/jaegers/](src/jaegers/), [src/engine/jaegerView.ts](src/engine/jaegerView.ts), [src/engine/pilotInput.ts](src/engine/pilotInput.ts), [src/ui/pilotScreen.ts](src/ui/pilotScreen.ts), [src/debug/jaegerScenario.ts](src/debug/jaegerScenario.ts)
 - Shatterdome: [src/shatterdome/](src/shatterdome/), [src/data/facilities.ts](src/data/facilities.ts), [src/data/personnel.ts](src/data/personnel.ts), [src/engine/interiorView.ts](src/engine/interiorView.ts), [src/ui/shatterdomeScreen.ts](src/ui/shatterdomeScreen.ts)
 - Environment: [src/world/worldClock.ts](src/world/worldClock.ts), [weather.ts](src/world/weather.ts), [ocean.ts](src/world/ocean.ts), [environment.ts](src/world/environment.ts)
 - Environment content: [src/data/climates.ts](src/data/climates.ts), [src/data/quality.ts](src/data/quality.ts)
@@ -183,6 +197,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and take movement and grip from `EnvironmentSample.effects` rather than inventing a second set. A machine is
-already chosen at a berth and boarded in the Conn-Pod, and that selection is already saved, so the next
-milestone starts from a Jaeger the player has picked rather than from an empty roster.
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and build combat on the locomotion controller rather than beside it. `applyReaction` already takes knockback,
+knockdown, a disabled leg and destruction, the input buffer already consumes the next legal action, and the
+camera already carries a target lock with nothing to lock on to. What is missing is something to fight and a
+data-driven definition of what an attack is.

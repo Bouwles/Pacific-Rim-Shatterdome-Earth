@@ -152,6 +152,8 @@ export interface WorldScreenCallbacks {
   onQualityChange(level: string): void;
   /** Raises or lowers the alert in the region the player is standing in. */
   onAlertChange(level: string): void;
+  /** Take the machine out. Ground view only: there is nothing to stand on from orbit. */
+  onPilot(jaegerId: string): void;
   onExit(): void;
 }
 
@@ -191,11 +193,17 @@ function row(label: string, field: string): HTMLElement {
  * around the globe. Every number shown is read back from world state, not from
  * whatever was requested.
  */
+export interface WorldRosterEntry {
+  readonly id: string;
+  readonly label: string;
+}
+
 export function renderWorldScreen(
   container: HTMLElement,
   regions: readonly RegionDefinition[],
   qualityLevels: readonly { readonly id: string; readonly label: string }[],
   alertLevels: readonly { readonly id: string; readonly label: string }[],
+  roster: readonly WorldRosterEntry[],
   callbacks: WorldScreenCallbacks,
 ): WorldScreenHandle {
   container.replaceChildren();
@@ -484,6 +492,30 @@ export function renderWorldScreen(
     walkRow.appendChild(button);
   }
 
+  // Deploying a machine belongs with the ground controls: piloting needs terrain
+  // under the feet, so the row is hidden on the globe rather than shown and refused.
+  const pilotRow = document.createElement("div");
+  pilotRow.className = "world-teleport";
+  pilotRow.dataset.section = "pilot";
+  const pilotLabel = document.createElement("label");
+  pilotLabel.textContent = "Machine";
+  const pilotSelect = document.createElement("select");
+  pilotSelect.dataset.field = "pilot-roster";
+  for (const entry of roster) {
+    const option = document.createElement("option");
+    option.value = entry.id;
+    option.textContent = entry.label;
+    pilotSelect.appendChild(option);
+  }
+  pilotLabel.appendChild(pilotSelect);
+  const pilotButton = document.createElement("button");
+  pilotButton.type = "button";
+  pilotButton.className = "secondary-button";
+  pilotButton.dataset.action = "pilot";
+  pilotButton.textContent = "Take the machine out";
+  pilotButton.addEventListener("click", () => callbacks.onPilot(pilotSelect.value));
+  pilotRow.append(pilotLabel, pilotButton);
+
   // Controls first, readouts last. The readouts grow without bound as more of the
   // world reports itself; the buttons must stay reachable regardless, so it is the
   // numbers that scroll away, never the things you click.
@@ -495,6 +527,7 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    pilotRow,
     alertRow,
     qualityRow,
     readout,
@@ -599,6 +632,9 @@ export function renderWorldScreen(
       const town = state.city;
       city.hidden = town === null;
       alertRow.hidden = town === null;
+      // Piloting needs streamed ground to stand on, so the row is only offered
+      // where there is any: on the globe there is nothing under the feet.
+      pilotRow.hidden = state.viewMode !== "ground";
       if (town) {
         set("city-region", `${town.regionId}, ${town.districtCount} districts`);
         set("city-alert", `${town.alertLevel}${town.sirens ? ", sirens" : ""}`);

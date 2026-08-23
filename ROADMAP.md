@@ -233,6 +233,30 @@ screen the boot flow used to land on.
 - `npm run typecheck`, `lint`, `format:check`, `test` (636), `smoke` (78), `build` all pass.
   **Next action:** none - complete. Proceed to Phase 3.
 
+## Phase 3 / Milestone 09 - Jaeger locomotion, scale, and camera foundation
+
+**Depends on:** Milestone 02 (asset manifests), Milestone 05 (streamed ground), Milestone 06
+(environment effects), Milestone 08 (the roster and the machine the player selects).
+**Status:** done.
+**Scope:** a shared locomotion controller driven entirely by a per-machine profile, twenty states,
+predictive ground queries, step-up, fall and landing, water states, booster, knockback, knockdown,
+get-up, disabled leg and death; three camera rigs with comfort controls, obstruction handling and
+lossless switching; buffered input; scale communication through footstep decals, dust, street lights,
+aircraft and delayed sound. Created `src/jaegers/`, `src/engine/jaegerView.ts`,
+`src/engine/pilotInput.ts`, `src/ui/pilotScreen.ts`, `src/debug/jaegerScenario.ts`. Added a third
+roster machine so "works for a heavy tank and an agile frame" is something the tests run.
+**Acceptance tests:**
+
+- The placeholder machine crosses city, coast and ocean courses without skating or snagging.
+  Measured stride is within 5 percent of declared stride on all three machines, blocked frames over
+  the debris field are zero, and the tower at the end of the city course does stop it.
+- Camera switching preserves target, heading intent, controls and heads-up state, asserted headlessly
+  and in the browser.
+- Controller behaviour is driven by a shared config and works for a heavy tank and an agile frame:
+  the same courses run with all three profiles and produce three different runs.
+- `npm run typecheck`, `lint`, `format:check`, `test` (710), `smoke` (86), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 3 — Single Jaeger + single kaiju combat vertical slice
 
 **Depends on:** Phase 2.

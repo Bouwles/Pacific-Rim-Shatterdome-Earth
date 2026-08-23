@@ -59,6 +59,14 @@ export interface QualityPreset extends RegistryEntry {
   readonly maxCityAgents: number;
   /** Destruction groups kept resident, nearest first. Beyond this the city fades out. */
   readonly maxCityGroups: number;
+  /** Footstep decals kept on the ground behind a Jaeger. The oldest is reused. */
+  readonly maxFootstepDecals: number;
+  /**
+   * Scale references drawn around a piloted machine: aircraft, birds, street
+   * lights. These are how a player reads how big the thing they are driving is,
+   * so the floor is high enough that Low still has some.
+   */
+  readonly maxScaleReferences: number;
   /**
    * Staff instances drawn in the Shatterdome room the player is standing in.
    * Only the active room is ever populated, so this is a per-room ceiling rather
@@ -85,6 +93,8 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityAgents: 220,
     maxCityGroups: 30,
     maxInteriorStaff: 6,
+    maxFootstepDecals: 12,
+    maxScaleReferences: 24,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "No shadows or reflections, one wave octave, a thinner city. Every telegraph is still drawn.",
   },
@@ -103,6 +113,8 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityAgents: 620,
     maxCityGroups: 70,
     maxInteriorStaff: 14,
+    maxFootstepDecals: 28,
+    maxScaleReferences: 60,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "Shadows on, cheap reflections, two wave octaves.",
   },
@@ -121,6 +133,8 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityAgents: 1500,
     maxCityGroups: 130,
     maxInteriorStaff: 26,
+    maxFootstepDecals: 56,
+    maxScaleReferences: 120,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "The default. Full wave detail and a full-resolution shadow map.",
   },
@@ -139,6 +153,8 @@ const PRESETS: readonly QualityPreset[] = [
     maxCityAgents: 3600,
     maxCityGroups: 240,
     maxInteriorStaff: 40,
+    maxFootstepDecals: 96,
+    maxScaleReferences: 220,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "For capture rather than play. Not expected to hold 60 fps in a heavy fight.",
   },
@@ -175,6 +191,13 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
   // absent one, and absence is information rather than detail.
   if (preset.maxCityBlocks < 1) errors.push("maxCityBlocks must be at least 1");
   if (preset.maxCityGroups < 1) errors.push("maxCityGroups must be at least 1");
+  if (preset.maxInteriorStaff < 1) errors.push("maxInteriorStaff must be at least 1");
+  // A machine with no scale references beside it is a machine with no scale.
+  // That is information rather than detail, so no preset may drop it to nothing.
+  if (preset.maxScaleReferences < 8) {
+    errors.push("maxScaleReferences must be at least 8: scale is information, not detail");
+  }
+  if (preset.maxFootstepDecals < 4) errors.push("maxFootstepDecals must be at least 4");
   // An empty room is not a cheaper room, it is an abandoned one, and a complex
   // with nobody in it tells the player something false about the game.
   if (preset.maxInteriorStaff < 1) errors.push("maxInteriorStaff must be at least 1");

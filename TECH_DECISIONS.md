@@ -580,3 +580,55 @@ registered draws nothing; the room reported six people on shift and rendered an
 empty floor. The pool also has to be excluded from bounding-box culling, because
 it is allocated with every instance parked below the deck. Both are handled where
 the count changes rather than per frame.
+
+## 2026-08-24, Milestone 09
+
+**One controller, a profile per machine.** `stepJaeger` never learns which Jaeger
+it is driving. That is what makes "works for a heavy tank and an agile frame"
+testable rather than aspirational: the courses run three profiles through the
+same code and compare the results.
+
+**Locomotion states are a table; transitions are an ordered predicate list.** A
+switch over twenty states would encode priority implicitly. The list makes
+priority the visible thing: death, then reactions, then water, then the stick.
+
+**Footfalls are spaced by distance, never by time.** This is the animation
+contract. An animation system reads a stride phase and footfall events and plays
+whatever it likes; the controller never reads back from a skeleton. It is also
+the measurement that catches skating, because a measured stride that disagrees
+with the declared one is exactly what skating is.
+
+**The ground probe has a floor.** Scaling lookahead purely by velocity meant a
+blocked machine probed zero metres, read clear ground, and crept into a cliff
+face one frame at a time. The probe now reaches at least half a stride in the
+direction of travel or facing.
+
+**A landing fires on leaving the air, not on touching the exact ground height.**
+The machine counts as grounded a metre and a half above the ground, so waiting
+for the precise height meant a fall that never reported a landing at all.
+
+**The body is never snapped to the camera.** Camera yaw is an intent. This is the
+single decision that most separates a heavy machine from a first-person
+character, and a test measures a single frame to keep it true.
+
+**Camera rigs are multiples of machine height.** A 68 m frame and an 82 m frame
+are both framed correctly with no per-machine camera data, so adding a machine
+cannot mean adding a camera.
+
+**Comfort is not a settings-menu afterthought.** Shake scale and reduced motion
+are on the pilot panel, and reduced motion removes sway, roll and the pull-back
+at speed while leaving every scale cue in place. Motion sickness is an
+accessibility problem, and the answer is not to remove the information.
+
+**Mass is communicated four ways before shake.** Acceleration and braking, turn
+authority, stride-spaced footfalls with prints that stay on the ground, and
+delayed sound. Shake is the last of them and the only one a player can switch
+off entirely.
+
+**The stand-in player marker is switched off while driving.** The streamer's
+white box exists so the player is somewhere when nothing represents them. Once a
+machine does, two things claim the same position and the bigger one wins.
+
+**Nothing new was saved.** A pilot session is live state; the world already saves
+the position it drives to. `ROOT_SAVE_VERSION` stays at 5 with no migration,
+which is the right answer whenever new state is derivable or transient.

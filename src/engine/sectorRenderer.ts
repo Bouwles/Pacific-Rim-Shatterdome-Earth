@@ -272,6 +272,18 @@ export class SectorRenderer implements SectorSink {
     for (const node of this.nodes.values()) this.placeNode(node, anchorBasis);
   }
 
+  /**
+   * Hides the stand-in marker.
+   *
+   * The white box is where the player is when nothing else represents them. Once
+   * a Jaeger is being driven, the machine is the marker, and leaving this on drew
+   * a 75 m white slab standing in exactly the same place, which hid the machine
+   * completely.
+   */
+  setPlayerMarkerVisible(visible: boolean): void {
+    this.playerMarker.setEnabled(visible);
+  }
+
   /** Moves the player marker within the current anchor frame. */
   setPlayerLocal(east: number, up: number, north: number): void {
     this.playerMarker.position.set(east, up + PLAYER_MARKER_HEIGHT_METERS / 2, north);

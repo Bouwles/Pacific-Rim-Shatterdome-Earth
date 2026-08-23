@@ -364,7 +364,13 @@ describe("the interior, drawn", () => {
     if (!bay) throw new Error("no bay");
     view = makeView();
     await view.setRoom(bay);
-    expect(view.stats().jaegerModels).toBe(jaegerRegistry.all().length);
+    // One model per berth, not one per roster entry: a tier 1 bay has two
+    // berths, and Milestone 09 added a third machine to the roster. A bay that
+    // stood every machine it knew about would be reporting capacity it has not
+    // built.
+    const berths = bay.interactables.filter((entry) => entry.kind === "berth").length;
+    expect(view.stats().jaegerModels).toBe(berths);
+    expect(view.stats().jaegerModels).toBeLessThanOrEqual(jaegerRegistry.all().length);
   });
 
   it("draws no more staff than the quality budget, however many are on shift", async () => {

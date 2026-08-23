@@ -60,6 +60,11 @@ import {
 } from "../world/cityActivity";
 import { CityView } from "../engine/cityView";
 import { localToGeo } from "../world/coordinates";
+import { PilotSession } from "../jaegers/pilotSession";
+import { JaegerView } from "../engine/jaegerView";
+import { PilotInputSource } from "../engine/pilotInput";
+import { renderPilotScreen, type PilotScreenHandle } from "../ui/pilotScreen";
+import type { CameraMode } from "../jaegers/camera";
 import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry } from "../data/jaegers";
@@ -484,6 +489,16 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let cityView: CityView | undefined;
   let cityRegionId: string | null = null;
   let diving = false;
+  /**
+   * The piloted machine. All four are built together and torn down together:
+   * the session is authoritative, the view draws it, the input source feeds it
+   * and the screen reports it.
+   */
+  let pilotSession: PilotSession | undefined;
+  let jaegerView: JaegerView | undefined;
+  let pilotInput: PilotInputSource | undefined;
+  let pilotScreen: PilotScreenHandle | undefined;
+  let lastPilotReadoutMs = 0;
 
   const districtRegistry = createDistrictRegistry();
   const districtsById = new Map<DistrictKind, ReturnType<typeof districtRegistry.getOrThrow>>(
@@ -635,6 +650,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * resident sector through the sink, which has to still exist to free them.
    */
   const closeGroundView = (): void => {
+    stopPilot();
     routeRunning = false;
     routeSeconds = 0;
     diving = false;
@@ -729,6 +745,199 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       districts: districtsById,
       quality,
     });
+  };
+
+  /**
+   * Ground height in the floating-origin local frame.
+   *
+   * The controller works in local metres and the streamer answers in geodetic,
+   * so this is the one place the two meet. Returning null rather than zero where
+   * nothing is loaded matters: a machine told the ground is at sea level over an
+   * unloaded sector would step off a cliff that is not there.
+   */
+  const localGroundHeight = (east: number, north: number): number | null => {
+    const position = floatingOrigin.toGeo({ east, north, up: 0 });
+    return streamer?.sampleGroundHeight(position) ?? null;
+  };
+
+  const stopPilot = (): void => {
+    pilotInput?.dispose();
+    pilotInput = undefined;
+    // The view goes before the screen: disposing it puts the previous camera
+    // back, and the panel that reports the camera must outlive that.
+    jaegerView?.dispose();
+    jaegerView = undefined;
+    pilotScreen?.dispose();
+    pilotScreen = undefined;
+    pilotSession = undefined;
+    sectorRenderer?.setPlayerMarkerVisible(true);
+    // Hand the orbit camera back the way the world view left it.
+    if (viewMode === "ground") {
+      bootScene.camera.setTarget(Vector3.Zero());
+      bootScene.scene.activeCamera = bootScene.camera;
+    }
+    refreshWorld();
+  };
+
+  const startPilot = (jaegerId: string): void => {
+    if (viewMode !== "ground") return;
+    const jaeger = jaegerRegistry.get(jaegerId) ?? jaegerRegistry.all()[0];
+    if (!jaeger) return;
+    stopPilot();
+
+    const local = floatingOrigin.toLocal(worldState.playerPosition);
+    const ground = localGroundHeight(local.east, local.north);
+    pilotSession = new PilotSession({
+      jaeger,
+      east: local.east,
+      north: local.north,
+      // Stand on the terrain if it is loaded, and on the last known altitude if
+      // it is not, rather than dropping the machine to sea level.
+      up: ground ?? worldState.playerPosition.altitudeMeters,
+      headingDeg: 0,
+    });
+
+    jaegerView = new JaegerView({
+      scene: bootScene.scene,
+      quality,
+      resolver: assetResolver,
+      assets: assetRegistry,
+      jaeger,
+      groundHeightAt: localGroundHeight,
+      audio: ambientAudio ?? null,
+    });
+
+    pilotInput = new PilotInputSource(canvas, {
+      onCameraCycle: () => {
+        pilotSession?.cycleCamera();
+        refreshPilot();
+      },
+      onLockToggle: () => {
+        // Nothing to lock on to yet: targets arrive with the combat milestone.
+        // The control exists because the camera already carries the lock, and it
+        // reports honestly that there is nothing out there.
+        pilotSession?.lockTarget(pilotSession.camera.lockedTargetId === null ? "none-in-range" : null);
+        refreshPilot();
+      },
+      onBooster: () => pilotSession?.press("booster", kernel?.tick ?? 0),
+      onReducedMotionToggle: () => {
+        const reduced = !(pilotSession?.comfort.reducedMotion ?? false);
+        pilotSession?.setComfort({ reducedMotion: reduced });
+        refreshPilot();
+      },
+      onExit: stopPilot,
+    });
+
+    pilotScreen = renderPilotScreen(
+      uiRoot,
+      jaegerRegistry
+        .all()
+        .map((entry) => ({ id: entry.id, label: `${entry.name} (${entry.markDesignation})` })),
+      {
+        onCameraMode: (mode: CameraMode) => {
+          pilotSession?.setCameraMode(mode);
+          refreshPilot();
+        },
+        onShakeScale: (value: number) => {
+          pilotSession?.setComfort({ shakeScale: value });
+          refreshPilot();
+        },
+        onReducedMotion: (value: boolean) => {
+          pilotSession?.setComfort({ reducedMotion: value });
+          refreshPilot();
+        },
+        onInvertPitch: (value: boolean) => {
+          pilotSession?.setComfort({ invertPitch: value });
+          refreshPilot();
+        },
+        onLockToggle: () => {
+          pilotSession?.lockTarget(pilotSession.camera.lockedTargetId === null ? "none-in-range" : null);
+          refreshPilot();
+        },
+        onSwitchJaeger: (id: string) => startPilot(id),
+        onExit: stopPilot,
+      },
+    );
+
+    // The machine is the player now; the streamer's stand-in marker would stand
+    // in the same spot and hide it.
+    sectorRenderer?.setPlayerMarkerVisible(false);
+    refreshPilot();
+  };
+
+  /** Pushes the machine's own numbers at the panel. Throttled like every other readout. */
+  const refreshPilot = (): void => {
+    if (!pilotScreen || !pilotSession) return;
+    const stats = jaegerView?.stats();
+    pilotScreen.update({
+      readout: pilotSession.readout(),
+      view: stats
+        ? {
+            decals: stats.decals,
+            decalCapacity: stats.decalCapacity,
+            scaleReferences: stats.scaleReferences,
+            dustParticles: stats.dustParticles,
+            modelResolved: stats.modelResolved,
+            soundDelaySeconds: JaegerView.soundDelaySeconds(stats.pendingSoundMeters),
+          }
+        : null,
+      groundHeightMeters: localGroundHeight(pilotSession.pose.east, pilotSession.pose.north),
+      headingErrorDeg: lastPilotHeadingError,
+      blocked: lastPilotBlocked,
+    });
+  };
+
+  let lastPilotHeadingError = 0;
+  let lastPilotBlocked = false;
+
+  /**
+   * One frame of piloting.
+   *
+   * The machine moves in the local frame, the world state follows it so streaming
+   * and the environment stay centred on where the player actually is, and a rebase
+   * moves the machine into the new frame rather than teleporting it.
+   */
+  const advancePilot = (deltaSeconds: number): void => {
+    const session = pilotSession;
+    if (!session || !pilotInput) return;
+
+    const cameraInput = pilotInput.sampleCamera(deltaSeconds);
+    const input = pilotInput.sample(session.camera.yawDeg, deltaSeconds, session.camera.mode !== "cockpit");
+    const sample = sampleEnvironment();
+
+    const frame = session.update({
+      deltaSeconds,
+      tick: kernel?.tick ?? 0,
+      input,
+      cameraInput,
+      ground: localGroundHeight,
+      waterHeightMeters: sample.waveHeightMeters,
+      // Grip and pace come from the environment the rest of the world already
+      // reads, never from a second set of numbers invented here.
+      effects: sample.effects,
+      obstruction: (distance) =>
+        jaegerView?.obstructionAt(session.pose, session.camera.yawDeg, distance) ?? null,
+    });
+    lastPilotHeadingError = frame.headingErrorDeg;
+    lastPilotBlocked = frame.blocked;
+
+    jaegerView?.update(frame.pose, frame.placement, frame.events, deltaSeconds, frame.camera.mode);
+
+    // The player is wherever the machine is: streaming, weather and the city all
+    // follow the machine once it is being driven.
+    const geo = floatingOrigin.toGeo({
+      east: frame.pose.east,
+      north: frame.pose.north,
+      up: frame.pose.up,
+    });
+    worldState.moveTo({ ...geo, altitudeMeters: frame.pose.up }, kernel?.tick ?? 0);
+    lastVelocity = { east: frame.pose.velocityEast, north: frame.pose.velocityNorth, up: 0 };
+    if (floatingOrigin.update(worldState.playerPosition)) {
+      sectorRenderer?.rebase();
+      cityView?.rebase();
+      const rebased = floatingOrigin.toLocal(worldState.playerPosition);
+      session.rebase(rebased.east, rebased.north, frame.pose.up);
+    }
   };
 
   const closeWorld = (): void => {
@@ -967,8 +1176,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (!next || next.id === quality.id) return;
     quality = next;
     if (viewMode === "ground") {
+      // Remember the machine so changing quality does not eject the player from
+      // it: the view is rebuilt at the new budgets and handed back.
+      const piloted = pilotSession?.jaeger.id ?? null;
       closeGroundView();
       openGroundView();
+      if (piloted) startPilot(piloted);
     }
     refreshWorld();
   };
@@ -1000,6 +1213,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       regionRegistry.all(),
       qualityRegistry.all().map((preset) => ({ id: preset.id, label: preset.displayName })),
       ALERT_LEVELS.map((level) => ({ id: level, label: ALERT_PROFILES[level].displayName })),
+      jaegerRegistry.all().map((entry) => ({ id: entry.id, label: entry.name })),
       {
         onTeleport: (regionId: string) => {
           routeRunning = false;
@@ -1053,6 +1267,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           worldState.setRegionAlert(regionId, level as AlertLevel, kernel?.tick ?? 0);
           refreshWorld();
         },
+        onPilot: (jaegerId: string) => startPilot(jaegerId),
         onExit: () => stateMachine.transition(AppState.MainMenu),
       },
     );
@@ -1084,9 +1299,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
       streamer.update({ position: worldState.playerPosition, velocity: lastVelocity });
 
+      // Driving comes before everything that reads where the player is.
+      if (pilotSession) advancePilot(Math.min(0.1, deltaMs / 1000));
+
       const local = floatingOrigin.toLocal(worldState.playerPosition);
       sectorRenderer.setPlayerLocal(local.east, local.up, local.north);
-      bootScene.camera.setTarget(new Vector3(local.east, local.up, local.north));
+      // The orbit camera is not in charge while a machine is being driven; the
+      // pilot camera owns the view and pointing this one at the same target would
+      // fight it on the frame the player leaves the machine.
+      if (!pilotSession) bootScene.camera.setTarget(new Vector3(local.east, local.up, local.north));
 
       // One sample, three consumers. Sky, weather and water all read the same
       // object gameplay would, so none of them can drift from the others.
@@ -1109,6 +1330,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       if (nowMs - lastReadoutMs >= READOUT_INTERVAL_MS) {
         lastReadoutMs = nowMs;
         refreshWorld();
+      }
+      if (pilotScreen && nowMs - lastPilotReadoutMs >= READOUT_INTERVAL_MS) {
+        lastPilotReadoutMs = nowMs;
+        refreshPilot();
       }
     };
 
@@ -1515,6 +1740,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   return {
     dispose(): void {
       unsubscribers.forEach((u) => u());
+      pilotInput?.dispose();
+      jaegerView?.dispose();
+      pilotScreen?.dispose();
       gallery?.dispose();
       galleryScreen?.dispose();
       saveScreen?.dispose();

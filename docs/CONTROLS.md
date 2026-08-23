@@ -199,6 +199,57 @@ Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
 
+## Piloting a Jaeger (Milestone 09)
+
+Taken out from the world map's ground view: pick a machine and press **Take the
+machine out**. The row is hidden on the globe, because piloting needs streamed
+ground to stand on.
+
+| Input      | Action                                                      |
+| ---------- | ----------------------------------------------------------- |
+| W A S D    | Drive. Direction is relative to where the camera is looking |
+| Shift      | Run                                                         |
+| F          | Guarded movement: slower, squarer, ready to absorb          |
+| Space      | Booster burst. Buffered, so an early press still fires      |
+| Q / E      | Turn the body directly, with no camera involved             |
+| Mouse      | Look, once pointer lock is engaged by clicking the view     |
+| Arrow keys | Look, at the same rate, with no mouse                       |
+| C          | Cycle camera: chase, combat, Conn-Pod                       |
+| T          | Toggle target lock                                          |
+| M          | Toggle reduced motion                                       |
+| Esc        | Leave the machine                                           |
+
+Pushing forward does not turn the machine to face the camera. It hands the
+controller a heading intent, and the body comes round at the rate its current
+state allows: quickly when planted, badly at a run. The panel reports the gap in
+degrees as `lag`.
+
+### Pilot readout
+
+| Readout    | Meaning                                                                              |
+| ---------- | ------------------------------------------------------------------------------------ |
+| State      | Which of the twenty locomotion states is live, plus guarding, blocked and leg damage |
+| Speed      | Current and the machine's own ceiling                                                |
+| Heading    | Body heading, look heading, and the lag between them                                 |
+| Ground     | Feet height against sampled ground height, and whether it is airborne                |
+| Water      | Water state and how submerged the machine is                                         |
+| Booster    | Charge, 0 to 100 percent                                                             |
+| Stride     | How far through the current stride the feet are                                      |
+| Camera     | Rig, lock state and live camera impulse                                              |
+| Comfort    | Motion scale, and whether reduced motion is on                                       |
+| Buffer     | Presses waiting, and how many expired unused                                         |
+| Scale refs | Scale references drawn, footprints on the ground, dust, and sound delay in seconds   |
+
+### Camera and comfort controls
+
+Three rig buttons, a lock button, a machine selector, a camera-motion slider, a
+reduced-motion switch and an invert-look switch. Switching rig keeps heading,
+pitch, lock and comfort exactly as they were.
+
+Reduced motion turns off sway, roll and the pull-back at speed. It does not turn
+off the framing, the street lights, the aircraft or the footprints, because
+those are how the size of the machine is read rather than decoration.
+
 ### City readout
 
 Shown wherever the player is standing in a region that has a city plan, which is
@@ -229,5 +280,5 @@ gesture, so it says `blocked` rather than pretending to be running.
 
 ## Not yet bound
 
-No on-foot player controller, Jaeger piloting, camera-mode switch, weapon, squad-command, or menu-navigation keys
-exist yet. See [../ROADMAP.md](../ROADMAP.md).
+No weapon, squad-command or menu-navigation keys exist yet. See
+[../ROADMAP.md](../ROADMAP.md).

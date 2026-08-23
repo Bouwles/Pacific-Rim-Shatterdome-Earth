@@ -233,3 +233,30 @@ live facility state so none of them can claim something the complex is not doing
 Everyone else in the complex is anonymous shift staff: a facility's population is
 one integer derived from its tier and the hour, and only the room the player is
 standing in turns that into positions.
+
+## Jaeger roster and locomotion profiles (Milestone 09)
+
+Three entries in `src/data/jaegers.ts`. Every one is a non-canon procedural
+placeholder, and what makes them different machines is the profile rather than
+the mesh: two of the three share an asset manifest.
+
+| id              | Name                 | Height | Walk / run     | Turn moving / planted | Step up | Stride | Character               |
+| --------------- | -------------------- | ------ | -------------- | --------------------- | ------- | ------ | ----------------------- |
+| placeholder-mk0 | Placeholder Sentinel | 75 m   | 9 / 17 m/s     | 26 / 42 deg per s     | 9 m     | 27 m   | The middle of the range |
+| heavy-mk4       | Placeholder Bulwark  | 82 m   | 7.2 / 12.5 m/s | 17 / 29 deg per s     | 11 m    | 30 m   | Heavy tank              |
+| agile-mk5       | Placeholder Harrier  | 68 m   | 11 / 23 m/s    | 38 / 64 deg per s     | 8 m     | 22 m   | Agile frame             |
+
+## Jaeger states (Milestone 09)
+
+Twenty rows in `src/jaegers/locomotion.ts`, registered through
+`ContentRegistry<JaegerStateDefinition>`: idle, start, walk, run, strafe, guard,
+turn-in-place, stop, step-up, fall, land, wade, swim, underwater, booster,
+knockback, knockdown, get-up, disabled and death. Each carries its own speed
+factor, turn authority, whether it listens to the player, a minimum length,
+whether the feet are planted, and whether it is a reaction.
+
+## Camera rigs (Milestone 09)
+
+Three rows in `src/jaegers/camera.ts`: exploration, combat and Conn-Pod. Rig
+geometry is in multiples of machine height, so adding a machine never means
+adding a camera.

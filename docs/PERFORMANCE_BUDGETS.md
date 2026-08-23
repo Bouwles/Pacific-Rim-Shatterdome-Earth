@@ -182,6 +182,30 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Piloted Jaeger cost (Milestone 09)
+
+Measured in the browser on WebGPU at High, seed 20260824, standing in Hong Kong
+with the city and the streamed terrain both live:
+
+| State                              | Draw calls | Frame time    | Frame rate |
+| ---------------------------------- | ---------- | ------------- | ---------- |
+| World ground view, no machine      | 88         | 0.9 ms        | 60 (vsync) |
+| Machine out, chase camera, running | 85 to 87   | 0.8 to 2.0 ms | 60 (vsync) |
+| Combat camera                      | 67         | 0.8 ms        | 60 (vsync) |
+| Conn-Pod camera                    | 72         | 0.5 ms        | 60 (vsync) |
+
+The machine costs four pooled meshes plus whatever its model resolves to: one
+decal quad, one dust box, one street-light box and one flyer box, each a single
+draw call however many instances they carry. Footprints are a ring buffer at the
+preset's ceiling, so a long run reuses the oldest print rather than growing.
+
+Two things were found by looking rather than by measuring. The streamer's own
+white player marker stands exactly where the machine stands and hid it
+completely, so it is switched off while a machine is being driven. And the
+scale-reference pools are excluded from bounding-box culling for the same reason
+the interior staff pool is: they are allocated parked below the world and moved
+every frame.
+
 ## Shatterdome interior cost (Milestone 08)
 
 One room at a time is the whole budget. Measured in the browser on WebGPU at
