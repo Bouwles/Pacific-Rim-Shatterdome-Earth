@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-08-24, Milestone 10: Combat targeting, input buffer, and attack framework
+
+There is something to fight, and a language every fight will be written in. Take a machine out, press spawn test kaiju, walk into range, and throw a jab into a cross into an overhead hammer.
+
+- Every attack is a row of data. How long the wind-up is, how long the fist is dangerous, how long you are stuck afterwards, how far the move carries you, how much you can still turn while it runs, what it cancels into and when, where the damage lands and what it costs in stamina and heat. No attack lives in an animation string, and no code knows a move by name.
+- Hits are swept rather than sampled. A fist crosses twenty metres in five ticks, so the volume is tested along the whole path it took rather than at the two ends of it, and it works the same way when the creature is the thing moving.
+- A kaiju is not a health bar. It is a head, a torso, a core, two limbs and a tail, each with its own health, its own armour and its own consequence for being destroyed. One of them ends the creature and the others cost it something specific.
+- Four ways to say what you mean. A swing thrown at something obvious lands on it. A lock holds one target through a camera change. Cycling walks across what is on screen from left to right. Aim mode picks a body zone, which is the only way going for the core means anything against something eighty metres tall.
+- Reactions are shared. Flinch, stagger, guard break, launch, wall impact, knockdown and component shock, and a machine goes through them exactly the way a creature does. A tail sweep knocks the machine down and the locomotion controller takes it from there.
+- Poise decides staggers. Slow expensive moves can knock down outright, everything else has to spend a target's balance first. This is the rule that stops a good machine holding a creature in a stagger for a whole fight.
+- Presses are buffered. A button pressed a fifth of a second before the machine can act on it still fires, and one pressed while flat on your back expires rather than going off when you stand up.
+- Illegal cancels are refused with the reason written out. Too early, too late, into something the move does not cancel into, or out of a swing that missed and had to land first. The refusals go in the log next to the hits.
+- The hit log says which volume connected, on which tick, against which body zone, for how much, and what reaction it caused. Turn on hit debug and the zones are drawn where the resolver believes they are, shrinking as they take damage.
+
+Three problems the tests found before anyone had to look at a screen.
+
+Component shock outranked a heavy attack's own reaction, so every heavy that also carried shock was quietly downgraded to a twitch nobody could see.
+
+Then, with that fixed, heavies staggered on every landing, and the creature spent an entire fight on its back without acting once. Poise now gates staggers and the fight goes both ways.
+
+And a destroyed body zone reported itself destroyed again on every hit that landed anywhere near it, so a head could be lost seven times in one exchange.
+
+Nothing about a fight is saved. Damage that outlives a battle belongs to the per-component damage milestone, and guessing at that milestone's save format now would be inventing a schema to throw away.
+
 ## 2026-08-24, Milestone 09: Jaeger locomotion, scale, and camera foundation
 
 You can take a machine out and drive it. Pick one from the world map's ground view, press take the machine out, and the roster entry you were inspecting in a Shatterdome berth is standing in Hong Kong under your control.

@@ -517,6 +517,54 @@ drop it to nothing.
 A pilot session is live state. `ROOT_SAVE_VERSION` is unchanged at 5 and no
 migration was added.
 
+## Combat schemas (Milestone 10)
+
+### `MoveDefinition` (src/data/moves.ts)
+
+| Field                                            | Meaning                                                 | Constraint                                                             |
+| ------------------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `startupTicks` / `activeTicks` / `recoveryTicks` | Phase lengths at 60 ticks a second                      | whole numbers, at least 1                                              |
+| `turnAuthority`                                  | Fraction of turn rate kept while the move runs          | 0 to 1                                                                 |
+| `movement`                                       | Forward metres per second between two ticks of the move | any                                                                    |
+| `armor`                                          | `none`, `light` or `super`                              | enumerated                                                             |
+| `cancelInto` / `cancelFromTick` / `cancelToTick` | What it cancels into and when                           | window must open at or after the active frames and end inside the move |
+| `cancelRequiresHit`                              | Whether the window only opens on a connect              | boolean                                                                |
+| `volumes`                                        | Swept capsules with their own live windows              | at least one; each must be live, and inside the active frames          |
+| `damage`                                         | One `DamagePacket`                                      | amount above zero, shock a fraction                                    |
+| `staminaCost` / `heatCost`                       | What it costs to throw                                  | zero or more                                                           |
+| `cues`                                           | Wind-up, impact and whiff cue ids                       | all three required                                                     |
+
+`DamagePacket` is `{ amount, kind, poise, guardDamage, knockbackMps,
+componentShock, reaction }`, where `reaction` is what a clean unguarded hit asks
+for and the reaction table decides what it gets.
+
+### `KaijuDefinition` (src/data/kaiju.ts)
+
+`{ id, name, category, heightMeters, massTons, poise, staggerSeconds,
+finisherThreshold, zones }`. Every zone carries `{ heightFraction,
+forwardMeters, lateralMeters, radiusMeters, health, armor, damageMultiplier,
+onDestroyed }`. Validation requires exactly one zone whose `onDestroyed` is
+`kill`, rejects duplicate zones, armour outside 0 to 1, and a finisher threshold
+that is not a fraction.
+
+### `CombatProfile` (src/combat/arena.ts)
+
+Derived, never authored: a Jaeger's heat dissipation comes from the cooling
+capacity already on its roster entry, and its poise and guard from its mass. A
+kaiju's poise comes from its own definition.
+
+### `CombatEvent`
+
+`{ tick, type, actorId, targetId, moveId, volumeId, zoneId, damage, reaction,
+contact, reason }`. Types are `attack-started`, `attack-cancelled`,
+`attack-rejected`, `hit`, `guarded`, `whiffed`, `reaction`, `zone-destroyed`,
+`defeated`, `overheated`, `recovered`.
+
+### Nothing new is saved
+
+`ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
+that survives a battle belongs to its own milestone.
+
 ## Not yet defined
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they

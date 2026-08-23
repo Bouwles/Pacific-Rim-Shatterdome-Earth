@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 09. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 10. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -24,6 +24,7 @@ src/
     cityView.ts        the city drawn: one mesh per destruction group, pooled agents on lanes
     interiorView.ts    one Shatterdome room at a time: shell, fixtures, pooled staff, its own camera
     jaegerView.ts      the piloted machine: model, footstep decals, dust, scale references, its camera
+    combatView.ts      the creature, its body zones as a debug view, and where contacts landed
     pilotInput.ts      keyboard and mouse for a piloted machine, as two plain snapshots
     onFootInput.ts     the only file that touches a key or a mouse event, turned into an input snapshot
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
@@ -61,6 +62,11 @@ src/
     environment.ts      the query surface AI and combat read; composes clock, weather and ocean
     cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
     cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
+  combat/              ← the fight; no Babylon, no DOM, no wall clock
+    arena.ts           fighters, resources, attack state, hit resolution, the event log
+    hitVolumes.ts      swept capsules, target spheres, overlap history
+    targeting.ts       soft targets, locks, cycling, aim mode, body-zone selection
+    reactions.ts       stagger, guard break, launch, knockdown, component shock, finisher windows
   jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
     locomotion.ts      states, acceleration, turn authority, ground queries, footfalls, reactions
     camera.ts          three rigs, comfort settings, impulse, obstruction, lossless rig switching
@@ -93,6 +99,8 @@ src/
     climates.ts          what weather each climate zone produces
     districts.ts         district grammar rows and the Hong Kong placement plan
     facilities.ts        the thirteen facilities, their tiers, and how the rooms connect
+    moves.ts             every attack: phases, curves, cancels, volumes, packets and costs
+    kaiju.ts             creatures as body zones with their own health, armour and consequences
     personnel.ts         named crew: post, shift, and lines that report real facility state
     quality.ts           Low to Cinematic presets with explicit particle, shadow and water budgets
   debug/
@@ -575,6 +583,68 @@ down expires unused rather than firing when it stands up.
 world position it drives to is already saved through `WorldState`, and the
 roster machine it uses is already saved by the Shatterdome. No migration was
 needed.
+
+## Combat
+
+Four modules in `src/combat/`, none of which import Babylon or the DOM, plus one
+view and one panel section that read what they produce.
+
+**An attack is a row, not a function.** `data/moves.ts` gives every move its
+startup, active and recovery lengths in ticks, a movement curve, how much turn
+authority survives it, its armour level, which tags it cancels into and when,
+which volumes are live on which ticks, one damage packet, and what it costs in
+stamina and heat. Adding an attack is a row. Nothing in the resolver knows a
+move by name.
+
+**Damage is a typed packet, never a string in an animation.** Amount, kind,
+poise, guard damage, knockback, component shock and the reaction it asks for.
+The validator refuses an attack with no volume, a cancel window that opens
+before the move can land, a volume that outlives its own active frames, and a
+packet that does no damage.
+
+**Hits are swept, not sampled.** A limb crosses twenty metres in five ticks, so
+each volume is placed where it was at the start of the tick and where it is at
+the end, and the closest approach over that movement decides the hit. Both ends
+are interpolated, so a creature walking into a stationary fist is the same
+problem as a fist reaching a standing creature. Every attack instance carries an
+overlap history, so a volume connects with a target once however long it stays
+live.
+
+**A creature is body zones.** Head, torso, core, two limbs and a tail, each with
+its own health, armour, damage multiplier and consequence. Exactly one zone ends
+the creature, which the validator enforces: none makes it immortal, two makes
+"what killed it" unanswerable.
+
+**Targeting has four levels of deliberateness.** Soft targeting picks what the
+player already faces. An explicit lock holds one creature and survives a camera
+change. Cycling walks left to right across what is on screen rather than by
+distance. Aim mode picks a body zone, and an aimed zone wins a hit when the blow
+reached it, which is the only way "go for the core" means anything against
+something eighty metres tall.
+
+**Reactions are a shared table.** Flinch, stagger, guard break, launch, wall
+impact, knockdown and component shock, each with a length, whether control is
+lost, what it does to poise and whether it opens a finisher. A machine and a
+creature stagger through the same code.
+
+**Poise gates staggers.** Explicit knockdowns and launches belong to slow,
+expensive moves and ignore poise; everything else has to spend it. Without that
+rule a machine that could keep throwing heavies held a creature in a stagger for
+the whole fight and the creature never acted once, which the scenario found
+immediately.
+
+**Buffered input is the same buffer locomotion uses.** The arena asks it for the
+oldest press that is legal right now, so an input made a fifth of a second early
+still fires and one made while the fighter was knocked down expires unused.
+
+**Everything that happens is an event with enough detail to explain itself**:
+tick, actor, target, move, volume, zone, damage, reaction, contact point and, for
+a refusal, the reason in words. That log is the debug view rather than a drawing
+of one.
+
+**Nothing new is saved.** A fight is live state. Damage that outlives a battle
+belongs to the per-component damage milestone, and inventing a save format for
+it now would be guessing at that milestone's schema.
 
 ## Quality presets
 

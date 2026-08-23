@@ -517,6 +517,23 @@
         border-top: 1px solid #1d3244;
         padding-top: 6px;
       }
+      #uiRoot .pilot-hitlog {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font:
+          11px/1.35 "Consolas",
+          monospace;
+        color: #9fd8b4;
+      }
+      #uiRoot .pilot-hitlog li {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       #uiRoot .pilot-hint {
         margin: 0;
         font-size: 11px;

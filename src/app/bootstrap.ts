@@ -65,6 +65,18 @@ import { JaegerView } from "../engine/jaegerView";
 import { PilotInputSource } from "../engine/pilotInput";
 import { renderPilotScreen, type PilotScreenHandle } from "../ui/pilotScreen";
 import type { CameraMode } from "../jaegers/camera";
+import { COMBAT_TICK_SECONDS, createMoveRegistry } from "../data/moves";
+import { createKaijuRegistry } from "../data/kaiju";
+import {
+  CombatArena,
+  combatProfileFor,
+  jaegerZones,
+  kaijuCombatProfile,
+  kaijuZones,
+  type CombatEvent,
+} from "../combat/arena";
+import { CombatView } from "../engine/combatView";
+import type { PilotCombatState } from "../ui/pilotScreen";
 import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry } from "../data/jaegers";
@@ -499,6 +511,26 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let pilotInput: PilotInputSource | undefined;
   let pilotScreen: PilotScreenHandle | undefined;
   let lastPilotReadoutMs = 0;
+  /**
+   * The fight. Built when a target is spawned and torn down with it, so a
+   * machine walking around on its own costs nothing at all.
+   */
+  let combatArena: CombatArena | undefined;
+  let combatView: CombatView | undefined;
+  let combatAccumulator = 0;
+  let combatDebugVolumes = false;
+  const combatLog: string[] = [];
+  const moveRegistry = createMoveRegistry();
+  const kaijuRegistry = createKaijuRegistry();
+  /** The number row, in order. Slot 5 is the finisher, which is usually refused. */
+  const ATTACK_SLOTS: readonly string[] = [
+    "melee.light.jab",
+    "melee.light.cross",
+    "melee.heavy.overhead",
+    "melee.launcher.uppercut",
+    "melee.guard-break.shoulder",
+    "melee.finisher.plasma-drop",
+  ];
 
   const districtRegistry = createDistrictRegistry();
   const districtsById = new Map<DistrictKind, ReturnType<typeof districtRegistry.getOrThrow>>(
@@ -760,7 +792,157 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     return streamer?.sampleGroundHeight(position) ?? null;
   };
 
+  const clearTarget = (): void => {
+    combatView?.dispose();
+    combatView = undefined;
+    combatArena = undefined;
+    combatAccumulator = 0;
+    combatLog.length = 0;
+    refreshPilot();
+  };
+
+  /**
+   * Puts a kaiju in front of the machine and starts a fight.
+   *
+   * The arena is authoritative and knows nothing about the scene; the view draws
+   * what it reports. Both fighters run the same resolver, which is the whole
+   * point of the framework.
+   */
+  const spawnTarget = (): void => {
+    const session = pilotSession;
+    if (!session) return;
+    clearTarget();
+
+    const kaiju = kaijuRegistry.getOrThrow("kaiju.biped-alpha");
+    const pose = session.pose;
+    const yaw = (pose.yawDeg * Math.PI) / 180;
+    // A hundred and twenty metres ahead: outside every move's reach, so the
+    // player has to close the distance rather than starting inside a swing.
+    const east = pose.east + Math.sin(yaw) * 120;
+    const north = pose.north + Math.cos(yaw) * 120;
+
+    combatArena = new CombatArena({
+      moves: moveRegistry,
+      fighters: [
+        {
+          id: "jaeger",
+          kind: "jaeger",
+          displayName: session.jaeger.name,
+          heightMeters: session.jaeger.locomotion.heightMeters,
+          profile: combatProfileFor(session.jaeger),
+          pose: { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg },
+          zones: jaegerZones(session.jaeger),
+          finisherThreshold: 0.2,
+        },
+        {
+          id: "kaiju",
+          kind: "kaiju",
+          displayName: kaiju.name,
+          heightMeters: kaiju.heightMeters,
+          profile: kaijuCombatProfile(kaiju),
+          pose: { east, north, up: pose.up, yawDeg: pose.yawDeg + 180 },
+          zones: kaijuZones(kaiju),
+          kaiju,
+          finisherThreshold: kaiju.finisherThreshold,
+        },
+      ],
+    });
+
+    combatView = new CombatView({
+      scene: bootScene.scene,
+      quality,
+      resolver: assetResolver,
+      assets: assetRegistry,
+      kaiju,
+      groundHeightAt: localGroundHeight,
+    });
+    combatView.setDebugVolumes(combatDebugVolumes);
+    session.lockTarget("kaiju");
+    refreshPilot();
+  };
+
+  /** Presses an attack. The arena decides whether it is legal, and says why not. */
+  const pressAttack = (slot: number): void => {
+    const moveId = ATTACK_SLOTS[slot];
+    if (!moveId || !combatArena) return;
+    const request = combatArena.request("jaeger", moveId);
+    if (!request.ok) {
+      // Refusals are shown rather than swallowed: this is the debug view the
+      // milestone asks for, and it is the only way a player learns the rules.
+      pushCombatLine(`refused: ${request.message}`);
+      return;
+    }
+    combatArena.press("jaeger", moveId);
+  };
+
+  const pushCombatLine = (line: string): void => {
+    combatLog.unshift(line);
+    while (combatLog.length > 6) combatLog.pop();
+  };
+
+  /** Turns arena events into the log line the panel shows and the effects the world plays. */
+  const consumeCombatEvents = (events: readonly CombatEvent[]): void => {
+    for (const event of events) {
+      if (event.type === "hit" || event.type === "guarded") {
+        pushCombatLine(
+          `t${event.tick} ${event.actorId} ${event.moveId ?? ""} · ${event.volumeId ?? ""} → ` +
+            `${event.zoneId ?? ""} ${event.damage} dmg${event.reaction && event.reaction !== "none" ? ` · ${event.reaction}` : ""}`,
+        );
+      } else if (event.type === "zone-destroyed") {
+        pushCombatLine(`t${event.tick} ${event.actorId} lost ${event.zoneId ?? ""} (${event.reason ?? ""})`);
+      } else if (event.type === "defeated") {
+        pushCombatLine(`t${event.tick} ${event.actorId} is down`);
+      } else if (event.type === "attack-rejected") {
+        pushCombatLine(`t${event.tick} refused: ${event.reason ?? ""}`);
+      }
+
+      // A reaction on the machine is felt rather than only logged: locomotion
+      // already knows how to be knocked back and knocked over.
+      if (event.type === "reaction" && event.actorId === "jaeger" && pilotSession) {
+        if (event.reaction === "knockdown" || event.reaction === "launch") {
+          pilotSession.react({ kind: "knockdown", impulseMps: 12 });
+        } else if (event.reaction === "stagger" || event.reaction === "guard-break") {
+          pilotSession.react({ kind: "knockback", impulseMps: 8 });
+        }
+      }
+    }
+  };
+
+  const combatState = (): PilotCombatState | null => {
+    if (!combatArena || !pilotSession) return null;
+    const snapshot = combatArena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    const jaegerView = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    if (!kaijuView || !jaegerView) return null;
+    const pose = pilotSession.pose;
+    return {
+      targetName: kaijuView.displayName,
+      targetDistanceMeters: Math.hypot(kaijuView.east - pose.east, kaijuView.north - pose.north),
+      lockedOn: pilotSession.camera.lockedTargetId !== null,
+      aimZoneId: jaegerView.aimZoneId,
+      zones: kaijuView.zones.map((zone) => ({
+        id: zone.id,
+        health: zone.health,
+        maxHealth: zone.maxHealth,
+      })),
+      stamina: jaegerView.stamina,
+      staminaMax: combatProfileFor(pilotSession.jaeger).staminaMax,
+      heat: jaegerView.heat,
+      overheated: jaegerView.overheated,
+      poise: jaegerView.poise,
+      guarding: jaegerView.guarding,
+      activeMove: jaegerView.activeMove,
+      activePhase: jaegerView.activePhase,
+      buffered: jaegerView.buffered,
+      finisherOpen: kaijuView.finisherOpen,
+      defeated: kaijuView.defeated,
+      hitLog: [...combatLog],
+      debugVolumes: combatDebugVolumes,
+    };
+  };
+
   const stopPilot = (): void => {
+    clearTarget();
     pilotInput?.dispose();
     pilotInput = undefined;
     // The view goes before the screen: disposing it puts the previous camera
@@ -826,6 +1008,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         refreshPilot();
       },
       onExit: stopPilot,
+      onAttack: pressAttack,
+      onAimModeToggle: () => {
+        if (!combatArena) return;
+        const current = combatArena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+        // Aim mode cycles through the zones the creature actually has, so what
+        // it offers can never disagree with what is there to hit.
+        const kaiju = kaijuRegistry.getOrThrow("kaiju.biped-alpha");
+        const ids: string[] = kaiju.zones.map((zone) => zone.id);
+        const index = current?.aimZoneId ? ids.indexOf(current.aimZoneId) : -1;
+        const next = index + 1 >= ids.length ? null : (ids[index + 1] ?? null);
+        combatArena.setAim("jaeger", next);
+        refreshPilot();
+      },
     });
 
     pilotScreen = renderPilotScreen(
@@ -855,6 +1050,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshPilot();
         },
         onSwitchJaeger: (id: string) => startPilot(id),
+        onSpawnTarget: spawnTarget,
+        onClearTarget: clearTarget,
+        onDebugVolumes: (enabled: boolean) => {
+          combatDebugVolumes = enabled;
+          combatView?.setDebugVolumes(enabled);
+          refreshPilot();
+        },
         onExit: stopPilot,
       },
     );
@@ -884,6 +1086,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightMeters: localGroundHeight(pilotSession.pose.east, pilotSession.pose.north),
       headingErrorDeg: lastPilotHeadingError,
       blocked: lastPilotBlocked,
+      combat: combatState(),
     });
   };
 
@@ -903,6 +1106,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     const cameraInput = pilotInput.sampleCamera(deltaSeconds);
     const input = pilotInput.sample(session.camera.yawDeg, deltaSeconds, session.camera.mode !== "cockpit");
+    // Guarding is one idea with two consumers: it slows the machine down and it
+    // is what the arena checks when a hit lands.
+    combatArena?.setGuard("jaeger", input.guard);
     const sample = sampleEnvironment();
 
     const frame = session.update({
@@ -917,11 +1123,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       effects: sample.effects,
       obstruction: (distance) =>
         jaegerView?.obstructionAt(session.pose, session.camera.yawDeg, distance) ?? null,
+      // What the camera frames while a lock is held. Null when nothing is out
+      // there, which is why the lock reports honestly rather than swinging to
+      // an imaginary target.
+      targetPosition: lastTargetPosition,
     });
     lastPilotHeadingError = frame.headingErrorDeg;
     lastPilotBlocked = frame.blocked;
 
     jaegerView?.update(frame.pose, frame.placement, frame.events, deltaSeconds, frame.camera.mode);
+
+    if (combatArena) advanceCombat(session, frame.pose, deltaSeconds);
 
     // The player is wherever the machine is: streaming, weather and the city all
     // follow the machine once it is being driven.
@@ -939,6 +1151,53 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       session.rebase(rebased.east, rebased.north, frame.pose.up);
     }
   };
+
+  /**
+   * Runs the fight alongside the machine.
+   *
+   * Combat has its own fixed tick, so frames are accumulated into whole ticks
+   * rather than the resolver being handed a variable delta. The machine's pose
+   * is pushed in before the tick and the target's is read back after, which
+   * keeps one authority over each: locomotion owns where the Jaeger is, the
+   * arena owns everything about the fight.
+   */
+  const advanceCombat = (
+    session: PilotSession,
+    pose: { east: number; north: number; up: number; yawDeg: number },
+    deltaSeconds: number,
+  ): void => {
+    const arena = combatArena;
+    if (!arena) return;
+
+    arena.moveTo("jaeger", { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg });
+
+    combatAccumulator += deltaSeconds;
+    const events: CombatEvent[] = [];
+    // Capped so a stalled frame cannot run a second of combat at once.
+    let budget = 8;
+    while (combatAccumulator >= COMBAT_TICK_SECONDS && budget > 0) {
+      combatAccumulator -= COMBAT_TICK_SECONDS;
+      budget -= 1;
+      // The creature keeps turning to face the machine and throws what it can,
+      // on a fixed cadence. This is a schedule rather than behaviour, and the
+      // panel says so.
+      arena.faceToward("kaiju", "jaeger", 1.2);
+      if (arena.tick % 240 === 0) {
+        arena.press("kaiju", arena.tick % 480 === 0 ? "kaiju.claw.swipe" : "kaiju.tail.sweep");
+      }
+      events.push(...arena.step());
+    }
+    consumeCombatEvents(events);
+
+    const snapshot = arena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    if (kaijuView && combatView) combatView.update(kaijuView, events, deltaSeconds);
+    // The camera frames the creature while a lock is held.
+    if (kaijuView) lastTargetPosition = { east: kaijuView.east, north: kaijuView.north, up: pose.up };
+    void session;
+  };
+
+  let lastTargetPosition: { east: number; north: number; up: number } | null = null;
 
   const closeWorld = (): void => {
     frameHook = null;
@@ -1741,6 +2000,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     dispose(): void {
       unsubscribers.forEach((u) => u());
       pilotInput?.dispose();
+      combatView?.dispose();
       jaegerView?.dispose();
       pilotScreen?.dispose();
       gallery?.dispose();

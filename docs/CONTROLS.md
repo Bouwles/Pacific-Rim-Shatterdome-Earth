@@ -250,6 +250,37 @@ Reduced motion turns off sway, roll and the pull-back at speed. It does not turn
 off the framing, the street lights, the aircraft or the footprints, because
 those are how the size of the machine is read rather than decoration.
 
+### Fighting (Milestone 10)
+
+Available once a target has been spawned from the pilot panel. Every attack goes
+through the buffer, so a press made slightly early still fires, and every refusal
+is written to the log with its reason rather than being swallowed.
+
+| Input | Action                                                               |
+| ----- | -------------------------------------------------------------------- |
+| 1     | Left jab. Fast, cheap, cancels into almost anything                  |
+| 2     | Right cross. Cancels onward only if it landed                        |
+| 3     | Overhead hammer. Slow, heavy, light armour                           |
+| 4     | Rising uppercut. Launches what it hits                               |
+| 5     | Shoulder charge. Goes through a guard, cannot be interrupted         |
+| 6     | Plasma drop. Only legal against a target that is already finished    |
+| F     | Guard. Absorbs most of a hit and all of the reaction until it breaks |
+| R     | Cycle aim through the creature's body zones, and back to no aim      |
+| T     | Lock and unlock the target                                           |
+
+**Spawn test kaiju** puts a creature a hundred and twenty metres ahead. **Clear**
+removes it. **Hit debug** draws the body zones exactly where the resolver
+believes they are, sized by how much health each has left.
+
+| Combat readout | Meaning                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| Target         | Name, distance, whether it is locked, which zone is aimed at, and whether a finisher is open |
+| Zones          | Every body zone with the health it has left                                                  |
+| Resources      | Stamina, heat and poise, and whether the machine is over temperature                         |
+| Move           | The move running now and which phase it is in                                                |
+| Buffer         | Presses waiting for a legal moment                                                           |
+| Hit log        | The last six events: tick, attacker, move, volume, zone and damage                           |
+
 ### City readout
 
 Shown wherever the player is standing in a region that has a city plan, which is

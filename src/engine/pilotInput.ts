@@ -23,7 +23,13 @@ export interface PilotInputCallbacks {
   readonly onBooster: () => void;
   readonly onExit: () => void;
   readonly onReducedMotionToggle: () => void;
+  /** An attack press. The slot is what the player pressed, not what will run. */
+  readonly onAttack?: (slot: number) => void;
+  readonly onAimModeToggle?: () => void;
 }
+
+/** Attack slots, in the order they sit on the number row. */
+export const ATTACK_SLOT_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"] as const;
 
 const FORWARD_KEYS = ["KeyW"] as const;
 const BACK_KEYS = ["KeyS"] as const;
@@ -132,13 +138,17 @@ export class PilotInputSource {
     // for every frame the key was held.
     if (event.repeat) return;
     this.held.add(event.code);
-    const actions: Readonly<Record<string, () => void>> = {
+    const actions: Record<string, () => void> = {
       KeyC: () => this.callbacks.onCameraCycle(),
       KeyT: () => this.callbacks.onLockToggle(),
       Space: () => this.callbacks.onBooster(),
       KeyM: () => this.callbacks.onReducedMotionToggle(),
+      KeyR: () => this.callbacks.onAimModeToggle?.(),
       Escape: () => this.callbacks.onExit(),
     };
+    ATTACK_SLOT_KEYS.forEach((code, index) => {
+      actions[code] = () => this.callbacks.onAttack?.(index);
+    });
     const action = actions[event.code];
     if (action) {
       action();

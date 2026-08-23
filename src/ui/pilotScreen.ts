@@ -22,12 +22,36 @@ export interface PilotViewStats {
   readonly soundDelaySeconds: number;
 }
 
+/** What the combat block shows. Null when nothing has been spawned to fight. */
+export interface PilotCombatState {
+  readonly targetName: string;
+  readonly targetDistanceMeters: number;
+  readonly lockedOn: boolean;
+  readonly aimZoneId: string | null;
+  readonly zones: readonly { readonly id: string; readonly health: number; readonly maxHealth: number }[];
+  readonly stamina: number;
+  readonly staminaMax: number;
+  readonly heat: number;
+  readonly overheated: boolean;
+  readonly poise: number;
+  readonly guarding: boolean;
+  readonly activeMove: string | null;
+  readonly activePhase: string | null;
+  readonly buffered: readonly string[];
+  readonly finisherOpen: boolean;
+  readonly defeated: boolean;
+  /** Newest first: tick, what connected, where, and for how much. */
+  readonly hitLog: readonly string[];
+  readonly debugVolumes: boolean;
+}
+
 export interface PilotScreenState {
   readonly readout: PilotReadout;
   readonly view: PilotViewStats | null;
   readonly groundHeightMeters: number | null;
   readonly headingErrorDeg: number;
   readonly blocked: boolean;
+  readonly combat: PilotCombatState | null;
 }
 
 export interface PilotScreenCallbacks {
@@ -37,6 +61,9 @@ export interface PilotScreenCallbacks {
   readonly onInvertPitch: (value: boolean) => void;
   readonly onLockToggle: () => void;
   readonly onSwitchJaeger: (jaegerId: string) => void;
+  readonly onSpawnTarget: () => void;
+  readonly onClearTarget: () => void;
+  readonly onDebugVolumes: (enabled: boolean) => void;
   readonly onExit: () => void;
 }
 
@@ -182,12 +209,67 @@ export function renderPilotScreen(
   addRow("buffer", "Buffer");
   addRow("scale", "Scale refs");
 
+  // Combat block. Hidden until there is something to fight, because an empty
+  // target readout would imply a system that is not running.
+  const combatRow = document.createElement("div");
+  combatRow.className = "pilot-row";
+  const spawnButton = document.createElement("button");
+  spawnButton.type = "button";
+  spawnButton.className = "secondary-button";
+  spawnButton.dataset["action"] = "spawn-target";
+  spawnButton.textContent = "Spawn test kaiju";
+  spawnButton.addEventListener("click", callbacks.onSpawnTarget);
+  const clearButton = document.createElement("button");
+  clearButton.type = "button";
+  clearButton.className = "secondary-button";
+  clearButton.dataset["action"] = "clear-target";
+  clearButton.textContent = "Clear";
+  clearButton.addEventListener("click", callbacks.onClearTarget);
+  const volumesLabel = document.createElement("label");
+  const volumes = document.createElement("input");
+  volumes.type = "checkbox";
+  volumes.dataset["action"] = "debug-volumes";
+  volumes.addEventListener("change", () => callbacks.onDebugVolumes(volumes.checked));
+  volumesLabel.append(volumes, document.createTextNode(" Hit debug"));
+  combatRow.append(spawnButton, clearButton, volumesLabel);
+
+  const combat = document.createElement("div");
+  combat.className = "world-readout pilot-readout";
+  combat.dataset["section"] = "combat";
+  combat.hidden = true;
+
+  const combatRows = new Map<string, HTMLElement>();
+  const addCombatRow = (key: string, label: string): void => {
+    const row = document.createElement("div");
+    row.className = "world-row";
+    const keyCell = document.createElement("span");
+    keyCell.className = "world-key";
+    keyCell.textContent = label;
+    const valueCell = document.createElement("span");
+    valueCell.className = "world-value";
+    valueCell.dataset["field"] = key;
+    row.append(keyCell, valueCell);
+    combat.appendChild(row);
+    combatRows.set(key, valueCell);
+  };
+  addCombatRow("target", "Target");
+  addCombatRow("target-zones", "Zones");
+  addCombatRow("resources", "Resources");
+  addCombatRow("move", "Move");
+  addCombatRow("combat-buffer", "Buffer");
+
+  const hitLog = document.createElement("ul");
+  hitLog.className = "pilot-hitlog";
+  hitLog.dataset["field"] = "hit-log";
+  combat.appendChild(hitLog);
+
   const hint = document.createElement("p");
   hint.className = "pilot-hint";
   hint.textContent =
-    "WASD drive · Shift run · F guard · Space booster · Q/E turn · Mouse or arrows look · C camera · T lock · M reduced motion · Esc leave";
+    "WASD drive · Shift run · Space booster · Q/E turn · Mouse or arrows look · C camera · T lock · M reduced motion · Esc leave. " +
+    "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode";
 
-  panel.append(header, cameraRow, rosterRow, comfortRow, readout, hint);
+  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, hint);
   container.appendChild(panel);
 
   let lastMode: CameraMode | null = null;
@@ -255,6 +337,49 @@ export function renderPilotScreen(
           ? `empty, ${readoutValues.droppedPresses} expired`
           : `${readoutValues.buffered.join(", ")} pending, ${readoutValues.droppedPresses} expired`,
       );
+      const combatState = state.combat;
+      combat.hidden = combatState === null;
+      if (combatState) {
+        const setCombat = (key: string, text: string): void => {
+          const cell = combatRows.get(key);
+          if (cell) cell.textContent = text;
+        };
+        setCombat(
+          "target",
+          `${combatState.targetName}, ${combatState.targetDistanceMeters.toFixed(0)} m` +
+            `${combatState.lockedOn ? ", locked" : ""}` +
+            `${combatState.aimZoneId ? `, aiming ${combatState.aimZoneId}` : ""}` +
+            `${combatState.defeated ? ", down" : combatState.finisherOpen ? ", finisher open" : ""}`,
+        );
+        setCombat(
+          "target-zones",
+          combatState.zones
+            .map((zone) => `${zone.id} ${Math.round((zone.health / Math.max(1, zone.maxHealth)) * 100)}%`)
+            .join(" · "),
+        );
+        setCombat(
+          "resources",
+          `stamina ${Math.round(combatState.stamina)}/${Math.round(combatState.staminaMax)} · ` +
+            `heat ${Math.round(combatState.heat)}%${combatState.overheated ? " over" : ""} · ` +
+            `poise ${Math.round(combatState.poise)}${combatState.guarding ? " · guarding" : ""}`,
+        );
+        setCombat(
+          "move",
+          combatState.activeMove ? `${combatState.activeMove} (${combatState.activePhase ?? "?"})` : "ready",
+        );
+        setCombat(
+          "combat-buffer",
+          combatState.buffered.length === 0 ? "empty" : combatState.buffered.join(", "),
+        );
+        hitLog.replaceChildren();
+        for (const line of combatState.hitLog) {
+          const item = document.createElement("li");
+          item.textContent = line;
+          hitLog.appendChild(item);
+        }
+        volumes.checked = combatState.debugVolumes;
+      }
+
       set(
         "scale",
         state.view === null

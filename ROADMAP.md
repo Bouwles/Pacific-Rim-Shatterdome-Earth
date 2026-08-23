@@ -262,12 +262,38 @@ roster machine so "works for a heavy tank and an agile frame" is something the t
 **Depends on:** Phase 2.
 **Status:** not-started.
 **Scope:** one playable Jaeger with light/heavy melee, block, evade, cockpit/third-person camera switch; one kaiju with a basic attack pattern and per-component damage; hit stop, damage numbers optional, component-based damage model.
+**Status:** locomotion, cameras and the attack framework are done (Milestones 09 and 10). What remains
+is kaiju behaviour rather than a schedule, per-component damage on the machine rather than one hull
+zone, hit stop, and damage that survives a battle into the save record.
 **Acceptance tests:** a full scripted encounter can be won or lost; damage persists to the Jaeger's save record after battle.
 **Next action:** a Jaeger the player can pilot, starting from the machine they already select at a berth and
 board in the Conn-Pod. The roster entry, its asset manifest and its saved selection all exist; what does not
 is a Jaeger entity in the world, a controller at Jaeger scale, and the damage record that outlives a fight.
 The deployment corridor out of Hong Kong is already surveyed as city layout data, and the environment
 already supplies the traction, movement and water-state multipliers a 75 m machine has to obey.
+
+## Phase 3 / Milestone 10 - Combat targeting, input buffer, and attack framework
+
+**Depends on:** Milestone 09 (the machine, its reactions and the input buffer).
+**Status:** done.
+**Scope:** the shared combat language. Data-driven moves with phases, movement and turn curves,
+armour, cancel tags and windows, swept hit volumes, typed damage packets and resource costs; a kaiju
+as body zones with their own health, armour and consequences; soft targeting, explicit lock, cycling
+and aim mode with body-zone selection; reusable reactions; an arena that resolves both sides with one
+code path and reports everything as events. Created `src/combat/`, `src/data/moves.ts`,
+`src/data/kaiju.ts`, `src/engine/combatView.ts`, `src/debug/combatScenario.ts`.
+**Acceptance tests:**
+
+- A test Jaeger and a test kaiju exchange attacks deterministically in an arena: the same scenario run
+  twice produces the same events, the same damage and the same digest, and a longer run is decided by
+  a lethal zone rather than by a timer.
+- Hit debug views show which volume connected, at which tick, and with which damage packet, in the log
+  and as zone markers drawn where the resolver believes the zones are.
+- Illegal cancels are rejected by name and defensive windows stay responsive: a cancel before the
+  window, after the window, into the wrong tag, or out of a whiffed move that has to land first are all
+  refused with a message, while a guard comes out of anything that lists it.
+- `npm run typecheck`, `lint`, `format:check`, `test` (774), `smoke` (93), `build` all pass.
+  **Next action:** none - complete.
 
 ## Phase 4 — World map and attack director MVP
 

@@ -90,7 +90,15 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - three camera rigs, chase, combat and Conn-Pod, framed from the machine's own height, with comfort controls for motion, reduced motion, field of view, invert look and sensitivity, and a rig switch that keeps heading, pitch, lock and comfort;
   - buffered input, so a press made slightly too early still fires and one made while knocked down expires unused;
   - scale communicated in the world: eight-metre street lights along the path, aircraft and birds crossing, footprints that stay on the ground, dust sized by the landing, and sound that arrives late at 343 m/s.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (710 unit+integration), `smoke` (86 Playwright), `build` all pass.
+- **A combat framework both sides use**, reachable by spawning a target while piloting:
+  - every attack is a row of data: phase lengths in ticks, a movement curve, how much turn authority survives it, armour, which tags it cancels into and when, which volumes are live on which ticks, one typed damage packet, and what it costs in stamina and heat;
+  - hit detection sweeps volumes rather than sampling them, interpolating both the volume and the target, with an overlap history so one volume connects with one target once;
+  - a kaiju is body zones with their own health, armour, damage multiplier and consequence, exactly one of which ends it;
+  - targeting at four levels: soft targeting, an explicit lock that survives a camera change, cycling left to right across the screen, and aim mode that picks a body zone;
+  - reactions as a shared table, with poise gating staggers so a heavy attack cannot hold a creature down for a whole fight;
+  - stamina, heat and an overheat lockout, all derived from the machine's own mass and cooling rather than authored per fighter;
+  - every event carries a tick, a volume, a zone, a packet and, for a refusal, a reason in words, which is the debug view rather than a picture of one.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (774 unit+integration), `smoke` (93 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -103,6 +111,10 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Loading a save whose world seed differs from the running session reports what to do (reload with `?seed=`) instead of switching worlds. Restoring across seeds needs a kernel rebuild, which belongs with the milestone that introduces a real new-game flow.
 - Autosave rotation is implemented and tested but nothing triggers it automatically yet; no gameplay event exists that would warrant one.
 - Terrain is broad-strokes landform, not geography. The generator knows a sample's latitude, a seeded moisture field and the authored region anchors, and nothing else. Real coastlines, mountain ranges, rivers and city footprints are not reproduced and no accuracy is claimed.
+- Kaiju behaviour does not exist. The creature attacks on a fixed cadence, which the panel and the code both call a schedule rather than an attack director.
+- A machine has one hull zone rather than per-component armour, so component damage lands on a single number. The zones exist on the creature side and the same code path will carry the machine's when its milestone comes.
+- Nothing about a fight is saved. Damage that outlives a battle arrives with the per-component damage milestone.
+- No hit stop, no damage numbers in the world, and no grapples or ranged weapons: the move table has the kinds, but only melee rows are shipped.
 - A piloted machine has no animation: the controller emits a stride phase and footfalls, and the model is moved as one rigid body. Binding a skeleton to that contract is a later milestone.
 - Nothing to fight and nothing to hit. Target lock exists on the camera and reports honestly that there is nothing in range, because kaiju and attacks arrive with the combat milestone.
 - The Conn-Pod camera sits inside the head and looks out; there is no cockpit interior geometry around it yet.
@@ -161,6 +173,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - World: [src/world/coordinates.ts](src/world/coordinates.ts), [cubeSphere.ts](src/world/cubeSphere.ts), [floatingOrigin.ts](src/world/floatingOrigin.ts), [regions.ts](src/world/regions.ts), [worldState.ts](src/world/worldState.ts), [start.ts](src/world/start.ts), [src/data/regions.ts](src/data/regions.ts)
 - World UI and view: [src/ui/worldScreen.ts](src/ui/worldScreen.ts), [src/debug/globeView.ts](src/debug/globeView.ts)
 - City: [src/world/cityLayout.ts](src/world/cityLayout.ts), [cityActivity.ts](src/world/cityActivity.ts), [src/data/districts.ts](src/data/districts.ts), [src/engine/cityView.ts](src/engine/cityView.ts)
+- Combat: [src/combat/](src/combat/), [src/data/moves.ts](src/data/moves.ts), [src/data/kaiju.ts](src/data/kaiju.ts), [src/engine/combatView.ts](src/engine/combatView.ts), [src/debug/combatScenario.ts](src/debug/combatScenario.ts)
 - Jaegers: [src/jaegers/](src/jaegers/), [src/engine/jaegerView.ts](src/engine/jaegerView.ts), [src/engine/pilotInput.ts](src/engine/pilotInput.ts), [src/ui/pilotScreen.ts](src/ui/pilotScreen.ts), [src/debug/jaegerScenario.ts](src/debug/jaegerScenario.ts)
 - Shatterdome: [src/shatterdome/](src/shatterdome/), [src/data/facilities.ts](src/data/facilities.ts), [src/data/personnel.ts](src/data/personnel.ts), [src/engine/interiorView.ts](src/engine/interiorView.ts), [src/ui/shatterdomeScreen.ts](src/ui/shatterdomeScreen.ts)
 - Environment: [src/world/worldClock.ts](src/world/worldClock.ts), [weather.ts](src/world/weather.ts), [ocean.ts](src/world/ocean.ts), [environment.ts](src/world/environment.ts)
@@ -197,7 +210,8 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and build combat on the locomotion controller rather than beside it. `applyReaction` already takes knockback,
-knockdown, a disabled leg and destruction, the input buffer already consumes the next legal action, and the
-camera already carries a target lock with nothing to lock on to. What is missing is something to fight and a
-data-driven definition of what an attack is.
+The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and give the creature behaviour rather than a cadence, and give the machine components rather than a hull.
+The arena already resolves both sides, already reports every hit by zone, and already carries the reactions a
+behaviour would choose between; what it lacks is anything deciding what the creature does. Per-component
+damage is the other half: the zone path exists and the machine currently uses one zone through it, so
+splitting a Jaeger into head, torso, arms, legs and weapons is data plus a save section rather than new code.

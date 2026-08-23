@@ -260,3 +260,37 @@ whether the feet are planted, and whether it is a reaction.
 Three rows in `src/jaegers/camera.ts`: exploration, combat and Conn-Pod. Rig
 geometry is in multiples of machine height, so adding a machine never means
 adding a camera.
+
+## Moves (Milestone 10)
+
+Eight rows in `src/data/moves.ts`, registered through
+`ContentRegistry<MoveDefinition>`. Times are in ticks at sixty ticks a second.
+
+| id                         | Kind        | Startup / active / recovery | Damage     | Cancels into                  | Notes                          |
+| -------------------------- | ----------- | --------------------------- | ---------- | ----------------------------- | ------------------------------ |
+| melee.light.jab            | light       | 7 / 4 / 12                  | 90 impact  | light, heavy, guard, evade    | Opens a guard                  |
+| melee.light.cross          | light       | 9 / 5 / 15                  | 140 impact | heavy, launcher, guard, evade | Cancels only if it landed      |
+| melee.heavy.overhead       | heavy       | 24 / 6 / 34                 | 420 crush  | finisher                      | Light armour                   |
+| melee.launcher.uppercut    | launcher    | 18 / 5 / 30                 | 260 impact | heavy, finisher               | Launches                       |
+| melee.guard-break.shoulder | guard-break | 20 / 8 / 26                 | 180 crush  | light, heavy                  | Super armour, 200 guard damage |
+| melee.finisher.plasma-drop | finisher    | 30 / 8 / 46                 | 900 plasma | none                          | Only against a finished target |
+| kaiju.claw.swipe           | heavy       | 26 / 7 / 30                 | 320 impact | heavy                         | The creature's opener          |
+| kaiju.tail.sweep           | launcher    | 22 / 9 / 36                 | 240 crush  | none                          | Super armour, knocks down      |
+
+## Kaiju (Milestone 10)
+
+Two entries in `src/data/kaiju.ts`, both original placeholder designs. Each is
+six body zones: head, torso, core, two limbs and a tail, with exactly one zone
+that ends the creature.
+
+| id                | Name        | Height | Poise | Core health / armour / multiplier |
+| ----------------- | ----------- | ------ | ----- | --------------------------------- |
+| kaiju.test-dummy  | Test Frame  | 70 m   | 220   | 1,800 / 0.15 / 2.2                |
+| kaiju.biped-alpha | Alpha Biped | 82 m   | 320   | 2,400 / 0.20 / 2.0                |
+
+## Reactions (Milestone 10)
+
+Eight rows in `src/combat/reactions.ts`: absorbed, flinch, stagger, guard break,
+launch, wall impact, knockdown and component shock. Each carries a length,
+whether control is lost, what it does to poise, how it scales knockback, and
+whether it opens a finisher.

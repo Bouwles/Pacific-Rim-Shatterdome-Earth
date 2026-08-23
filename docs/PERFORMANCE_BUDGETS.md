@@ -182,6 +182,27 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Combat cost (Milestone 10)
+
+Measured in the browser on WebGPU at High, seed 20260824, in Hong Kong with the
+city, the streamed terrain, a piloted machine and a live fight:
+
+| State                              | Draw calls | Frame time    | Frame rate |
+| ---------------------------------- | ---------- | ------------- | ---------- |
+| Machine out, no target             | 85 to 88   | 0.8 ms        | 144        |
+| Target spawned, exchanging attacks | 98 to 101  | 0.6 to 0.8 ms | 144        |
+| Hit debug view on                  | 100        | 0.6 ms        | 144        |
+
+The creature costs whatever its model resolves to plus two pooled meshes: one
+wireframe sphere mesh carrying every body zone marker, and one carrying the hit
+markers. Hit resolution itself is arithmetic: for each live volume, four swept
+samples against each of the target's six zones, which is under two hundred
+distance tests per tick with one attacker and one target.
+
+Combat runs on its own fixed sixty-tick clock, accumulated from frame time and
+capped at eight ticks per frame, so a stalled frame cannot run a second of
+fighting at once.
+
 ## Piloted Jaeger cost (Milestone 09)
 
 Measured in the browser on WebGPU at High, seed 20260824, standing in Hong Kong

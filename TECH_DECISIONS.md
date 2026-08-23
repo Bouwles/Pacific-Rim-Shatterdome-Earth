@@ -632,3 +632,47 @@ machine does, two things claim the same position and the bigger one wins.
 **Nothing new was saved.** A pilot session is live state; the world already saves
 the position it drives to. `ROOT_SAVE_VERSION` stays at 5 with no migration,
 which is the right answer whenever new state is derivable or transient.
+
+## 2026-08-24, Milestone 10
+
+**Moves are data and damage is a typed packet.** The failure mode this exists to
+prevent is damage living in animation event strings with nothing validating it.
+A move that cannot connect, a cancel window that opens before the move can land,
+a volume that outlives its own active frames and a packet that does no damage
+are all refused at registration, by name.
+
+**Hit detection is swept, and never a per-frame mesh intersection.** The volume
+is placed where it was and where it is, both ends interpolated, and the closest
+approach decides. That is four distance tests per volume per zone per tick, all
+of it arithmetic the simulation already has, and none of it needs a scene.
+
+**One overlap history per attack instance.** A multi-hit move is a deliberate
+thing with several volumes, not an accident of a volume staying live for six
+ticks.
+
+**Both sides run one resolver.** The creature's claw sits in the same table as
+the machine's cross. When kaiju behaviour arrives it will choose rows from that
+table rather than getting a combat system of its own.
+
+**Poise gates staggers; explicit knockdowns do not.** Found by running the
+scenario: without the gate, a machine that could keep throwing heavies held the
+creature in a permanent stagger and the fight was one sided in a way no number
+in the table admitted to.
+
+**Aim mode decides which zone a hit lands on, generously.** Without it, every
+swing lands on whatever is biggest, which on an eighty metre creature is always
+the torso, and body zones become decoration. An aimed zone wins when the contact
+was within the larger of three zone radii and a third of the creature's height.
+
+**Refusals are events.** An attack that cannot be thrown produces a logged reason
+in words. That is the same principle as the facility terminal greying a button
+with an explanation: a rule the player cannot see is a rule they will assume is a
+bug.
+
+**Combat has its own fixed tick, accumulated from frame time and capped.** A
+stalled frame cannot run a second of fighting at once, and the resolver never
+sees a variable delta.
+
+**Nothing new is saved.** A fight is live state. Per-component damage that
+survives a battle is its own milestone with its own save section, and inventing
+that schema now would be guessing.
