@@ -27,9 +27,7 @@ async function fight(page: Page, query = "?seed=20260824"): Promise<void> {
 }
 
 test.describe("kaiju behaviour", () => {
-  test("explains its goal, what it weighed and what it sensed, with no console errors", async ({
-    page,
-  }) => {
+  test("explains its goal, what it weighed and what it sensed, with no console errors", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") consoleErrors.push(msg.text());
@@ -47,7 +45,9 @@ test.describe("kaiju behaviour", () => {
     await expect(field(page, "ai-goal")).toContainText("—");
     await expect(field(page, "ai-considered")).toHaveText(/\w+ \d+/);
     await expect(field(page, "ai-senses")).toHaveText(/jaeger by (sight|sound|vibration)/);
-    await expect(field(page, "ai-path")).toHaveText(/(direct|detour|burrow-under|climb-over|swim-across|smash-through|blocked|none) in \w+/);
+    await expect(field(page, "ai-path")).toHaveText(
+      /(direct|detour|burrow-under|climb-over|swim-across|smash-through|blocked|none) in \w+/,
+    );
     await expect(field(page, "ai-body")).toHaveText(/ability\./);
     expect(consoleErrors, consoleErrors.join("\n")).toEqual([]);
   });

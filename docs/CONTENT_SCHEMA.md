@@ -565,6 +565,62 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Kaiju framework schemas (Milestone 15)
+
+### `LocomotionFamilyDefinition` (src/data/locomotionFamilies.ts)
+
+Nine families: biped, quadruped, serpentine, winged, burrower, swimmer,
+amphibious, crawler, colossal.
+
+| Field                                  | Meaning                                              | Constraint                                             |
+| -------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| `media`                                | Ground, water, underground, air or wall              | at least one; must include `preferredMedium`           |
+| `groundSpeedMps` / `preferredSpeedMps` | How fast it is out of and in its element             | above zero                                             |
+| `turnRateDegPerSecond`                 | Heading change while moving                          | above zero                                             |
+| `turnInPlaceDegPerSecond`              | Heading change while stationary                      | zero or more; **zero means it genuinely cannot**       |
+| `stepUpMeters` / `maxSlopeDeg`         | What it can step over and walk up                    | slope within (0, 90]; a climber may not refuse a slope |
+| `canClimb` / `ignoresRubble`           | Whether a wall or rubble stops it                    | read by navigation, never switched on                  |
+| `transitionSeconds` / `widthPerHeight` | Cost of changing medium, and how wide a gap it needs | zero or more; width above zero                         |
+
+### `SenseProfile` (src/kaiju/senses.ts)
+
+`{ kind, rangeMeters, decayPerSecond, arcDeg, occlusionScale, waterScale }` for
+each of `sight`, `sound`, `vibration`, `scent`, `threat`, `objective` and
+`damage-memory`. Arc is within (0, 180], where 180 means all the way round. A
+creature definition overrides one kind at a time; anything it does not mention
+keeps the default.
+
+A `SenseContact` is `{ sourceId, east, north, confidence, kind, ageSeconds,
+damageDealt }`: where something **was**, not where it is.
+
+### Goals (src/kaiju/behavior.ts)
+
+Eleven rows, each with a pure `score(situation, profile)` and an `explain`. The
+situation is distance, contact confidence, health, poise, damage taken,
+objective and feed distances, medium, water and climbable nearby, whether the
+route is blocked, frustration and phase. The profile is per-goal weights plus
+caution, objective focus, appetite, enrage threshold and the locomotion family.
+
+### `KaijuDefinition` additions
+
+| Field         | Meaning                                                            | Constraint                                               |
+| ------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| `locomotion`  | Names a locomotion family                                          | must be a registered family                              |
+| `senses`      | Overrides on the default profiles                                  | each profile validated                                   |
+| `behavior`    | Weights and traits                                                 | traits within [0, 1]; weights zero or more               |
+| `organs`      | `{ id, displayName, zoneId, health, grants[], description }`       | must sit on a zone this creature has and grant something |
+| `armor`       | `{ zoneId, health, absorption, description }`                      | absorption strictly between none and all                 |
+| `severable`   | `{ zoneId, disables[], movementScale, description }`               | severing must cost something                             |
+| `resistances` | Multiplier per damage kind                                         | zero or more                                             |
+| `prefers`     | Media it would rather be in                                        | at least one                                             |
+| `phases`      | `{ id, displayName, below, damageScale, speedScale, description }` | thresholds must descend and sit strictly inside a fight  |
+
+### What is saved
+
+Nothing new. A creature's senses, goal, frustration, armour, organs and severed
+limbs are live state belonging to the fight they happened in, and a fight is not
+saved. `ROOT_SAVE_VERSION` stays at 7.
+
 ## Destruction schemas (Milestone 14)
 
 ### `BuildingArchetype` (src/data/buildings.ts)

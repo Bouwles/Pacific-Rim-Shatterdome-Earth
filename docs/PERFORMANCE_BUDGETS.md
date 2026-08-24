@@ -182,6 +182,32 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Kaiju behaviour cost (Milestone 15)
+
+Measured in the browser on WebGPU at High, seed 20260824, with a creature
+driving itself in Hong Kong:
+
+| State                                  | Draw calls | Frame time    | Frame rate |
+| -------------------------------------- | ---------- | ------------- | ---------- |
+| Creature sensing, deciding and closing | 106 to 112 | 0.6 to 0.9 ms | 144        |
+
+Behaviour costs nothing to draw: it adds no mesh, no material and no instance.
+What it adds is arithmetic on the combat tick, and the shape of that arithmetic
+is the budget:
+
+- **Senses are a loop over stimuli, not a query over the world.** The world hands
+  the creature a short list of what is happening; nothing walks the scene.
+- **A decision is eleven pure functions over one plain object.** No allocation
+  beyond the considered list, no lookups, and no path finding.
+- **Navigation probes at most nine directions.** One direct line, then eight
+  detour bearings, each a couple of world samples. There is no graph, no grid,
+  and nothing cached between ticks.
+- **Contacts are bounded by what is in the fight**, decay on their own, and are
+  forgotten after 45 seconds of nothing refreshing them.
+
+One creature per fight today. The costs above are per creature per combat tick,
+so a squad milestone should measure again rather than assume this scales.
+
 ## Destruction cost (Milestone 14)
 
 Measured in the browser on WebGPU at High, seed 20260824, fighting in the

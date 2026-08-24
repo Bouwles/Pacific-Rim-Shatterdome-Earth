@@ -295,6 +295,41 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Locomotion families (Milestone 15)
+
+Nine rows in `src/data/locomotionFamilies.ts`. Speeds are metres per second,
+turn rates degrees per second.
+
+| id         | Media               | Ground | Preferred      | Turn moving | Turn in place | Step up | Slope | Climbs | Ignores rubble |
+| ---------- | ------------------- | ------ | -------------- | ----------- | ------------- | ------- | ----- | ------ | -------------- |
+| biped      | ground, water       | 16     | 16 ground      | 55          | 90            | 14 m    | 42°   | no     | no             |
+| quadruped  | ground              | 22     | 22 ground      | 40          | 45            | 9 m     | 50°   | no     | no             |
+| serpentine | ground, water       | 18     | 26 water       | 26          | **0**         | 6 m     | 35°   | yes    | yes            |
+| winged     | air, ground         | 9      | 48 air         | 70          | 20            | 40 m    | 90°   | yes    | yes            |
+| burrower   | underground, ground | 12     | 20 underground | 35          | 30            | 8 m     | 60°   | no     | yes            |
+| swimmer    | water               | 3      | 34 water       | 50          | 25            | 2 m     | 20°   | no     | no             |
+| amphibious | ground, water       | 14     | 24 water       | 45          | 55            | 10 m    | 40°   | no     | no             |
+| crawler    | ground, wall        | 20     | 20 ground      | 80          | 120           | 20 m    | 85°   | yes    | yes            |
+| colossal   | ground, water       | 11     | 11 ground      | 14          | 8             | 40 m    | 55°   | no     | yes            |
+
+A turn-in-place rate of zero is not a rounding: a serpentine body cannot change
+heading without travelling, and navigation enforces it.
+
+## Kaiju archetypes (Milestone 15)
+
+Three creatures in `src/data/kaiju.ts`, plus the training frame.
+
+| id                   | Family     | Senses it leans on   | Tactic                                     | Organ        | Grants                 |
+| -------------------- | ---------- | -------------------- | ------------------------------------------ | ------------ | ---------------------- |
+| kaiju.biped-alpha    | biped      | ordinary             | Closes and stays. Enrages under a quarter  | throat sac   | acid spit              |
+| kaiju.serpent-delta  | serpentine | vibration, scent     | Waits, then works around. Prefers water    | sonar bulb   | deep sense, vibration  |
+| kaiju.burrower-sigma | burrower   | vibration, objective | Ignores the machine, digs to the objective | seismic node | ground slam, vibration |
+| kaiju.test-dummy     | biped      | none                 | Stands there. It is a training frame       | -            | -                      |
+
+Each also carries armour plates, a severable appendage, resistances per damage
+kind and its own phases. Losing an organ takes the abilities it granted with it;
+severing an appendage takes what it was doing and slows the creature down.
+
 ## Building archetypes (Milestone 14)
 
 Five rows in `src/data/buildings.ts`. A district builds with the first archetype

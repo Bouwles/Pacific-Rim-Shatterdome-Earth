@@ -380,6 +380,28 @@ and the world panel.
 - `npm run typecheck`, `lint`, `format:check`, `test` (953), `smoke` (117), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 15 - Kaiju framework, senses, behaviour and body zones
+
+**Depends on:** Milestone 10 (the combat framework these creatures fight inside).
+**Status:** done.
+**Scope:** nine locomotion families; seven sense channels producing contacts rather than truth;
+eleven goals scored by utility with hysteresis and plain-language explanations; navigation fallbacks
+for ruined cities, water, cliffs and blocked routes; bodies with breakable armour, special organs that
+grant abilities, severable appendages, damage-kind resistances, environmental preferences and phases;
+and an AI debug view on the pilot panel. Created `src/data/locomotionFamilies.ts`,
+`src/kaiju/senses.ts`, `src/kaiju/behavior.ts`, `src/kaiju/navigation.ts`, `src/kaiju/creature.ts`,
+`src/debug/kaijuScenario.ts`. Extended the kaiju table with two new archetypes, the pilot panel, and
+the combat loop, which now lets the creature drive itself instead of attacking on a fixed cadence.
+**Acceptance tests:**
+
+- Three archetypes pursue the same objective with visibly different tactics, proved by their goal
+  trails and by which of them actually arrives.
+- Breaking a special organ removes the ability it granted, live and in tests.
+- The debug view explains the current goal, the alternatives considered, path state and sensory
+  contacts.
+- `npm run typecheck`, `lint`, `format:check`, `test` (998), `smoke` (120), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

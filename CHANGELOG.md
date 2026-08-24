@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-24, Milestone 15: Kaiju framework, senses, behaviour and body zones
+
+Kaiju think now. Not well, but for reasons, and the reasons are different for each of them.
+
+- Nine ways of getting around: walking on two legs or four, coiling, flying, digging, swimming, doing both, crawling up a wall, or simply being too big for any of it to matter. Which one a creature is decides what an obstacle even means to it.
+- A serpent cannot turn on the spot. Not "turns slowly": it has to travel to change where it is pointing, and the code enforces that rather than assuming everything pivots like a tank.
+- Seven senses, none of which give a creature the truth. It sees a cone in front of it, hears in every direction, feels the ground through vibration, smells what has been past, and it ends up with a guess about where you were, which gets vaguer the less sure it is. Fight something in cover and it is looking for you rather than at you.
+- Kaiju remember being hurt. Hit something from somewhere it never saw and it knows roughly where the blow came from, and it holds that longer than it holds anything else.
+- Eleven things a creature can want: hunting, closing, flanking, waiting in ambush, climbing, digging, swimming, wrecking what it came for, stopping to eat, breaking off, and going past caring. It scores all of them every tick and takes the best, with enough margin that it does not flicker between two.
+- Three creatures who do not fight alike. A brawler that walks at you and stays. A serpent that waits out of sight, then comes at you from the side rather than the front. And a digger that will not fight you at all if it can help it, because it came for the Shatterdome and you are in the way.
+- Bodies that come apart in specific ways. Chest plate off before the chest is worth hitting. A throat sac that, once burst, ends the acid spit for good. A fin that, once taken, means the thing cannot corner. Phases that make a wounded creature slower and angrier and a nearly dead one faster and worse.
+- A debug view that says what it is doing and why: the goal in words, the alternatives it weighed with their scores, every contact it has and which sense found it, what navigation did about the road, and what is left of the body.
+- The fixed attack cadence is gone. Creatures used to swing every four seconds because a schedule stood in for behaviour. Now they close, hold, back off or ignore you entirely on their own.
+
 ## 2026-08-24, Milestone 14: Staged city destruction, debris, regional persistence and rebuilding
 
 Hong Kong can be knocked down now, and it stays knocked down.

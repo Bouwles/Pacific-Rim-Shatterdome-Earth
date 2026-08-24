@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 14. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 15. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -74,6 +74,11 @@ src/
     finisher.ts        beat state machine, hold and skip settings, placement safety query
     projectiles.ts     a fixed pool of rounds, swept movement, ballistic arcs, the combat bubble
     abilities.ts       status effects as a table, and pure weapon scoring for anything choosing
+  kaiju/               ← how a creature senses, decides and gets around; no Babylon, no DOM
+    senses.ts          seven sense channels, contacts as beliefs, damage memory
+    behavior.ts        eleven goals as registry rows, utility scoring, hysteresis, explanations
+    navigation.ts      direct, detour, climb, burrow, swim, smash, blocked; slope and turn rules
+    creature.ts        one creature: senses to goal to path to body, with armour, organs and phases
   jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
     damage.ts          per-component structure, states, scars, routing, repair orders, the saved record
     roster.ts          one record per machine: status, damage, outstanding work, recovery and rebuild
@@ -756,6 +761,49 @@ exist.
 **Events are drained rather than collected from steps.** A trigger is pulled
 between two ticks, so anything a step returned would have missed every shot,
 reload and refusal. The arena keeps a drain cursor and the panel reads that.
+
+## The kaiju framework
+
+**A creature is a body, a family, a set of senses and a set of weights.** None of
+those is a name. `data/kaiju.ts` carries the body zones, armour plates, special
+organs, severable appendages, resistances, environmental preferences and phases;
+`data/locomotionFamilies.ts` carries the nine ways of getting around; the
+behaviour engine reads weights and traits. **Nothing in the engine switches on a
+creature id**, which is the rule that lets a serpent and a burrower share one
+code path and still fight nothing alike.
+
+**Senses produce beliefs, not truth.** `kaiju/senses.ts` runs seven channels -
+sight, sound, vibration, scent, threat, objective and damage memory - each with
+its own range, arc, decay, and its own answer to cover and water. What comes out
+is a contact: where something was, how sure the creature is, and which sense
+said so, with a seeded error that grows as confidence falls. Everything
+downstream acts on contacts, so a creature can be wrong, can lose something, and
+can remember being hit by something it never saw.
+
+**Goals are rows with a score and an explanation.** `kaiju/behavior.ts` holds
+eleven: hunt, approach, flank, ambush, climb, burrow, swim, destroy-objective,
+feed, retreat and enrage. Each scores a plain situation object purely, the
+highest weighted score wins, and a switching margin stops a creature dithering
+between two goals a point apart. Every goal also returns a sentence saying why,
+which is what the debug view shows.
+
+**Navigation is fallback rules, not a path finder.** `kaiju/navigation.ts` tries
+the straight line, then whatever this family does about an obstacle: go under,
+go over, go through, take to the water, or work around it in eight steps, and
+says plainly when nothing it can do gets it through. Two things the engine
+refuses to assume: the ground is flat, and everything can turn in place. Slope
+and step-up are checked against the family's own limits, and a family with no
+turn-in-place rate has to travel to change heading.
+
+**The creature is where it all meets.** `kaiju/creature.ts` senses, decides,
+moves, and carries the body: armour that comes off before the zone under it is
+honest work, organs that grant abilities and take them away when destroyed,
+appendages that can be severed for a real cost, resistances per damage kind, and
+phases that change how hard it hits and how fast it moves as it is worn down.
+
+**The arena stays authoritative.** The creature decides what to press; the arena
+decides what happens. In a live fight the creature drives itself in place of the
+fixed attack cadence that stood in for behaviour until now.
 
 ## City destruction
 

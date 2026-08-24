@@ -367,6 +367,23 @@ past a weapon's reach the target is, how close is too close for indirect fire,
 that a forward-arc weapon needs you to turn, that a magazine is empty and the
 spares are gone, or that too many rounds are already in the air.
 
+### Reading a creature (Milestone 15)
+
+Five rows on the pilot panel are the AI debug view. Nothing is bound to a new
+key: this is what the creature is doing, shown rather than driven.
+
+| Readout       | Meaning                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kaiju goal    | What it is doing now and the sentence explaining why                                                                                         |
+| Considering   | The alternatives it weighed this tick, with their scores, best first                                                                         |
+| Senses        | Every contact: which source, which sense found it, how sure, and how far                                                                     |
+| Path          | What navigation did (direct, detour, climb-over, burrow-under, swim-across, smash-through, blocked), in which medium, at what speed, and why |
+| Creature body | Phase, abilities it can still use, anything severed, and organ health                                                                        |
+
+Those rows are the same numbers the creature acted on, not a second copy kept
+for display. A creature that has lost an organ shows the ability disappearing
+from the list the moment it goes, and the hit log says which organ it was.
+
 ### City damage and rebuilding (Milestone 14)
 
 Four rows on the world panel report what has happened to the city around you.

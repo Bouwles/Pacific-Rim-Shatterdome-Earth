@@ -136,7 +136,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - hours of recovery applied when you walk back into a region or skip the clock, so fires burn out and people come out while you are away;
   - clearing and rebuilding as projects that take crew hours and funding, work the worst block first, go faster with the facilities you actually built and slower where the region is not secure, and stall unpaid rather than finishing free;
   - a world panel that reports damage, hazards, rubble against its ceiling and what crews are working on, and can put them on the worst block.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (953 unit+integration), `smoke` (117 Playwright), `build` all pass.
+- **Kaiju that hunt rather than home**, driving themselves in any fight:
+  - nine locomotion families covering biped, quadruped, serpentine, winged, burrower, swimmer, amphibious, crawler and colossal, each with its own media, speeds, turn rates, slope and step limits;
+  - a serpentine body that genuinely cannot turn on the spot, and navigation that enforces it rather than assuming every creature pivots like a tank;
+  - seven senses (sight, sound, vibration, scent, threat, objective, damage memory) with their own ranges, arcs, decay and answers to cover and water, producing contacts that can be wrong, go stale and be forgotten;
+  - a creature that remembers being hit by something it never saw;
+  - eleven goals scored by utility, each a registry row with a pure score and a sentence explaining itself, with a switching margin so nothing dithers;
+  - navigation fallbacks that go under, over, through, around or into the water depending on what the body can do, and say plainly when nothing works;
+  - bodies with armour plates that come off, organs that grant abilities and take them away when destroyed, appendages that can be severed for a real cost, resistances per damage kind, and phases that change how hard it hits and how fast it moves;
+  - three archetypes that solve the same objective differently: a brawler that closes, an ambusher that waits and flanks, and a sapper that ignores the machine and digs to what it came for;
+  - an AI debug view on the pilot panel showing the current goal and why, the alternatives weighed, every sensory contact, path state and body state.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (998 unit+integration), `smoke` (120 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

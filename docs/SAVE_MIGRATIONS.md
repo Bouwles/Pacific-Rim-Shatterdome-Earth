@@ -192,6 +192,17 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Milestone 15 saves nothing new
+
+`ROOT_SAVE_VERSION` stays at 7. Everything the kaiju framework owns is live
+state belonging to one fight: what a creature has sensed, what it currently
+wants, how frustrated it is, which armour plates are off, which organs are gone
+and which limbs have been severed. A fight is not saved, so none of it is.
+
+What a creature **is** - its body, family, senses, weights, organs and phases -
+is content in the registry rather than state, so it comes from the build and
+never from a file.
+
 ## Version 6 to 7: regional damage (Milestone 14)
 
 Version 7 adds a `damage` snapshot to every region record, and moves the world

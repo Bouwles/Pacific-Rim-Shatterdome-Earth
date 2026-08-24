@@ -677,6 +677,40 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-24, Milestone 15
+
+**Utility scoring, not a behaviour tree.** Every goal is a row with a pure score
+and an explanation, so the engine has no structure to rewrite when a creature
+needs to prefer something different: it needs different weights. A tree would
+have grown a branch per creature, which is the failure mode the milestone names.
+
+**A creature reaches the engine as weights, traits and a family.** Nothing in
+`behavior.ts`, `navigation.ts` or `creature.ts` mentions a kaiju id, and a test
+asserts no explanation contains one. That is what makes a fourth creature a row
+in a table.
+
+**Senses produce beliefs.** A contact is where something was, how sure the
+creature is, and which sense said so, with a seeded error that grows as
+confidence falls. Handing behaviour the truth would have made every creature a
+homing missile and made cover, water and darkness cosmetic.
+
+**Navigation is fallback rules rather than a path finder.** A graph over a city
+that is being levelled would need rebuilding as it changes, and would still not
+tell a burrower that the road is irrelevant to it. Nine probes and a family's own
+answers cost nothing and produce visibly different movement.
+
+**Turning in place is a rate that can be zero.** It is the smallest possible way
+to express "this body cannot do that", and it makes the serpent read as a
+serpent without a single line of serpent-specific code.
+
+**Organs are targets inside zones, not zones of their own.** They take a share of
+what gets past the armour, so shooting a creature in the head can burst what is
+in the head without the head having to be a separate hit volume.
+
+**The arena stays authoritative.** The creature decides what to press; the arena
+decides what happens, applies damage and resolves reactions. The creature only
+owns what is bolted to it: plates, organs and limbs.
+
 ## 2026-08-24, Milestone 14
 
 **A destruction group is the smallest damageable thing.** The layout already
