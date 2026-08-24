@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-08-24, Milestone 14: Staged city destruction, debris, regional persistence and rebuilding
+
+Hong Kong can be knocked down now, and it stays knocked down.
+
+- Fight in the streets and the streets go. Blocks take damage where the fight happens, buildings come down in whole numbers, and the rubble ends up in the road. What is left standing around the hole is untouched: this is damage to a district, not a slider on a city.
+- Seven states, and only three of them come from being hit. Intact, damaged and breached are how much is left standing. Collapsing, ruined, cleared and rebuilding are stages the city moves through over time and work.
+- Fires that burn, contamination that lingers, and people still under the rubble. A warehouse district leaves poison behind; a tenement stack leaves the most people trapped. The panel tells you how many, and how badly rescue crews are needed.
+- Rubble you can watch land. Chunks are thrown out of a collapse, bounce once, and settle, and the moment they settle they stop costing anything. There is a hard ceiling on how many can exist, set by your quality preset, and a collapse that wants more than the game has room for is told so rather than quietly given less.
+- The damage is still there when you come back. Leave the city, leave the ground view, load a save from three sessions ago: the same blocks are still down. What gets saved is a handful of numbers for each block that was touched, so a levelled Hong Kong is about five kilobytes rather than a copy of the scene.
+- Time does something. Come back a day later and the fires are out and people have been pulled out. Come back a week later with crews on the job and the rubble is gone and something is going up in its place. Nothing snaps back to new.
+- Rebuilding is work, not a countdown. Crews clear before they build, take the worst block first, and go faster if you have actually built the logistics and fabrication facilities to back them. A region that is not secure slows them down, and a rebuild you have not paid for stalls and says how short it is.
+- One button, on the world panel: the worst block in the city, what it will cost in hours and money, and crews on their way. It refuses out loud when there is nothing to clear, when work is already underway, or when the place is still on fire.
+
+One problem found by hand, after the tests were green: the +1h and +6h buttons moved the clock and the weather and did nothing at all for a burning city. Six hours would pass and the fires would still be burning and the crews would still be standing there. Both paths through time now go through the same recovery.
+
 ## 2026-08-24, Milestone 13: Localized Jaeger damage, scars, disabled systems and recovery
 
 A machine is no longer a health bar. It is a Conn-Pod, a sensor mast, a torso, a reactor, two arms and two legs, and what happens to each of them is different.

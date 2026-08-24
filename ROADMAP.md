@@ -359,6 +359,27 @@ the berth panel and the machine view.
 - `npm run typecheck`, `lint`, `format:check`, `test` (912), `smoke` (112), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 14 - Staged city destruction, debris, regional persistence and rebuilding
+
+**Depends on:** Milestone 07 (the city layout) and Milestone 10 (combat, which is what damages it).
+**Status:** done.
+**Scope:** building archetypes with a seven-state lifecycle; per-block damage, fire, contamination,
+rubble, trapped civilians and a city safety score; a pooled debris system that freezes and recycles;
+regional persistence through a compact per-block summary on every region record; clearing and
+rebuilding projects influenced by facilities, security and funding; and a world panel that reports
+all of it and can put crews on the worst block. Created `src/data/buildings.ts`,
+`src/world/destruction.ts`, `src/world/debris.ts`, `src/debug/destructionScenario.ts`. Extended the
+city view, the region record, the world state, the save schema and migrations, the quality presets
+and the world panel.
+**Acceptance tests:**
+
+- A building-scale battle visibly changes the active district and the damage remains after leaving
+  and reloading.
+- Returning days later shows staged clearing or reconstruction rather than an instant reset.
+- The maximum active debris body count is enforced under stress at every preset size.
+- `npm run typecheck`, `lint`, `format:check`, `test` (953), `smoke` (117), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

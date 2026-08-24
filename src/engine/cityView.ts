@@ -12,6 +12,7 @@ import {
 import type { DistrictDefinition, DistrictKind } from "../data/districts";
 import type { QualityPreset } from "../data/quality";
 import { headingAlong, pointAlong, type CityLayout, type DestructionGroup } from "../world/cityLayout";
+import type { BuildingState } from "../data/buildings";
 import { instanceCountFor, type ActivitySample } from "../world/cityActivity";
 import { ecefToLocal, tangentBasisAt, type GeoPosition, type TangentBasis } from "../world/coordinates";
 
@@ -93,6 +94,14 @@ interface GroupNode {
   readonly mesh: Mesh;
   readonly blockCount: number;
   readonly bytes: number;
+  /**
+   * The towers this group was built from, seven numbers each: east, north,
+   * ground, width, depth, height, rotation. Kept so a damaged block can be
+   * redrawn from its own source rather than regenerated from the layout.
+   */
+  readonly source: readonly number[];
+  /** What the group is currently drawn as. Redrawn only when this changes. */
+  drawnState: BuildingState;
 }
 
 /**
@@ -105,6 +114,41 @@ interface GroupNode {
  * into four array reads.
  */
 const GROUND_FIELD_RESOLUTION = 65;
+
+/**
+ * How tall a block stands in each state, as a fraction of its intact height.
+ *
+ * A table rather than a switch, and the one place the look of damage is
+ * decided: the simulation says which state a block is in and this says what
+ * that looks like.
+ */
+const HEIGHT_BY_STATE: Readonly<Record<BuildingState, number>> = {
+  intact: 1,
+  damaged: 0.92,
+  breached: 0.7,
+  collapsing: 0.45,
+  ruined: 0.18,
+  cleared: 0.04,
+  rebuilding: 0.55,
+};
+
+/** How far a block leans in each state, radians of scatter. */
+const LEAN_BY_STATE: Readonly<Record<BuildingState, number>> = {
+  intact: 0,
+  damaged: 0.02,
+  breached: 0.06,
+  collapsing: 0.18,
+  ruined: 0.32,
+  cleared: 0,
+  rebuilding: 0.04,
+};
+
+/** Parks every instance in a buffer far below the world until it is used. */
+function parkAll(buffer: Float32Array): void {
+  for (let index = 0; index < buffer.length / 16; index += 1) {
+    composeInstance(buffer, index, new Vector3(0.001, 0.001, 0.001), 0, new Vector3(0, -100_000, 0));
+  }
+}
 
 const SCRATCH_QUATERNION = new Quaternion();
 const SCRATCH_MATRIX = new Matrix();
@@ -136,6 +180,9 @@ export class CityView {
   private readonly landmarkMesh: Mesh | null = null;
   private readonly defenseMesh: Mesh | null = null;
   private readonly musterMesh: Mesh | null = null;
+  private readonly debrisMesh: Mesh | null = null;
+  private readonly debrisBuffer: Float32Array;
+  private debrisCount = 0;
   private quality: QualityPreset;
   private readonly groundField: Float32Array;
   private readonly groundFieldExtent: number;
@@ -166,6 +213,10 @@ export class CityView {
     this.defenseMesh = this.buildDefenses();
     this.musterMesh = this.buildMusterPoints();
     this.buildAgentPools();
+    // Rubble shares one mesh at the preset's own ceiling, so a street full of
+    // it costs one draw call.
+    this.debrisBuffer = new Float32Array(options.quality.maxDebrisBodies * 16);
+    this.debrisMesh = this.buildDebrisPool();
     this.rebase();
   }
 
@@ -294,7 +345,14 @@ export class CityView {
       }
       mesh.thinInstanceSetBuffer("matrix", matrices, 16, true);
 
-      this.groups.push({ group, mesh, blockCount: drawn, bytes: matrices.byteLength });
+      this.groups.push({
+        group,
+        mesh,
+        blockCount: drawn,
+        bytes: matrices.byteLength,
+        source: instances,
+        drawnState: "intact",
+      });
       this.gpuBytes += matrices.byteLength;
     }
   }
@@ -670,9 +728,106 @@ export class CityView {
     };
   }
 
+  /**
+   * Redraws the blocks whose state has changed.
+   *
+   * A damaged block loses height and leans; a ruined one is a rubble field at a
+   * fraction of its old height; a rebuilding one is scaffolding part of the way
+   * back up. Only groups whose state actually changed are touched, so a city
+   * standing still costs nothing.
+   */
+  updateDamage(stateOf: (groupId: string) => BuildingState): number {
+    if (this.disposed) return 0;
+    let redrawn = 0;
+    for (const node of this.groups) {
+      const state = stateOf(node.group.id);
+      if (state === node.drawnState) continue;
+      node.drawnState = state;
+      redrawn += 1;
+      this.redrawGroup(node, state);
+    }
+    return redrawn;
+  }
+
+  /** Draws whatever the debris pool says is in the world. */
+  updateDebris(
+    chunks: readonly { east: number; north: number; up: number; yawRadians: number; sizeMeters: number }[],
+  ): void {
+    if (this.disposed || !this.debrisMesh) return;
+    const capacity = this.debrisBuffer.length / 16;
+    const count = Math.min(chunks.length, capacity);
+    for (let index = 0; index < count; index += 1) {
+      const chunk = chunks[index];
+      if (!chunk) continue;
+      composeInstance(
+        this.debrisBuffer,
+        index,
+        new Vector3(chunk.sizeMeters, chunk.sizeMeters * 0.6, chunk.sizeMeters),
+        chunk.yawRadians,
+        new Vector3(chunk.east, chunk.up, chunk.north),
+      );
+    }
+    const previous = this.debrisCount;
+    this.debrisCount = count;
+    this.debrisMesh.thinInstanceCount = count;
+    if (count !== previous) {
+      this.debrisMesh.thinInstanceSetBuffer("matrix", this.debrisBuffer, 16);
+      this.debrisMesh.thinInstanceCount = count;
+      this.debrisMesh.thinInstanceRefreshBoundingInfo(false);
+    } else if (count > 0) {
+      this.debrisMesh.thinInstanceBufferUpdated("matrix");
+    }
+  }
+
+  /** How many blocks are currently drawn in each state. For the panel. */
+  damageStates(): Readonly<Record<string, number>> {
+    const counts: Record<string, number> = {};
+    for (const node of this.groups) {
+      counts[node.drawnState] = (counts[node.drawnState] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  private redrawGroup(node: GroupNode, state: BuildingState): void {
+    const scale = HEIGHT_BY_STATE[state] ?? 1;
+    const lean = LEAN_BY_STATE[state] ?? 0;
+    const matrices = new Float32Array(node.blockCount * 16);
+    for (let index = 0; index < node.blockCount; index += 1) {
+      const at = index * 7;
+      const height = Math.max(1, (node.source[at + 5] ?? 1) * scale);
+      // A deterministic wobble from the index, so a ruined block is a jumble
+      // rather than a neat row of shorter boxes, and looks the same every time.
+      const wobble = lean === 0 ? 0 : ((index % 5) - 2) * lean;
+      composeInstance(
+        matrices,
+        index,
+        new Vector3(node.source[at + 3] ?? 1, height, node.source[at + 4] ?? 1),
+        (node.source[at + 6] ?? 0) + wobble,
+        new Vector3(node.source[at] ?? 0, (node.source[at + 2] ?? 0) + height / 2, node.source[at + 1] ?? 0),
+      );
+    }
+    node.mesh.thinInstanceSetBuffer("matrix", matrices, 16, true);
+    node.mesh.thinInstanceCount = node.blockCount;
+    node.mesh.thinInstanceRefreshBoundingInfo(false);
+  }
+
+  private buildDebrisPool(): Mesh {
+    const mesh = MeshBuilder.CreateBox("city.debris", { size: 1 }, this.scene);
+    mesh.material = this.material("city.debris.mat", new Color3(0.28, 0.27, 0.26), 0.02);
+    mesh.isPickable = false;
+    mesh.parent = this.root;
+    parkAll(this.debrisBuffer);
+    mesh.thinInstanceSetBuffer("matrix", this.debrisBuffer, 16);
+    mesh.thinInstanceCount = 0;
+    mesh.alwaysSelectAsActiveMesh = true;
+    this.gpuBytes += this.debrisBuffer.byteLength;
+    return mesh;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.debrisMesh?.dispose();
     for (const group of this.groups) group.mesh.dispose();
     this.groups.length = 0;
     for (const mesh of this.roadMeshes) mesh.dispose();

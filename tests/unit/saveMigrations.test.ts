@@ -35,7 +35,7 @@ describe("migrateSave from the version 0 fixture", () => {
 
     expect(result.fromVersion).toBe(0);
     // Walks the whole chain: wrap the bare snapshot, then add the world section.
-    expect(result.applied).toEqual(["0", "1", "2", "3", "4", "5"]);
+    expect(result.applied).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRootSave(result.document)).toEqual([]);
   });

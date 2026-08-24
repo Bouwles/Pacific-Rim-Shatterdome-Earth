@@ -565,6 +565,47 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Destruction schemas (Milestone 14)
+
+### `BuildingArchetype` (src/data/buildings.ts)
+
+One row per kind of structure a district builds with.
+
+| Field                                         | Meaning                                                | Constraint                                             |
+| --------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
+| `districts`                                   | Districts that build with it; empty means anywhere     | looked up, never switched on                           |
+| `structurePerMeter`                           | How much punishment it takes per metre of height       | above zero                                             |
+| `fractured` / `fractureChunks`                | Whether it is worth authoring chunks for, and how many | a fractured archetype needs at least four; others zero |
+| `debrisYield`                                 | Chunks a collapse offers the pool                      | above zero                                             |
+| `collapseSeconds`                             | How long the collapsing state lasts                    | above zero                                             |
+| `rubbleHeightFraction`                        | How tall the rubble pile stands                        | within [0, 1]                                          |
+| `fireChance` / `contaminationChance`          | Rolled once per collapse from a seeded stream          | within [0, 1]                                          |
+| `occupancyThousands`                          | People at risk per structure                           | zero or more                                           |
+| `clearHours` / `rebuildHours` / `rebuildCost` | What it costs to put right                             | rebuildHours must exceed clearHours                    |
+
+### Building states
+
+`intact` above 0.85 integrity, `damaged` above 0.55, `breached` above 0.15,
+then `collapsing`, `ruined`, `cleared` and `rebuilding`, which are reached by
+time and work rather than by damage. Derived, never stored.
+
+### `RegionDamageSnapshot` (src/world/destruction.ts)
+
+`{ schemaVersion, regionId, groups[], landmarks[], projects[] }`. A group record
+is seven numbers: `{ id, integrity, down, fire, contamination, rubble, trapped }`.
+A landmark record is an id and a state. A project is a group, a phase
+(`clearing` or `rebuilding`), hours and funding still owed. Only touched blocks,
+non-intact landmarks and running projects are written, so an untouched city
+saves three empty arrays.
+
+### What is saved
+
+`ROOT_SAVE_VERSION` is 7 and `WORLD_SCHEMA_VERSION` is 4. Every region record
+now carries a `damage` snapshot alongside its integrity, safety rating and
+alert. Migration step `"6"` gives a version 6 save an undamaged snapshot per
+region, which is the only honest reading of a file written when damage did not
+survive a fight.
+
 ## Damage schemas (Milestone 13)
 
 ### `ComponentDefinition` (src/data/components.ts)

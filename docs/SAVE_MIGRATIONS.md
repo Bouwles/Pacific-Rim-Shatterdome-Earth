@@ -192,6 +192,28 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Version 6 to 7: regional damage (Milestone 14)
+
+Version 7 adds a `damage` snapshot to every region record, and moves the world
+section to schema version 4.
+
+The snapshot is deliberately small: seven numbers for each block that has been
+touched, a state for each named landmark that is not intact, and any clearing or
+rebuilding project still running. Untouched blocks are not written at all, so an
+undamaged city carries three empty arrays and a levelled one carries a few
+kilobytes. **No scene graph, no debris transform and no per-building record is
+ever saved**; rubble is a pooled runtime object and the city view rebuilds the
+look of a block from its state.
+
+A version 6 save has no record of what any fight did to a city, because damage
+did not survive one: the streets came back whole the moment you left. The
+migration therefore gives every region an undamaged snapshot with nothing being
+rebuilt. Nothing else in the document is touched.
+
+On load, a block or landmark naming something this build no longer has is
+dropped rather than resurrected, and anything the file never mentioned comes
+back untouched.
+
 ## Version 5 to 6: the roster (Milestone 13)
 
 Version 6 adds a `roster` section: one record per machine carrying its status,

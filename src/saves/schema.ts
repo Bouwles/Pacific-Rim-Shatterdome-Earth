@@ -8,7 +8,7 @@ import { validateRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 6;
+export const ROOT_SAVE_VERSION = 7;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;

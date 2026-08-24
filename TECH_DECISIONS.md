@@ -677,6 +677,39 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-24, Milestone 14
+
+**A destruction group is the smallest damageable thing.** The layout already
+buckets every building into one on a 480 m grid, so damage had a unit before
+this milestone started. Going finer means per-building records, which means a
+save proportional to the size of the city and a physics problem nobody asked
+for. Going coarser means a city with one health bar.
+
+**Debris is pooled, ballistic and frozen, not physics.** A collapse throws at
+most two dozen chunks whatever the building was, each one integrates until it
+lands, and then it stops forever. The alternative, a rigid body per piece of
+facade, is exactly the failure mode the milestone names.
+
+**The summary is the save, and the detail is rebuilt from it.** The detailed
+model exists only for the region the player is standing in. Everywhere else is a
+few numbers per damaged block on a record that every region on the planet
+already carries. That is what makes destruction regional rather than local
+without saving a scene.
+
+**Maximum health and geometry come from the build, never the file.** A saved
+block carries fractions and counts. Rebalancing the city grammar therefore
+changes what an old save means in the right direction instead of leaving it
+carrying numbers from a version that no longer exists.
+
+**Both clocks go through one call.** Time skipped on the panel and time passed
+while away are the same thing to a burning building, and having two paths is how
+one of them ends up doing nothing. That is exactly what had happened before it
+was caught by hand.
+
+**Passability belongs to the nearest block.** Group radii overlap on a 480 m
+grid, so asking whether any nearby group is blocked called clear streets
+impassable because the next block along had come down.
+
 ## 2026-08-24, Milestone 13
 
 **A machine is a component table, not a health bar with extra fields.** The

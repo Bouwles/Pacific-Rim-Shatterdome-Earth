@@ -113,6 +113,27 @@ export interface CityReadout {
   readonly agentsByKind: Readonly<Record<string, number>>;
   readonly cityMeshes: number;
   readonly cityGpuBytes: number;
+  /** What has been knocked down here, and what is being done about it. */
+  readonly damageSummary: string;
+  readonly safetyRating: number;
+  readonly blocksDamaged: number;
+  readonly blocksRuined: number;
+  readonly firesBurning: number;
+  readonly contaminatedBlocks: number;
+  readonly routesBlockedFraction: number;
+  readonly trappedThousands: number;
+  readonly rescuePressure: number;
+  /** Live rubble against the ceiling the preset allows. */
+  readonly debrisLive: number;
+  readonly debrisCapacity: number;
+  readonly debrisFrozen: number;
+  /** Blocks being cleared or rebuilt right now, in words. */
+  readonly rebuildSummary: string;
+  /** The worst damaged block, or null when the city is whole. */
+  readonly worstBlockId: string | null;
+  readonly worstBlockLabel: string | null;
+  /** What starting work on it would cost, or null when there is nothing to do. */
+  readonly rebuildQuote: string | null;
   /**
    * True when a city view exists to report on. The layout and the alert are real
    * wherever the player is, but "drawn" and "agents" describe rendering, and
@@ -154,6 +175,8 @@ export interface WorldScreenCallbacks {
   onQualityChange(level: string): void;
   /** Raises or lowers the alert in the region the player is standing in. */
   onAlertChange(level: string): void;
+  /** Starts clearing and then rebuilding the named block. */
+  onRebuild(groupId: string): void;
   /** Take the machine out. Ground view only: there is nothing to stand on from orbit. */
   onPilot(jaegerId: string): void;
   onExit(): void;
@@ -387,6 +410,29 @@ export function renderWorldScreen(
     alertButtons.set(level.id, button);
   }
 
+  // Starting work on the worst block. Disabled, visibly, when there is nothing
+  // to clear or the block is still burning.
+  const rebuildRow = document.createElement("div");
+  rebuildRow.className = "world-teleport";
+  rebuildRow.dataset.section = "rebuild";
+  const rebuildLabel = document.createElement("label");
+  rebuildLabel.textContent = "Worst block";
+  const rebuildTarget = document.createElement("span");
+  rebuildTarget.className = "world-value";
+  rebuildTarget.dataset.field = "rebuild-target";
+  rebuildLabel.appendChild(rebuildTarget);
+  const rebuildButton = document.createElement("button");
+  rebuildButton.type = "button";
+  rebuildButton.className = "secondary-button";
+  rebuildButton.dataset.action = "rebuild";
+  rebuildButton.textContent = "Clear and rebuild";
+  rebuildButton.disabled = true;
+  let rebuildTargetId: string | null = null;
+  rebuildButton.addEventListener("click", () => {
+    if (rebuildTargetId) callbacks.onRebuild(rebuildTargetId);
+  });
+  rebuildRow.append(rebuildLabel, rebuildButton);
+
   const city = document.createElement("div");
   city.className = "world-readout world-city";
   city.dataset.section = "city";
@@ -401,6 +447,10 @@ export function renderWorldScreen(
     row("Defence / routes", "city-defence"),
     row("Drawn", "city-drawn"),
     row("Agents", "city-agents"),
+    row("Damage", "city-damage"),
+    row("Hazards", "city-hazards"),
+    row("Rubble", "city-rubble"),
+    row("Rebuilding", "city-rebuilding"),
   );
 
   const environment = document.createElement("div");
@@ -536,6 +586,7 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    rebuildRow,
     pilotRow,
     alertRow,
     qualityRow,
@@ -685,6 +736,19 @@ export function renderWorldScreen(
           .map(([kind, count]) => `${count} ${kind}`)
           .join(", ");
         set("city-agents", `${town.agents}/${town.agentCapacity} pooled${kinds ? ` (${kinds})` : ""}`);
+        set("city-damage", `${town.damageSummary} · safety ${Math.round(town.safetyRating * 100)}%`);
+        set(
+          "city-hazards",
+          `${town.firesBurning} burning · ${town.contaminatedBlocks} contaminated · ` +
+            `${Math.round(town.routesBlockedFraction * 100)}% of routes blocked · ` +
+            `${town.trappedThousands.toFixed(1)}k trapped, rescue pressure ${Math.round(town.rescuePressure * 100)}%`,
+        );
+        set("city-rubble", `${town.debrisLive}/${town.debrisCapacity} bodies, ${town.debrisFrozen} settled`);
+        set("city-rebuilding", town.rebuildSummary);
+        rebuildTargetId = town.worstBlockId;
+        rebuildTarget.textContent = town.worstBlockLabel ?? "nothing down";
+        rebuildButton.disabled = town.worstBlockId === null;
+        if (town.rebuildQuote) rebuildButton.title = town.rebuildQuote;
 
         for (const [level, button] of alertButtons) {
           button.classList.toggle("is-active", level === town.alertLevel);

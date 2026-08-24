@@ -205,7 +205,7 @@ describe("the saved record", () => {
       shatterdome: { marker: "untouched" },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["5"]);
+    expect(result.applied).toEqual(["5", "6"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRosterSnapshot(result.document.roster)).toEqual([]);
     expect(result.document.roster.machines.length).toBe(jaegerRegistry.all().length);
@@ -213,10 +213,10 @@ describe("the saved record", () => {
       expect(machine.status).toBe("ready");
       expect(machine.damage.scars).toEqual([]);
     }
-    // Everything else in the file survives exactly as written.
-    expect((result.document as unknown as Record<string, unknown>)["world"]).toEqual({
-      marker: "untouched",
-    });
+    // Everything else in the file survives: later steps add their own sections,
+    // but nothing that was already written is disturbed.
+    const world = (result.document as unknown as Record<string, unknown>)["world"] as Record<string, unknown>;
+    expect(world["marker"]).toBe("untouched");
     expect((result.document as unknown as Record<string, unknown>)["shatterdome"]).toEqual({
       marker: "untouched",
     });

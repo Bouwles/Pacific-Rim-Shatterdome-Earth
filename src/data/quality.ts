@@ -73,6 +73,12 @@ export interface QualityPreset extends RegistryEntry {
    */
   readonly maxProjectiles: number;
   /**
+   * Ceiling on rigid debris bodies in the air and on the ground at once. The
+   * pool is allocated at this size and never grows: a collapse that wants more
+   * gets what is free and the shortfall is reported.
+   */
+  readonly maxDebrisBodies: number;
+  /**
    * Staff instances drawn in the Shatterdome room the player is standing in.
    * Only the active room is ever populated, so this is a per-room ceiling rather
    * than a complex-wide one.
@@ -101,6 +107,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxFootstepDecals: 12,
     maxScaleReferences: 24,
     maxProjectiles: 48,
+    maxDebrisBodies: 60,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "No shadows or reflections, one wave octave, a thinner city. Every telegraph is still drawn.",
   },
@@ -122,6 +129,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxFootstepDecals: 28,
     maxScaleReferences: 60,
     maxProjectiles: 96,
+    maxDebrisBodies: 140,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "Shadows on, cheap reflections, two wave octaves.",
   },
@@ -143,6 +151,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxFootstepDecals: 56,
     maxScaleReferences: 120,
     maxProjectiles: 180,
+    maxDebrisBodies: 260,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "The default. Full wave detail and a full-resolution shadow map.",
   },
@@ -164,6 +173,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxFootstepDecals: 96,
     maxScaleReferences: 220,
     maxProjectiles: 320,
+    maxDebrisBodies: 420,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "For capture rather than play. Not expected to hold 60 fps in a heavy fight.",
   },
@@ -210,6 +220,8 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
   // A salvo weapon puts three rounds in the air at once and a rotary cannon
   // several a second. Fewer than this and a weapon silently stops working.
   if (preset.maxProjectiles < 24) errors.push("maxProjectiles must be at least 24");
+  // A collapse that cannot throw a handful of chunks is not a collapse.
+  if (preset.maxDebrisBodies < 32) errors.push("maxDebrisBodies must be at least 32");
   // An empty room is not a cheaper room, it is an abandoned one, and a complex
   // with nobody in it tells the player something false about the game.
   if (preset.maxInteriorStaff < 1) errors.push("maxInteriorStaff must be at least 1");

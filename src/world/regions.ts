@@ -1,5 +1,6 @@
 import { ContentRegistry, type RegistryEntry } from "../data/registry";
 import { validateGeoPosition, type GeoPosition } from "./coordinates";
+import { emptyDamageSnapshot, validateDamageSnapshot, type RegionDamageSnapshot } from "./destruction";
 import { initialAlertState, validateAlertState, type CityAlertState } from "./cityActivity";
 
 /**
@@ -100,6 +101,13 @@ export interface RegionRecord {
   readonly tier: SimulationTier;
   /** Alert level and evacuation progress. Authoritative, so it is saved. */
   readonly alert: CityAlertState;
+  /**
+   * What has been knocked down here and what is being done about it.
+   *
+   * A summary per damaged block and a state per named landmark, never a scene
+   * graph: an untouched city carries three empty arrays.
+   */
+  readonly damage: RegionDamageSnapshot;
 }
 
 export function initialRecord(regionId: string): RegionRecord {
@@ -110,6 +118,7 @@ export function initialRecord(regionId: string): RegionRecord {
     lastVisitedTick: 0,
     tier: "strategic",
     alert: initialAlertState(),
+    damage: emptyDamageSnapshot(regionId),
   };
 }
 
@@ -133,5 +142,6 @@ export function validateRegionRecord(record: RegionRecord, knownIds: ReadonlySet
   } else {
     errors.push(...validateAlertState(record.alert).map((error) => `${record.regionId}.${error}`));
   }
+  errors.push(...validateDamageSnapshot(record.damage).map((error) => `${record.regionId}.${error}`));
   return errors;
 }

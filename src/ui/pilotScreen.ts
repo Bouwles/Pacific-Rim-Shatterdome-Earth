@@ -68,6 +68,33 @@ export interface PilotCombatState {
   }[];
   /** Status effects burning or shocking away on the target. */
   readonly targetStatuses: readonly string[];
+  /**
+   * What the creature is doing and why. Null before anything is fighting, so
+   * the rows say nothing rather than implying an AI that is not running.
+   */
+  readonly creature: {
+    readonly goal: string;
+    readonly goalReason: string;
+    readonly considered: readonly {
+      readonly goal: string;
+      readonly score: number;
+      readonly reason: string;
+    }[];
+    readonly contacts: readonly {
+      readonly sourceId: string;
+      readonly kind: string;
+      readonly confidence: number;
+      readonly distanceMeters: number;
+    }[];
+    readonly medium: string;
+    readonly navOutcome: string;
+    readonly navReason: string;
+    readonly speedMps: number;
+    readonly phase: string;
+    readonly abilities: readonly string[];
+    readonly severed: readonly string[];
+    readonly organs: readonly { readonly id: string; readonly fraction: number }[];
+  } | null;
   readonly liveProjectiles: number;
   readonly projectileCapacity: number;
 }
@@ -333,6 +360,11 @@ export function renderPilotScreen(
   addCombatRow("move", "Move");
   addCombatRow("combat-buffer", "Buffer");
   addCombatRow("melee", "Melee");
+  addCombatRow("ai-goal", "Kaiju goal");
+  addCombatRow("ai-considered", "Considering");
+  addCombatRow("ai-senses", "Senses");
+  addCombatRow("ai-path", "Path");
+  addCombatRow("ai-body", "Creature body");
   addCombatRow("weapons", "Weapons");
   addCombatRow("rounds", "Rounds");
   addCombatRow("training", "Coaching");
@@ -516,6 +548,53 @@ export function renderPilotScreen(
           ]
             .filter((part) => part !== null)
             .join(" · "),
+        );
+        const ai = combatState.creature;
+        setCombat("ai-goal", ai === null ? "not running" : `${ai.goal} — ${ai.goalReason}`);
+        setCombat(
+          "ai-considered",
+          ai === null
+            ? "-"
+            : ai.considered.length === 0
+              ? "nothing wants anything"
+              : ai.considered
+                  .slice(0, 4)
+                  .map((entry) => `${entry.goal} ${Math.round(entry.score)}`)
+                  .join(" · "),
+        );
+        setCombat(
+          "ai-senses",
+          ai === null
+            ? "-"
+            : ai.contacts.length === 0
+              ? "nothing sensed"
+              : ai.contacts
+                  .map(
+                    (contact) =>
+                      `${contact.sourceId} by ${contact.kind} ${Math.round(contact.confidence * 100)}% at ${Math.round(contact.distanceMeters)} m`,
+                  )
+                  .join(" · "),
+        );
+        setCombat(
+          "ai-path",
+          ai === null
+            ? "-"
+            : `${ai.navOutcome} in ${ai.medium} at ${ai.speedMps.toFixed(1)} m/s — ${ai.navReason}`,
+        );
+        setCombat(
+          "ai-body",
+          ai === null
+            ? "-"
+            : [
+                ai.phase,
+                ai.abilities.length === 0 ? "no abilities left" : ai.abilities.join(", "),
+                ai.severed.length > 0 ? `severed: ${ai.severed.join(", ")}` : null,
+                ...ai.organs.map(
+                  (organ) => `${organ.id.replace("organ.", "")} ${Math.round(organ.fraction * 100)}%`,
+                ),
+              ]
+                .filter((part) => part !== null)
+                .join(" · "),
         );
         setCombat(
           "weapons",

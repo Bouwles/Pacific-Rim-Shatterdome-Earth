@@ -295,6 +295,24 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Building archetypes (Milestone 14)
+
+Five rows in `src/data/buildings.ts`. A district builds with the first archetype
+that lists it; anything unlisted falls back to the archetype that takes any
+district.
+
+| id                      | Districts            | Structure/m | Fractured | Debris | Collapse | Fire | Contam. | People | Clear | Rebuild | Cost  |
+| ----------------------- | -------------------- | ----------- | --------- | ------ | -------- | ---- | ------- | ------ | ----- | ------- | ----- |
+| building.harbour-tower  | waterfront, downtown | 42          | 14 chunks | 26     | 9 s      | 35%  | 5%      | 2.4k   | 210 h | 1,400 h | 8.6M  |
+| building.tenement-stack | slums, hillside      | 18          | no        | 12     | 5 s      | 55%  | 2%      | 4.1k   | 90 h  | 420 h   | 1.2M  |
+| building.dock-warehouse | docks, industrial    | 26          | no        | 18     | 4 s      | 40%  | 25%     | 0.3k   | 120 h | 380 h   | 0.9M  |
+| building.precinct-block | shatterdome          | 58          | 18 chunks | 30     | 12 s     | 20%  | 8%      | 1.2k   | 260 h | 1,900 h | 12.4M |
+| building.viaduct        | anywhere             | 34          | 10 chunks | 22     | 6 s      | 10%  | 3%      | 0.2k   | 150 h | 900 h   | 4.1M  |
+
+Fractured archetypes are the ones worth authoring chunks for; everything else is
+swapped and decalled. An archetype that claims chunks without being fractured,
+or that is cheaper to rebuild than to clear, is refused at registration.
+
 ## Jaeger components (Milestone 13)
 
 Eight rows in `src/data/components.ts`, generic across machines and scaled by

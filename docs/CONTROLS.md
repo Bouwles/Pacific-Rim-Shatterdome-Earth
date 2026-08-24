@@ -367,6 +367,28 @@ past a weapon's reach the target is, how close is too close for indirect fire,
 that a forward-arc weapon needs you to turn, that a magazine is empty and the
 spares are gone, or that too many rounds are already in the air.
 
+### City damage and rebuilding (Milestone 14)
+
+Four rows on the world panel report what has happened to the city around you.
+**Damage** gives the headline: how many blocks are damaged, how many are
+levelled, what is still burning, how many people are still trapped, and the
+safety rating that follows from all of it. **Hazards** breaks that out into
+fires, contamination, the fraction of routes blocked by rubble, and how badly
+rescue crews are needed. **Rubble** shows live debris bodies against the ceiling
+the quality preset allows and how many have settled. **Rebuilding** says what
+crews are working on and how many hours are left.
+
+Under the controls, **Worst block** names the most damaged block in the city and
+**Clear and rebuild** puts crews on it. The button is disabled, visibly, when
+there is nothing down, and hovering it shows the quote in hours and funding. The
+refusals are sentences: nothing to clear there, work is already underway, or it
+is still burning and crews go in once the fire is down.
+
+Nothing is bound to a new key. Damage is something that happens to the city
+while you fight in it, and the **+1h** and **+6h** time controls now advance the
+city's recovery as well as the clock: fires burn down, people come out, and any
+crews on site keep working.
+
 ### Damage and repair (Milestone 13)
 
 Two rows on the pilot panel report what the machine is carrying. **Damage** gives

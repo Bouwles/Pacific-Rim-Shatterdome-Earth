@@ -9,6 +9,7 @@ import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start"
 import { createFacilityRegistry } from "../data/facilities";
 import { emptyShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { emptyRosterSnapshot } from "../jaegers/roster";
+import { emptyDamageSnapshot } from "../world/destruction";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -210,6 +211,41 @@ const addRosterSection: MigrationStep = {
   }),
 };
 
+/**
+ * Adds regional damage introduced by Milestone 14.
+ *
+ * A version 6 save has no record of what any fight did to a city, because
+ * damage did not survive one: the streets came back whole the moment you left.
+ * Every region therefore comes back undamaged with nothing being rebuilt, which
+ * is the only honest reading of a file that never captured any.
+ *
+ * Nothing else in the document is touched.
+ */
+const addRegionDamage: MigrationStep = {
+  id: "6",
+  fromVersion: 6,
+  toVersion: 7,
+  description: "Add per-region destruction summaries, landmark states and rebuild projects.",
+  apply: (document) => {
+    const world = (
+      typeof document["world"] === "object" && document["world"] !== null ? document["world"] : {}
+    ) as Record<string, unknown>;
+    const regions = Array.isArray(world["regions"]) ? (world["regions"] as Record<string, unknown>[]) : [];
+    return {
+      ...document,
+      schemaVersion: 7,
+      world: {
+        ...world,
+        schemaVersion: WORLD_SCHEMA_VERSION,
+        regions: regions.map((record) => ({
+          ...record,
+          damage: emptyDamageSnapshot(String(record["regionId"] ?? "")),
+        })),
+      },
+    };
+  },
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -230,6 +266,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addRegionAlerts);
   registry.register(addShatterdomeSection);
   registry.register(addRosterSection);
+  registry.register(addRegionDamage);
   return registry;
 }
 

@@ -182,6 +182,38 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Destruction cost (Milestone 14)
+
+Measured in the browser on WebGPU at High, seed 20260824, fighting in the
+Hong Kong waterfront blocks:
+
+| State                                          | Draw calls | Frame time    | Frame rate |
+| ---------------------------------------------- | ---------- | ------------- | ---------- |
+| City intact, nothing coming down               | 106 to 110 | 0.6 to 0.8 ms | 144        |
+| Blocks collapsing, 48 rubble bodies in the air | 155        | 0.8 ms        | 144        |
+
+**Debris ceilings by preset**: low 60, medium 140, high 260, cinematic 420. The
+pool is allocated once at that size and never grows. One collapse may ask for at
+most 24 chunks however large the building was, the pool gives what is free, and
+the shortfall is counted and shown on the panel rather than quietly allocated
+for. All live rubble shares one draw call.
+
+Three rules keep destruction off the frame budget:
+
+- **Nothing below a block is simulated.** A destruction group covers a few city
+  blocks; there is no wall panel, no per-building rigid body, and no fracture
+  solve at runtime.
+- **Everything settles.** A chunk that lands freezes and is never integrated
+  again, so a street full of rubble costs transforms and nothing else. Anything
+  still moving after 45 seconds is recycled regardless.
+- **Only changed blocks are redrawn.** The view compares each group's state
+  against what it last drew, so a city standing still costs nothing, and a fight
+  redraws a handful of groups rather than the city.
+
+**What is saved**: a summary per damaged block, not a scene. A heavily levelled
+Hong Kong serialises to about 5 KB, asserted in a test that also fails if the
+snapshot ever starts containing anything mesh-shaped.
+
 ## Damage cost (Milestone 13)
 
 Measured in the browser on WebGPU at High, seed 20260824, with a damaged machine

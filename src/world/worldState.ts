@@ -12,10 +12,11 @@ import {
 import { EnvironmentSystem, validateEnvironmentSnapshot, type EnvironmentSnapshot } from "./environment";
 import type { ClimateWeatherProfile } from "./weather";
 import type { WorldClockOptions } from "./worldClock";
+import type { CitySafetyReport, RegionDamageSnapshot } from "./destruction";
 import { advanceAlert, setAlertLevel, type AlertLevel } from "./cityActivity";
 
 /** Raised to 3 by Milestone 07, which added alert state to every region record. */
-export const WORLD_SCHEMA_VERSION = 3;
+export const WORLD_SCHEMA_VERSION = 4;
 
 /**
  * Climate for anywhere the player is not inside a named region. Open water is
@@ -210,6 +211,37 @@ export class WorldState {
     };
     this.recordsById.set(regionId, updated);
     return updated;
+  }
+
+  /**
+   * Writes a region's destruction summary back onto its strategic record.
+   *
+   * This is what makes damage regional rather than local: the detailed model
+   * lives with the active city while you are standing in it, and what survives
+   * is this summary, which every region on the planet can afford to carry.
+   */
+  setRegionDamage(
+    regionId: string,
+    damage: RegionDamageSnapshot,
+    report: CitySafetyReport,
+    tick: number,
+  ): RegionRecord {
+    const record = this.recordsById.get(regionId);
+    if (!record) throw new Error(`Unknown region "${regionId}"`);
+    const updated: RegionRecord = {
+      ...record,
+      integrity: clamp01(report.integrity),
+      safetyRating: clamp01(report.safety),
+      lastVisitedTick: tick,
+      damage,
+    };
+    this.recordsById.set(regionId, updated);
+    return updated;
+  }
+
+  /** The damage summary a region is carrying, for rebuilding it in detail. */
+  damageFor(regionId: string): RegionDamageSnapshot | undefined {
+    return this.recordsById.get(regionId)?.damage;
   }
 
   serialize(): WorldSnapshot {

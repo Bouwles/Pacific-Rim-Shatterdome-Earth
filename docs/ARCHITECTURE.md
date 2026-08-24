@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 13. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 14. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -62,6 +62,8 @@ src/
     environment.ts      the query surface AI and combat read; composes clock, weather and ocean
     cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
     cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
+    destruction.ts      per-block damage, hazards, rescue, safety scoring, clearing and rebuilding
+    debris.ts           a fixed pool of rubble: ballistic, frozen on settling, recycled by age
   combat/              ← the fight; no Babylon, no DOM, no wall clock
     arena.ts           fighters, resources, attack state, hit resolution, the event log
     hitVolumes.ts      swept capsules, target spheres, overlap history
@@ -754,6 +756,46 @@ exist.
 **Events are drained rather than collected from steps.** A trigger is pulled
 between two ticks, so anything a step returned would have missed every shot,
 reload and refusal. The arena keeps a drain cursor and the panel reads that.
+
+## City destruction
+
+**A block is the unit of damage.** The layout already buckets every building
+into a destruction group on a 480 m grid, and `world/destruction.ts` gives each
+one integrity, structures down, fire, contamination, rubble in the road and
+people still trapped. Nothing smaller is ever simulated: no wall panel is a
+body, and no building is a rigid assembly.
+
+**Seven states, and only three of them come from damage.** Intact, damaged and
+breached are read from integrity. Collapsing, ruined, cleared and rebuilding are
+stages a block is moved through by time and work. `data/buildings.ts` holds the
+archetypes: what a structure is made of, how it comes apart, how long it burns,
+how much rubble it leaves, and what clearing and rebuilding it cost.
+
+**Two clocks.** Seconds move a collapse through to rubble and let a fire spread
+while you are standing there. Hours burn fires out, pull people out, and put
+crew hours into projects. Both arrive from outside: the module owns no timer.
+
+**Rubble is pooled and frozen.** `world/debris.ts` allocates its chunks once at
+the quality preset's ceiling. A collapse asks for at most two dozen, gets what
+is free, and the shortfall is reported. Each chunk flies ballistically, freezes
+the moment it settles, and is recycled by age when something newer comes down.
+A frozen chunk costs one transform and nothing else.
+
+**Damage is regional, and the summary is what survives.** The detailed model
+lives with the active city; leaving writes a summary onto the region's strategic
+record: a handful of numbers per damaged block, a state per named landmark, and
+any running projects. A levelled city saves in single-digit kilobytes and **no
+scene graph is ever written**. Walking back in rebuilds the detailed model from
+that summary and applies the hours that passed while nobody was there.
+
+**Rebuilding is a project, not a timer.** Crews clear before they rebuild, worst
+block first. Rate is modified by the facilities actually built in the
+Shatterdome, by how secure the region is, and by funding; an unpaid rebuild
+stalls and says how short it is rather than finishing for free.
+
+**The renderer reads the states and owns none of them.** `cityView` redraws only
+the blocks whose state changed, from the tower data it was built with, and draws
+live rubble as thin instances on one pooled mesh.
 
 ## Localized damage, scars and repair
 

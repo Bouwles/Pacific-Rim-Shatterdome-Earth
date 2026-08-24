@@ -127,7 +127,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a repair board on each berth with every component, what is offline, the marks it wears, and a work order priced and timed from the damage, worst component first;
   - a shift of work you can put in, which finishes components, clears their marks and signs the machine off;
   - a save section carrying status, hours owed, sorties and one fraction per component, with maximum health taken from the build rather than the file on load.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (912 unit+integration), `smoke` (112 Playwright), `build` all pass.
+- **A city that stays knocked down**, in whichever region you fight in:
+  - five building archetypes with a seven-state lifecycle: intact, damaged, breached, collapsing, ruined, cleared, rebuilding;
+  - damage per block rather than per building, with fire, contamination, rubble in the road, people still trapped and a city safety score that follows from all of it;
+  - authored fracture chunk counts on the structures worth them, and swaps, leaning and rubble heights for everything else;
+  - a pooled debris system sized by the quality preset (60 to 420) that never grows, freezes chunks the moment they settle, recycles the oldest settled chunk under pressure, and expires everything after 45 seconds;
+  - regional persistence through a compact summary on every region record: seven numbers per damaged block, a state per named landmark, and any running project, with no scene graph and no debris transform ever saved;
+  - hours of recovery applied when you walk back into a region or skip the clock, so fires burn out and people come out while you are away;
+  - clearing and rebuilding as projects that take crew hours and funding, work the worst block first, go faster with the facilities you actually built and slower where the region is not secure, and stall unpaid rather than finishing free;
+  - a world panel that reports damage, hazards, rubble against its ceiling and what crews are working on, and can put them on the worst block.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (953 unit+integration), `smoke` (117 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

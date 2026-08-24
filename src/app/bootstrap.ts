@@ -69,6 +69,12 @@ import {
   type AlertLevel,
 } from "../world/cityActivity";
 import { CityView } from "../engine/cityView";
+import { RegionDestruction } from "../world/destruction";
+import { Creature, type CreatureDebug } from "../kaiju/creature";
+import type { BodyZoneId } from "../data/kaiju";
+import type { NavigationQuery } from "../kaiju/navigation";
+import { DEFAULT_DAY_LENGTH_TICKS } from "../world/worldClock";
+import { DebrisPool, debrisStream, MAX_CHUNKS_PER_COLLAPSE } from "../world/debris";
 import { geoToLocal, localToGeo } from "../world/coordinates";
 import { PilotSession } from "../jaegers/pilotSession";
 import { JaegerView } from "../engine/jaegerView";
@@ -591,6 +597,112 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * walking back into Hong Kong does not lay it out again.
    */
   const cityLayouts = new Map<string, CityLayout>();
+  /**
+   * Destruction per region, built on demand from the layout and seeded with
+   * whatever that region's strategic record is carrying. This is the detailed
+   * model; the record is the summary that survives leaving.
+   */
+  const destructionByRegion = new Map<string, RegionDestruction>();
+  /** Rubble in the world, capped by the quality preset and shared by every fight. */
+  const debrisPool = new DebrisPool(quality.maxDebrisBodies);
+  /** How wide a blow reaches into the streets around it. */
+  const CITY_IMPACT_RADIUS_METERS = 70;
+  /** Combat damage is machine-scale; buildings take a multiple of it. */
+  const CITY_IMPACT_SCALE = 260;
+  /** Blocks whose rubble is still being thrown, so the view redraws them. */
+  let debrisDirty = false;
+  /**
+   * The detailed destruction model for a region.
+   *
+   * Rebuilt from the region's saved summary the first time it is asked for, so
+   * walking back into a city you levelled shows the city you levelled.
+   */
+  const destructionFor = (regionId: string): RegionDestruction | null => {
+    const existing = destructionByRegion.get(regionId);
+    if (existing) return existing;
+    const layout = layoutFor(regionId);
+    if (!layout) return null;
+    const destruction = new RegionDestruction({ layout, seed: kernel?.seed ?? 0 });
+    const saved = worldState.damageFor(regionId);
+    if (saved) destruction.restore(saved);
+
+    // Time passed while nobody was here. Fires burn out, people are pulled out,
+    // and any crews already on site keep working: coming back days later shows
+    // a city part way through recovering rather than one frozen where you left
+    // it, and never one that has quietly reset.
+    const record = worldState.recordFor(regionId);
+    const elapsedTicks = Math.max(0, (kernel?.tick ?? 0) - (record?.lastVisitedTick ?? 0));
+    const hoursAway = (elapsedTicks / DEFAULT_DAY_LENGTH_TICKS) * 24;
+    if (hoursAway > 0) {
+      destruction.advanceHours(hoursAway);
+      const messages = destruction.progressProjects(hoursAway, {
+        // A working Shatterdome puts crews and cranes behind the job, and a
+        // region nobody has secured is one crews will not stay in.
+        facilityBonus: shatterdomeRebuildBonus(),
+        security: record?.safetyRating ?? 1,
+        funding: Number.POSITIVE_INFINITY,
+      });
+      for (const message of messages) worldMessages.push(message);
+    }
+
+    destructionByRegion.set(regionId, destruction);
+    return destruction;
+  };
+
+  /**
+   * How much faster the rebuild crews work.
+   *
+   * Read from the complex the player actually built: logistics and fabrication
+   * are what put cranes and materials on a site, so tiering them up shows up in
+   * a city coming back faster. Nothing is invented; a facility that does not
+   * exist contributes nothing.
+   */
+  const shatterdomeRebuildBonus = (): number => {
+    const tiers = shatterdomeState
+      .all()
+      .filter((facility) => facility.facilityId === "logistics" || facility.facilityId === "manufacture")
+      .reduce((total, facility) => total + facility.tier, 0);
+    return 1 + tiers * 0.25;
+  };
+
+  /** Lines the world panel shows about rebuilding. Newest first, bounded. */
+  const worldMessages: string[] = [];
+
+  /**
+   * Hours of recovery for the region the player is in.
+   *
+   * The one path for time passing over a damaged city, used both by the clock
+   * skip on the panel and by the catch-up applied when walking back into a
+   * region after being away. Fires burn down, people come out, and any crews on
+   * site keep working: what a player sees is a city part way through recovering,
+   * never one that has quietly reset.
+   */
+  const advanceRegionHours = (regionId: string, hours: number): void => {
+    if (hours <= 0) return;
+    const destruction = destructionFor(regionId);
+    if (!destruction) return;
+    const record = worldState.recordFor(regionId);
+    destruction.advanceHours(hours);
+    const messages = destruction.progressProjects(hours, {
+      facilityBonus: shatterdomeRebuildBonus(),
+      security: record?.safetyRating ?? 1,
+      funding: Number.POSITIVE_INFINITY,
+    });
+    for (const message of messages) worldMessages.unshift(message);
+    while (worldMessages.length > 4) worldMessages.pop();
+    commitDestruction(regionId);
+    if (cityView && cityRegionId === regionId) {
+      cityView.updateDamage((groupId) => destruction.stateOf(groupId));
+    }
+  };
+
+  /** Writes the detailed model back onto the strategic record. */
+  const commitDestruction = (regionId: string): void => {
+    const destruction = destructionByRegion.get(regionId);
+    if (!destruction) return;
+    worldState.setRegionDamage(regionId, destruction.snapshot(), destruction.report(), kernel?.tick ?? 0);
+  };
+
   const layoutFor = (regionId: string): CityLayout | null => {
     const region = regionRegistry.get(regionId);
     if (!region || region.cityPlanId === null) return null;
@@ -797,9 +909,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * everywhere else the ground stays as the terrain generator made it.
    */
   const rebuildCityView = (): void => {
+    // Leaving takes the damage with you: the detailed model writes its summary
+    // onto the strategic record before the view goes.
+    if (cityRegionId) commitDestruction(cityRegionId);
     cityView?.dispose();
     cityView = undefined;
     cityRegionId = null;
+    debrisPool.clear();
+    debrisDirty = false;
     if (viewMode !== "ground") return;
 
     const regionId = worldState.activeRegionId;
@@ -823,6 +940,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       districts: districtsById,
       quality,
     });
+    // Building the city also brings its damage back, which is what makes the
+    // streets you levelled still levelled when you walk back in.
+    const destruction = destructionFor(region.id);
+    if (destruction) cityView.updateDamage((groupId) => destruction.stateOf(groupId));
   };
 
   /**
@@ -876,6 +997,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     combatArena = undefined;
     combatAccumulator = 0;
     combatLog.length = 0;
+    creature = undefined;
+    creatureDebug = undefined;
     propInstances = [];
     trainingLine = "";
     refreshPilot();
@@ -945,6 +1068,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightAt: localGroundHeight,
     });
     combatView.setDebugVolumes(combatDebugVolumes);
+
+    // The creature that is going to fight. Everything about how it behaves
+    // comes from its own definition.
+    creature = new Creature({
+      definition: kaiju,
+      east,
+      north,
+      headingDeg: pose.yawDeg + 180,
+      seed: kernel?.seed ?? 0,
+    });
+    creatureDebug = creature.debug();
+    creatureAttackCooldown = 0;
 
     // The machine carries everything for now; loadouts are a later milestone.
     for (const weapon of weaponRegistry.all()) combatArena.equipWeapon("jaeger", weapon);
@@ -1063,6 +1198,120 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     side: "melee.heavy.spin.side",
   };
 
+  /** The creature currently in the fight, if there is one. */
+  let creature: Creature | undefined;
+  /** The last thing it decided, for the panel. */
+  let creatureDebug: CreatureDebug | undefined;
+  /** How long since it last threw something, in combat ticks. */
+  let creatureAttackCooldown = 0;
+
+  /**
+   * One tick of a creature being alive inside a fight.
+   *
+   * The senses are fed from where the machine actually is, the goal comes out
+   * of the behaviour engine, navigation moves the body, and an attack is thrown
+   * only when the thing it wants is close enough to hit. The arena stays
+   * authoritative: this decides what to press, never what happens.
+   */
+  const driveCreature = (arena: CombatArena, deltaSeconds: number): void => {
+    if (!creature) return;
+    const snapshot = arena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    const jaegerView = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    if (!kaijuView || !jaegerView) return;
+
+    creature.east = kaijuView.east;
+    creature.north = kaijuView.north;
+    creature.headingDeg = kaijuView.yawDeg;
+    const lethal = kaijuView.zones.find((zone) => zone.id === "core") ?? kaijuView.zones[0];
+    creature.healthFraction = lethal ? lethal.health / Math.max(1, lethal.maxHealth) : 1;
+
+    const destruction = cityRegionId ? destructionByRegion.get(cityRegionId) : undefined;
+    const region = cityRegionId ? regionRegistry.get(cityRegionId) : undefined;
+    const world: NavigationQuery = {
+      groundHeight: (east, north) => localGroundHeight(east, north),
+      waterDepth: (east, north) => {
+        const ground = localGroundHeight(east, north);
+        return ground === null ? 0 : Math.max(0, -ground);
+      },
+      isPassable: (east, north) => {
+        if (!destruction || !region) return true;
+        const geo = localToGeo(floatingOrigin.anchor, { east, north, up: 0 });
+        const inCity = geoToLocal(region.centre, geo);
+        return destruction.isPassable(inCity.east, inCity.north);
+      },
+      // Towers are what there is to climb, and a levelled block is not one.
+      climbableHeight: (east, north) => {
+        if (!destruction || !region) return 0;
+        const geo = localToGeo(floatingOrigin.anchor, { east, north, up: 0 });
+        const inCity = geoToLocal(region.centre, geo);
+        return destruction.isPassable(inCity.east, inCity.north) ? 0 : 60;
+      },
+    };
+
+    const inWater = (localGroundHeight(kaijuView.east, kaijuView.north) ?? 0) < 0;
+    creatureDebug = creature.advance(deltaSeconds, {
+      stimuli: [
+        { sourceId: "jaeger", east: jaegerView.east, north: jaegerView.north, strength: 1, kind: "sight" },
+        { sourceId: "jaeger", east: jaegerView.east, north: jaegerView.north, strength: 0.9, kind: "sound" },
+        {
+          sourceId: "jaeger",
+          east: jaegerView.east,
+          north: jaegerView.north,
+          strength: 1.1,
+          kind: "vibration",
+          inWater,
+        },
+      ],
+      world,
+      // The Shatterdome is what it came for, which is why it is walking through
+      // the city rather than standing in a field.
+      objective: shatterdomeObjective(),
+      food: null,
+      waterNearby: (localGroundHeight(kaijuView.east, kaijuView.north + 200) ?? 0) < 0,
+      climbableNearby: world.climbableHeight(kaijuView.east + 120, kaijuView.north) > 0,
+      hideSpot: null,
+    });
+
+    // Where the body wants to be is where the arena is told to put it.
+    arena.moveTo("kaiju", {
+      east: creature.east,
+      north: creature.north,
+      // Height comes from the ground it is standing on, which is the one thing
+      // about where it is that the creature does not decide.
+      up: localGroundHeight(creature.east, creature.north) ?? 0,
+      yawDeg: creature.headingDeg,
+    });
+
+    if (creatureAttackCooldown > 0) {
+      creatureAttackCooldown -= 1;
+      return;
+    }
+    const reach = Math.hypot(jaegerView.east - creature.east, jaegerView.north - creature.north);
+    const wantsToFight = creatureDebug.goal !== "retreat" && creatureDebug.goal !== "destroy-objective";
+    if (reach > 90 || !wantsToFight) return;
+    // Which attack is a matter of what this creature can still do: an ability
+    // lost with an organ or a limb is not on the menu.
+    const move = creature.can("ability.tail-sweep") && reach > 45 ? "kaiju.tail.sweep" : "kaiju.claw.swipe";
+    const request = arena.request("kaiju", move);
+    if (request.ok) {
+      arena.press("kaiju", move);
+      creatureAttackCooldown = 180;
+    }
+  };
+
+  /** Where the complex is, in the local frame, or null when it is not loaded. */
+  const shatterdomeObjective = (): { east: number; north: number } | null => {
+    const regionId = cityRegionId;
+    const layout = regionId ? cityLayouts.get(regionId) : undefined;
+    const region = regionId ? regionRegistry.get(regionId) : undefined;
+    if (!layout || !region) return null;
+    const pad = layout.defensePositions.find((entry) => entry.kind === "jaeger-pad");
+    if (!pad) return null;
+    const geo = localToGeo(region.centre, { east: pad.east, north: pad.north, up: 0 });
+    return floatingOrigin.toLocal(geo);
+  };
+
   /** Presses an attack. The arena decides whether it is legal, and says why not. */
   const pressAttack = (slot: number): void => {
     let moveId = ATTACK_SLOTS[slot];
@@ -1094,6 +1343,62 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           `t${event.tick} ${event.actorId} ${event.moveId ?? ""} · ${event.volumeId ?? ""} → ` +
             `${event.zoneId ?? ""} ${event.damage} dmg${event.reaction && event.reaction !== "none" ? ` · ${event.reaction}` : ""}`,
         );
+      }
+      // Armour plates and organs are the creature's own layers, sitting inside
+      // the zone the arena already resolved. The arena stays authoritative for
+      // zone health; this erodes what is bolted to it and says what was lost.
+      if (event.type === "hit" && event.targetId === "kaiju" && creature && event.zoneId) {
+        const outcome = creature.absorb(
+          event.zoneId as BodyZoneId,
+          event.damage,
+          event.damageKind ?? "impact",
+        );
+        for (const note of outcome.notes) pushCombatLine(note);
+      }
+      if (event.type === "zone-destroyed" && event.actorId === "kaiju" && creature && event.zoneId) {
+        const severed = creature.sever(event.zoneId as BodyZoneId);
+        if (severed) pushCombatLine(severed);
+      }
+      // A fight in a city is a fight in a city. Anything landing hard enough,
+      // wherever it lands, goes into the streets around it: this is the only
+      // place combat reaches the world, and it reaches it through the same
+      // impact call a scripted event would use.
+      if ((event.type === "hit" || event.type === "zone-destroyed") && event.contact) {
+        const regionId = cityRegionId;
+        const destruction = regionId ? destructionFor(regionId) : null;
+        const region = regionId ? regionRegistry.get(regionId) : undefined;
+        if (destruction && region && event.damage > 0) {
+          // Combat and the city use different frames: combat is local to the
+          // floating origin, the city is local to the region centre.
+          const geo = localToGeo(floatingOrigin.anchor, {
+            east: event.contact.east,
+            north: event.contact.north,
+            up: 0,
+          });
+          const inCity = geoToLocal(region.centre, geo);
+          const impact = destruction.applyImpact(
+            inCity.east,
+            inCity.north,
+            CITY_IMPACT_RADIUS_METERS,
+            event.damage * CITY_IMPACT_SCALE,
+          );
+          if (impact.structuresDowned > 0) {
+            pushCombatLine(impact.message);
+            const wanted = Math.min(impact.debrisSpawned, MAX_CHUNKS_PER_COLLAPSE);
+            const groupId = impact.groupsHit[0] ?? "unknown";
+            debrisPool.spawn({
+              east: event.contact.east,
+              north: event.contact.north,
+              up: Math.max(event.contact.up, localGroundHeight(event.contact.east, event.contact.north) ?? 0),
+              groupId,
+              count: wanted,
+              spreadMeters: CITY_IMPACT_RADIUS_METERS,
+              sizeMeters: 5,
+              rng: debrisStream((kernel?.seed ?? 0) + event.tick, groupId),
+            });
+            debrisDirty = true;
+          }
+        }
       }
       // A blow heavy enough to leave a mark leaves one, on the component it
       // landed on. The mark is four numbers; the view grows the debris from it.
@@ -1216,6 +1521,36 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         channelling: weapon.channelling,
       })),
       targetStatuses: kaijuView.statuses.map((status) => status.statusId.replace("status.", "")),
+      // The AI debug view: the same numbers the creature acted on, never a
+      // second copy kept for display.
+      creature: creatureDebug
+        ? {
+            goal: creatureDebug.goal,
+            goalReason: creatureDebug.goalReason,
+            considered: creatureDebug.considered.map((entry) => ({
+              goal: entry.goal,
+              score: entry.score,
+              reason: entry.reason,
+            })),
+            contacts: creatureDebug.contacts.map((contact) => ({
+              sourceId: contact.sourceId,
+              kind: contact.kind,
+              confidence: contact.confidence,
+              distanceMeters: contact.distanceMeters,
+            })),
+            medium: creatureDebug.medium,
+            navOutcome: creatureDebug.navOutcome,
+            navReason: creatureDebug.navReason,
+            speedMps: creatureDebug.speedMps,
+            phase: creatureDebug.phase,
+            abilities: creatureDebug.abilities,
+            severed: creatureDebug.severed,
+            organs: creatureDebug.organsLeft.map((organ) => ({
+              id: organ.id,
+              fraction: organ.fraction,
+            })),
+          }
+        : null,
       liveProjectiles: combatArena.projectilePool().live,
       projectileCapacity: combatArena.projectilePool().capacity,
     };
@@ -1650,13 +1985,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     while (combatAccumulator >= COMBAT_TICK_SECONDS && budget > 0) {
       combatAccumulator -= COMBAT_TICK_SECONDS;
       budget -= 1;
-      // The creature keeps turning to face the machine and throws what it can,
-      // on a fixed cadence. This is a schedule rather than behaviour, and the
-      // panel says so.
-      arena.faceToward("kaiju", "jaeger", 1.2);
-      if (arena.tick % 240 === 0) {
-        arena.press("kaiju", arena.tick % 480 === 0 ? "kaiju.claw.swipe" : "kaiju.tail.sweep");
-      }
+      // The creature decides for itself: it senses the machine, picks a goal,
+      // works out how to get where that goal wants it, and attacks when it is
+      // close enough. Nothing here knows which creature it is.
+      driveCreature(arena, COMBAT_TICK_SECONDS);
       arena.step();
     }
     // Drained rather than collected from the steps: a trigger pulled between
@@ -1751,7 +2083,46 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const count = Math.max(1, activity.size);
     const view = cityView?.stats();
 
+    // Destruction, from the detailed model while the player is standing in the
+    // city and from the region's own saved summary while they are not.
+    const destruction = regionId ? destructionByRegion.get(regionId) : undefined;
+    const report = destruction?.report() ?? null;
+    const projects = destruction?.activeProjects() ?? [];
+    const worst = destruction
+      ? [...destruction.groups()]
+          .filter((group) => group.structuresDown > 0)
+          .sort((a, b) => a.integrity - b.integrity)[0]
+      : undefined;
+    const quote = worst && destruction ? destruction.quoteProject(worst.groupId) : null;
+
     return {
+      damageSummary: report?.summary ?? "No detailed record here yet.",
+      safetyRating: report?.safety ?? record.safetyRating,
+      blocksDamaged: report?.groupsDamaged ?? 0,
+      blocksRuined: report?.groupsRuined ?? 0,
+      firesBurning: report?.firesBurning ?? 0,
+      contaminatedBlocks: report?.contaminatedGroups ?? 0,
+      routesBlockedFraction: report?.routesBlocked ?? 0,
+      trappedThousands: report?.trappedThousands ?? 0,
+      rescuePressure: report?.rescuePressure ?? 0,
+      debrisLive: debrisPool.live,
+      debrisCapacity: debrisPool.capacity,
+      debrisFrozen: debrisPool.frozen,
+      rebuildSummary:
+        projects.length === 0
+          ? (worldMessages[0] ?? "Nothing under way.")
+          : projects
+              .map(
+                (project) =>
+                  `${project.phase} ${destruction?.describeGroup(project.groupId) ?? project.groupId}, ` +
+                  `${Math.round(project.hoursRemaining)} h left`,
+              )
+              .join(" · "),
+      worstBlockId: worst?.groupId ?? null,
+      worstBlockLabel: worst && destruction ? destruction.describeGroup(worst.groupId) : null,
+      rebuildQuote: quote
+        ? `${quote.hours} hours, ${quote.funding.toLocaleString("en-GB")} in funding`
+        : null,
       regionId: layout.regionId,
       districtCount: layout.districts.length,
       blockCount: layout.stats.blockCount,
@@ -1998,6 +2369,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onAdvanceHours: (hours: number) => {
           const ticks = Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24);
           worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
+          // Time passing over a damaged city is time the city spends recovering.
+          const regionId = worldState.activeRegionId;
+          if (regionId) advanceRegionHours(regionId, hours);
           refreshWorld();
         },
         onDiveToggle: () => {
@@ -2005,6 +2379,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshWorld();
         },
         onQualityChange: (level: string) => applyQuality(level as QualityLevel),
+        onRebuild: (groupId: string) => {
+          const regionId = worldState.activeRegionId;
+          const destruction = regionId ? destructionFor(regionId) : null;
+          if (!destruction) return;
+          const outcome = destruction.startProject(groupId);
+          // Refusals are shown rather than swallowed: still burning, already
+          // under way, or nothing to clear.
+          worldMessages.unshift(outcome.message);
+          while (worldMessages.length > 4) worldMessages.pop();
+          if (regionId) commitDestruction(regionId);
+          refreshWorld();
+        },
         onAlertChange: (level: string) => {
           const regionId = worldState.activeRegionId;
           if (!regionId) return;
@@ -2066,6 +2452,26 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       if (cityView) {
         const layout = cityLayouts.get(cityRegionId ?? "");
         if (layout) cityView.update(sample.tick, sampleCityActivity(layout, sample));
+        const destruction = cityRegionId ? destructionByRegion.get(cityRegionId) : undefined;
+        if (destruction) {
+          // Collapses finish on the fight clock, and the rubble keeps falling.
+          const frameSeconds = Math.min(0.1, deltaMs / 1000);
+          destruction.advanceSeconds(frameSeconds);
+          debrisPool.advance(frameSeconds, (east, north) => localGroundHeight(east, north));
+          cityView.updateDamage((groupId) => destruction.stateOf(groupId));
+          if (debrisPool.live > 0 || debrisDirty) {
+            cityView.updateDebris(
+              debrisPool.active().map((chunk) => ({
+                east: chunk.east,
+                north: chunk.north,
+                up: chunk.up,
+                yawRadians: chunk.yawRadians,
+                sizeMeters: chunk.sizeMeters,
+              })),
+            );
+            debrisDirty = debrisPool.live > 0;
+          }
+        }
       }
 
       // The streamer runs every frame; the panel does not. A 144 Hz DOM write is
