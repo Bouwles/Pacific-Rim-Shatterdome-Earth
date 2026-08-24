@@ -8,6 +8,13 @@ import {
 } from "../data/moves";
 import type { BodyZone, KaijuDefinition } from "../data/kaiju";
 import type { JaegerDefinition } from "../data/jaegers";
+import {
+  componentHealth,
+  createComponentRegistry,
+  type ComponentDefinition,
+  type WeaponMount,
+} from "../data/components";
+import type { JaegerDamageState } from "../jaegers/damage";
 import { InputBuffer } from "../jaegers/inputBuffer";
 import { normalizeDegrees, signedDelta } from "../jaegers/locomotion";
 import {
@@ -54,7 +61,7 @@ import {
   type FinisherState,
   type SpaceQuery,
 } from "./finisher";
-import { chargeScale } from "../data/moves";
+import { chargeScale, type DamageKind } from "../data/moves";
 import { firesProjectiles, resolvesInstantly, type WeaponDefinition } from "../data/weapons";
 import { ProjectilePool, spreadStream, type ProjectileTargets } from "./projectiles";
 import {
@@ -65,7 +72,14 @@ import {
   type StatusDefinition,
 } from "./abilities";
 import type { PropDefinition, PropInstance } from "../data/props";
-import { zoneAtPoint, zonePosition, type TargetingPose } from "./targeting";
+import {
+  nearestPlacedZone,
+  placedZone,
+  zoneAtPoint,
+  zonePosition,
+  type TargetingPose,
+  type ZonePlacement,
+} from "./targeting";
 
 /**
  * The combat arena.
@@ -154,6 +168,12 @@ export interface FighterSpec {
   readonly zones: readonly ZoneState[];
   /** Kaiju only: how the zones are laid out, so hits can be placed on them. */
   readonly kaiju?: KaijuDefinition;
+  /**
+   * Where this fighter's zones sit, for anything that is not a kaiju. A machine
+   * built out of components carries one of these so a hit lands on an arm rather
+   * than on "the machine".
+   */
+  readonly layout?: readonly ZonePlacement[];
   /** Fraction of core health at or below which a finisher becomes legal. */
   readonly finisherThreshold: number;
 }
@@ -282,6 +302,8 @@ export interface CombatEvent {
   readonly contact: Point3 | null;
   /** Says why, for the events that are a refusal. */
   readonly reason: string | null;
+  /** What kind of damage it was, so routing and scarring can read it. */
+  readonly damageKind: DamageKind | null;
 }
 
 export type AttackRejection =
@@ -327,6 +349,8 @@ export interface ArenaOptions {
   readonly seed?: number;
   /** Ground height for a point, used to retire rounds that hit the deck. */
   readonly groundHeight?: (east: number, north: number) => number | null;
+  /** Which component carries which weapon mount. Injected so a test can vary it. */
+  readonly components?: ContentRegistry<ComponentDefinition>;
 }
 
 /** Turns a kaiju definition into fighter zones. */
@@ -344,26 +368,54 @@ export function kaijuZones(kaiju: KaijuDefinition): ZoneState[] {
 }
 
 /**
- * A Jaeger's zones.
+ * A Jaeger's zones, one per component.
  *
- * One hull zone for now. Per-component armour and repair is its own milestone;
- * what matters here is that a Jaeger takes damage through the same path a kaiju
- * does, so nothing has to be written twice later.
+ * This is the whole difference between "the machine has 3,000 health" and "the
+ * right arm is gone". Health comes from the machine's own damage record when one
+ * is passed, so a machine that walked into the fight with a bent leg starts the
+ * fight with a bent leg.
  */
-export function jaegerZones(jaeger: JaegerDefinition): ZoneState[] {
-  const hull = 2_400 + jaeger.massBudget.massTons;
-  return [
-    {
-      id: "core",
-      displayName: "Hull",
-      maxHealth: hull,
-      health: hull,
-      armor: 0.35,
-      damageMultiplier: 1,
-      onDestroyed: "kill",
+export function jaegerZones(
+  jaeger: JaegerDefinition,
+  damage?: JaegerDamageState,
+  registry: ContentRegistry<ComponentDefinition> = createComponentRegistry(),
+): ZoneState[] {
+  return registry.all().map((component) => {
+    const max = componentHealth(jaeger, component);
+    const carried = damage?.components.find((entry) => entry.componentId === component.id);
+    return {
+      id: component.id,
+      displayName: component.displayName,
+      maxHealth: max,
+      health: carried ? Math.min(max, Math.max(0, carried.health)) : max,
+      armor: component.armor,
+      damageMultiplier: component.damageMultiplier,
+      // What losing it does is read from the table rather than switched on an id.
+      onDestroyed: component.critical
+        ? "kill"
+        : component.disables.includes("movement")
+          ? "cripple-movement"
+          : component.mounts.length > 0
+            ? "cripple-attack"
+            : "none",
       shock: 0,
-    },
-  ];
+    };
+  });
+}
+
+/** Where a machine's components sit, so hits can be placed on them. */
+export function jaegerLayout(
+  jaeger: JaegerDefinition,
+  registry: ContentRegistry<ComponentDefinition> = createComponentRegistry(),
+): ZonePlacement[] {
+  const height = jaeger.locomotion.heightMeters;
+  return registry.all().map((component) => ({
+    id: component.id,
+    heightFraction: component.heightFraction,
+    forwardMeters: component.forwardFraction * height,
+    lateralMeters: component.lateralFraction * height,
+    radiusMeters: component.radiusFraction * height,
+  }));
 }
 
 export class CombatArena {
@@ -372,6 +424,8 @@ export class CombatArena {
   private readonly fighters = new Map<string, FighterState>();
   private readonly projectiles: ProjectilePool;
   private readonly statusRegistry: ContentRegistry<StatusDefinition>;
+  /** Which component carries which mount. Read when a weapon is fired. */
+  private readonly componentsRegistry: ContentRegistry<ComponentDefinition>;
   private readonly seedValue: number;
   private readonly groundHeight: (east: number, north: number) => number | null;
   private tickValue = 0;
@@ -386,6 +440,7 @@ export class CombatArena {
     this.statusRegistry = createStatusRegistry();
     this.seedValue = options.seed ?? 20260824;
     this.groundHeight = options.groundHeight ?? (() => null);
+    this.componentsRegistry = options.components ?? createComponentRegistry();
     for (const spec of options.fighters) this.add(spec);
   }
 
@@ -620,6 +675,12 @@ export class CombatArena {
     if (fighter.grapple.phase === "held" && fighter.grapple.victimId === fighter.id) {
       return reject("no-control", `${fighter.displayName} is being held.`);
     }
+    // A weapon on a component that is gone is gone with it. This is the whole
+    // point of localized damage: losing the right arm silences what was on it.
+    const mount = this.mountedOn(fighter, weapon.mount);
+    if (mount && mount.health <= 0) {
+      return reject("no-weapon", `${weapon.displayName} went with the ${mount.displayName.toLowerCase()}.`);
+    }
     if (state.reloadTicksLeft > 0) {
       return reject("reloading", `${weapon.displayName} is reloading.`);
     }
@@ -753,6 +814,44 @@ export class CombatArena {
   }
 
   /** Live projectiles, for the renderer and for the stress test. */
+  /**
+   * Damage straight onto one zone.
+   *
+   * The honest way for anything outside a swing to hurt a fighter: a hazard, a
+   * scripted event, or a test that needs an arm gone without throwing punches
+   * for a minute. It goes through the same destruction bookkeeping a fist does.
+   */
+  damageZone(fighterId: string, zoneId: string, amount: number, kind: DamageKind = "impact"): boolean {
+    const fighter = this.fighters.get(fighterId);
+    const zone = fighter?.zones.find((entry) => entry.id === zoneId);
+    if (!fighter || !zone || amount <= 0) return false;
+    const wasIntact = zone.health > 0;
+    zone.health = Math.max(0, zone.health - amount);
+    this.pushEvent({
+      type: "hit",
+      actorId: fighterId,
+      targetId: fighterId,
+      zoneId: zone.id,
+      damage: Math.round(amount),
+      reaction: "none",
+      damageKind: kind,
+      reason: "direct damage",
+    });
+    if (wasIntact && zone.health <= 0) {
+      this.pushEvent({
+        type: "zone-destroyed",
+        actorId: fighterId,
+        zoneId: zone.id,
+        reason: zone.displayName,
+      });
+      if (zone.onDestroyed === "kill") {
+        fighter.defeated = true;
+        this.pushEvent({ type: "defeated", actorId: fighterId });
+      }
+    }
+    return true;
+  }
+
   projectilePool(): ProjectilePool {
     return this.projectiles;
   }
@@ -1102,7 +1201,14 @@ export class CombatArena {
         radiusMeters: zone.radiusMeters,
       }));
     }
-    // A machine with no zone layout is one body-sized sphere at chest height.
+    if (target.layout && target.layout.length > 0) {
+      return target.layout.map((zone) => ({
+        id: zone.id,
+        centre: placedZone(target.heightMeters, zone, target.pose),
+        radiusMeters: zone.radiusMeters,
+      }));
+    }
+    // A fighter with no layout at all is one body-sized sphere at chest height.
     return [
       {
         id: "core",
@@ -1125,11 +1231,28 @@ export class CombatArena {
   ): void {
     const packet = attack.move.damage;
     const zonePick = target.kaiju ? zoneAtPoint(target.kaiju, target.pose, contact) : null;
-    let zoneId = zonePick?.zone.id ?? "core";
+    const placedPick =
+      !target.kaiju && target.layout
+        ? nearestPlacedZone(target.heightMeters, target.layout, target.pose, contact)
+        : null;
+    let zoneId = zonePick?.zone.id ?? placedPick?.zone.id ?? target.zones[0]?.id ?? "core";
 
     // An aimed zone wins if the blow actually reached it. The reach allowance is
     // generous, because a pilot aiming for the core and connecting with the
     // chest plate has hit what they were aiming at.
+    if (attacker.aimZoneId && !target.kaiju && target.layout) {
+      const aimed = target.layout.find((entry) => entry.id === attacker.aimZoneId);
+      if (aimed) {
+        const centre = placedZone(target.heightMeters, aimed, target.pose);
+        const reach = Math.hypot(
+          centre.east - contact.east,
+          centre.up - contact.up,
+          centre.north - contact.north,
+        );
+        const allowance = Math.max(aimed.radiusMeters * 3, target.heightMeters * 0.35);
+        if (reach <= allowance) zoneId = aimed.id;
+      }
+    }
     if (attacker.aimZoneId && target.kaiju) {
       const aimed = target.kaiju.zones.find((entry) => entry.id === attacker.aimZoneId);
       if (aimed) {
@@ -1304,6 +1427,7 @@ export class CombatArena {
       damage: Math.round(dealt),
       reaction: outcome.reaction.id,
       contact,
+      damageKind: packet.kind,
     });
 
     if (outcome.reaction.durationTicks > 0) {
@@ -1450,6 +1574,8 @@ export class CombatArena {
       zoneId: zone.id,
       damage: amount,
       reaction: "none",
+      // A finisher or a slam is crushing force, whatever the move that led to it.
+      damageKind: "crush",
       reason,
     });
     if (wasIntact && zone.health <= 0) {
@@ -1771,6 +1897,7 @@ export class CombatArena {
       damage: Math.round(dealt),
       reaction: outcome.reaction.id,
       contact,
+      damageKind: weapon.damage.kind,
       reason: underwater ? "underwater" : null,
     });
 
@@ -1827,6 +1954,13 @@ export class CombatArena {
 
   private statusWord(statusId: string): string {
     return (this.statusRegistry.get(statusId)?.displayName ?? statusId).toLowerCase();
+  }
+
+  /** The zone carrying a mount, when this fighter is built out of components. */
+  private mountedOn(fighter: FighterState, mount: WeaponMount): ZoneState | undefined {
+    const owner = this.componentsRegistry.all().find((component) => component.mounts.includes(mount));
+    if (!owner) return undefined;
+    return fighter.zones.find((zone) => zone.id === owner.id);
   }
 
   private weaponById(weaponId: string): WeaponDefinition | undefined {
@@ -1926,6 +2060,7 @@ export class CombatArena {
       reaction: null,
       contact: null,
       reason: null,
+      damageKind: null,
       ...event,
     });
   }

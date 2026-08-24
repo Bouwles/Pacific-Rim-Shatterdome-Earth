@@ -57,6 +57,8 @@ export interface JaegerViewStats {
   readonly decalCapacity: number;
   readonly scaleReferences: number;
   readonly scaleReferenceCapacity: number;
+  /** Marks currently worn by the machine. */
+  readonly scarsDrawn: number;
   readonly dustParticles: number;
   readonly modelResolved: boolean;
   readonly cameraMode: string;
@@ -88,6 +90,9 @@ function composeInto(
   );
   SCRATCH_MATRIX.copyToArray(target, index * 16);
 }
+
+/** Ceiling on drawn marks. The record keeps more; the machine only wears this many. */
+const MAX_DRAWN_SCARS = 24;
 
 /** Aircraft cross at a fixed altitude and speed; birds scatter lower and slower. */
 interface ScaleFlyer {
@@ -137,6 +142,10 @@ export class JaegerView {
   private readonly flyerMesh: Mesh;
   private readonly flyerBuffer: Float32Array;
   private readonly flyers: ScaleFlyer[] = [];
+
+  private readonly scarMesh: Mesh;
+  private readonly scarBuffer: Float32Array;
+  private scarCount = 0;
 
   private readonly ready: Promise<void>;
   private pendingSoundMeters = 0;
@@ -211,6 +220,19 @@ export class JaegerView {
 
     // Aircraft and birds. A helicopter passing behind a shoulder says more about
     // size than any amount of camera movement.
+    // Battle damage. One pooled mesh of torn plate, placed from the machine's own
+    // scar record: the marks are the save data, and the debris is grown from the
+    // seed each one carries, so a machine looks the same every time it loads.
+    this.scarMesh = MeshBuilder.CreateBox("jaeger.scars", { size: 1 }, this.scene);
+    this.scarMesh.material = this.material("jaeger.scars", new Color3(0.11, 0.1, 0.09), 0.02);
+    this.scarMesh.parent = this.machineRoot;
+    this.scarMesh.isPickable = false;
+    this.scarBuffer = new Float32Array(MAX_DRAWN_SCARS * 16);
+    parkAll(this.scarBuffer);
+    this.scarMesh.thinInstanceSetBuffer("matrix", this.scarBuffer, 16);
+    this.scarMesh.thinInstanceCount = 0;
+    this.scarMesh.alwaysSelectAsActiveMesh = true;
+
     this.flyerMesh = MeshBuilder.CreateBox("jaeger.flyers", { size: 1 }, this.scene);
     this.flyerMesh.material = this.material("jaeger.flyers", new Color3(0.2, 0.22, 0.25), 0.05);
     this.flyerMesh.parent = this.root;
@@ -514,6 +536,58 @@ export class JaegerView {
     return null;
   }
 
+  /**
+   * Wears the damage.
+   *
+   * Every mark is placed from the component it belongs to and the seed the scar
+   * carries, so nothing about where the debris sits is stored: the same record
+   * always produces the same machine, and a repaired component loses its marks
+   * because the record loses them.
+   */
+  updateDamage(
+    marks: readonly {
+      readonly heightFraction: number;
+      readonly lateralFraction: number;
+      readonly forwardFraction: number;
+      readonly severity: number;
+      readonly seed: number;
+    }[],
+  ): void {
+    if (this.disposed) return;
+    const height = this.jaeger.locomotion.heightMeters;
+    const count = Math.min(marks.length, MAX_DRAWN_SCARS);
+    for (let index = 0; index < count; index += 1) {
+      const mark = marks[index];
+      if (!mark) continue;
+      // Two independent values out of one seed, so a mark sits somewhere on the
+      // component rather than always at its centre.
+      const jitterA = ((mark.seed % 1_000) / 1_000 - 0.5) * height * 0.06;
+      const jitterB = (((mark.seed >> 10) % 1_000) / 1_000 - 0.5) * height * 0.06;
+      const size = height * (0.02 + mark.severity * 0.05);
+      composeInto(
+        this.scarBuffer,
+        index,
+        mark.lateralFraction * height + jitterA,
+        mark.heightFraction * height + jitterB,
+        mark.forwardFraction * height,
+        ((mark.seed >> 20) % 628) / 100,
+        size,
+        size,
+        size * 0.4,
+      );
+    }
+    const previous = this.scarCount;
+    this.scarCount = count;
+    this.scarMesh.thinInstanceCount = count;
+    if (count !== previous) {
+      this.scarMesh.thinInstanceSetBuffer("matrix", this.scarBuffer, 16);
+      this.scarMesh.thinInstanceCount = count;
+      this.scarMesh.thinInstanceRefreshBoundingInfo(false);
+    } else if (count > 0) {
+      this.scarMesh.thinInstanceBufferUpdated("matrix");
+    }
+  }
+
   stats(): JaegerViewStats {
     return {
       meshes: this.scene.meshes.filter((mesh) => mesh.name.startsWith("jaeger.")).length,
@@ -521,6 +595,7 @@ export class JaegerView {
       decalCapacity: this.decalBuffer.length / 16,
       scaleReferences: this.lightCount + this.flyers.length,
       scaleReferenceCapacity: this.lightBuffer.length / 16 + this.flyerBuffer.length / 16,
+      scarsDrawn: this.scarCount,
       dustParticles: this.dustPuffs.length,
       modelResolved: this.resolved !== null,
       cameraMode: this.cameraModeLabel,
@@ -557,6 +632,7 @@ export class JaegerView {
     for (const mesh of [this.decalMesh, this.dustMesh, this.lightMesh, this.flyerMesh]) mesh.dispose();
     for (const material of this.materials) material.dispose();
     this.materials.length = 0;
+    this.scarMesh.dispose();
     this.machineRoot.dispose();
     this.root.dispose();
     this.dustPuffs.length = 0;

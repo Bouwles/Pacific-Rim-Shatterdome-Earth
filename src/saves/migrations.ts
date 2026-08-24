@@ -8,6 +8,7 @@ import { initialAlertState } from "../world/cityActivity";
 import { DEFAULT_START_POSITION, DEFAULT_START_REGION_ID } from "../world/start";
 import { createFacilityRegistry } from "../data/facilities";
 import { emptyShatterdomeSnapshot } from "../shatterdome/facilityState";
+import { emptyRosterSnapshot } from "../jaegers/roster";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -186,6 +187,29 @@ const addShatterdomeSection: MigrationStep = {
   }),
 };
 
+/**
+ * Adds the roster section introduced by Milestone 13.
+ *
+ * A version 5 save has no per-machine damage recorded, because damage did not
+ * survive a fight: a Jaeger was one health bar that reset when the fight ended.
+ * Every machine therefore comes back intact and ready, with no scars and no
+ * outstanding work, which is exactly what a file that never recorded damage
+ * honestly means.
+ *
+ * Nothing else in the document is touched.
+ */
+const addRosterSection: MigrationStep = {
+  id: "5",
+  fromVersion: 5,
+  toVersion: 6,
+  description: "Add the roster section: per-machine component damage, scars and repair status.",
+  apply: (document) => ({
+    ...document,
+    schemaVersion: 6,
+    roster: emptyRosterSnapshot(),
+  }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -205,6 +229,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addEnvironmentSection);
   registry.register(addRegionAlerts);
   registry.register(addShatterdomeSection);
+  registry.register(addRosterSection);
   return registry;
 }
 

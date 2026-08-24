@@ -122,6 +122,51 @@ export function cycleTarget(
 }
 
 /** Where a zone actually sits, given where the creature is standing. */
+/**
+ * Where a zone sits, for anything with zones.
+ *
+ * A creature's head and a machine's Conn-Pod are placed by the same three
+ * numbers, so both go through this rather than each having its own copy.
+ */
+export interface ZonePlacement {
+  readonly id: string;
+  readonly heightFraction: number;
+  readonly forwardMeters: number;
+  readonly lateralMeters: number;
+  readonly radiusMeters: number;
+}
+
+export function placedZone(heightMeters: number, zone: ZonePlacement, pose: TargetingPose): Point3 {
+  const yaw = (pose.yawDeg * Math.PI) / 180;
+  const forwardEast = Math.sin(yaw);
+  const forwardNorth = Math.cos(yaw);
+  const rightEast = Math.cos(yaw);
+  const rightNorth = -Math.sin(yaw);
+  return {
+    east: pose.east + forwardEast * zone.forwardMeters + rightEast * zone.lateralMeters,
+    north: pose.north + forwardNorth * zone.forwardMeters + rightNorth * zone.lateralMeters,
+    up: pose.up + zone.heightFraction * heightMeters,
+  };
+}
+
+/** The zone nearest a contact point, for anything with a layout. */
+export function nearestPlacedZone(
+  heightMeters: number,
+  zones: readonly ZonePlacement[],
+  pose: TargetingPose,
+  contact: Point3,
+): { readonly zone: ZonePlacement; readonly position: Point3; readonly distanceMeters: number } | null {
+  let best: { zone: ZonePlacement; position: Point3; distanceMeters: number } | null = null;
+  for (const zone of zones) {
+    const position = placedZone(heightMeters, zone, pose);
+    const distanceMeters =
+      Math.hypot(position.east - contact.east, position.up - contact.up, position.north - contact.north) -
+      zone.radiusMeters;
+    if (best === null || distanceMeters < best.distanceMeters) best = { zone, position, distanceMeters };
+  }
+  return best;
+}
+
 export function zonePosition(kaiju: KaijuDefinition, zone: BodyZone, pose: TargetingPose): Point3 {
   const yaw = (pose.yawDeg * Math.PI) / 180;
   const forwardEast = Math.sin(yaw);

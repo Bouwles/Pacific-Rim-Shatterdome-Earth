@@ -295,6 +295,41 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Jaeger components (Milestone 13)
+
+Eight rows in `src/data/components.ts`, generic across machines and scaled by
+each machine's own mass. Health is the share of a machine whose structure is
+2,400 plus its mass in tons.
+
+| id                    | Share | Armour | Multiplier | Fears                       | Takes down with it           | Mounts                    | Critical |
+| --------------------- | ----- | ------ | ---------- | --------------------------- | ---------------------------- | ------------------------- | -------- |
+| component.conn-pod    | 8%    | 0.45   | 1.6x       | neural 3x, radiation, shock | pilot, sensors, targeting    | -                         | yes      |
+| component.sensor-mast | 4%    | 0.15   | 1.3x       | electrical 2.2x, energy     | sensors, targeting           | -                         | no       |
+| component.torso       | 30%   | 0.40   | 1.0x       | crush, impact               | balance                      | chest                     | no       |
+| component.reactor     | 10%   | 0.50   | 1.2x       | pierce 1.8x, plasma         | power, cooling, both weapons | -                         | yes      |
+| component.arm.left    | 11%   | 0.30   | 1.0x       | shear 1.5x, corrosive       | weapons.left, grapple        | arm.left, shoulder.left   | no       |
+| component.arm.right   | 11%   | 0.30   | 1.0x       | shear 1.5x, corrosive       | weapons.right, grapple       | arm.right, shoulder.right | no       |
+| component.leg.left    | 13%   | 0.35   | 0.9x       | crush 1.4x, impact          | movement, balance            | -                         | no       |
+| component.leg.right   | 13%   | 0.35   | 0.9x       | crush 1.4x, impact          | movement, balance            | -                         | no       |
+
+The shares total exactly one, checked when the registry is built. A component
+that disables nothing, carries no mount and is not critical is refused.
+
+## Weapon mounts (Milestone 13)
+
+Every weapon names the component it hangs on, so losing an arm silences what was
+on it.
+
+| Weapon                    | Mount          | Goes with |
+| ------------------------- | -------------- | --------- |
+| weapon.plasma-caster      | arm.right      | Right arm |
+| weapon.chain-sword        | arm.right      | Right arm |
+| weapon.rotary-cannon      | arm.left       | Left arm  |
+| weapon.arc-whip           | arm.left       | Left arm  |
+| weapon.anti-kaiju-missile | shoulder.left  | Left arm  |
+| weapon.shoulder-mortar    | shoulder.right | Right arm |
+| weapon.booster-strike     | chest          | Torso     |
+
 ## Ranged weapons (Milestone 12)
 
 Seven rows in `src/data/weapons.ts`, covering all eight behaviours. Times are in

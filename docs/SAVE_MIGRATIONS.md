@@ -192,6 +192,30 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Version 5 to 6: the roster (Milestone 13)
+
+Version 6 adds a `roster` section: one record per machine carrying its status,
+the hours of work it owes, how many sorties it has come home from, and a damage
+snapshot.
+
+The damage snapshot is deliberately small. One fraction per component and the
+scar list, where a scar is four numbers: which component, how bad, what kind of
+damage made it, and a seed. Debris is grown from the seed by the view, so no
+transform is ever written to a save.
+
+A version 5 save has no damage recorded anywhere, because damage did not survive
+a fight: a Jaeger was one health bar that reset when the fight ended. The
+migration therefore gives every machine a full, unmarked record with no
+outstanding work, which is the only honest reading of a file that never captured
+any. Nothing else in the document is touched.
+
+Two rules the restore enforces rather than trusts. Maximum health comes from the
+machine's own definition in this build rather than from the file, so rebalancing
+a chassis does not leave an old save carrying the old numbers. A component or a
+scar naming something this build has never heard of is dropped rather than
+resurrected, and a machine recorded as deployed comes back ready, because a
+sortie is not saved.
+
 ## Milestone 12 saves nothing new
 
 `ROOT_SAVE_VERSION` stays at 5. Magazines, spare rounds, heat, cooldowns, rounds

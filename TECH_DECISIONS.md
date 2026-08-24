@@ -677,6 +677,42 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-24, Milestone 13
+
+**A machine is a component table, not a health bar with extra fields.** The
+components are one registry, generic across chassis and scaled by mass, and the
+arena builds one hit zone per component from it. That is what makes "the right
+arm is gone" a real sentence rather than a cosmetic label on a number.
+
+**A component must cost something to lose.** A part that disables no system,
+carries no mount and is not critical is refused at registration. Otherwise the
+table fills up with parts nobody notices and localized damage becomes decoration.
+
+**What is offline is derived, never stored.** Disabled systems, component states
+and mobility penalties are all functions of current health, computed when asked.
+Storing them is how a save ends up claiming an arm is gone that is visibly
+attached.
+
+**A scar is four numbers and a seed.** The alternative, saving where each piece
+of torn plate sits, is the failure mode this milestone was told to avoid: it
+grows without bound, it breaks the moment the model changes, and it makes a save
+file proportional to how many fights a machine has had. Growing the debris from
+a seed means the record is tiny and the machine still looks the same every time.
+
+**Maximum health comes from the build, not the file.** A save carries fractions.
+Rebalancing a chassis therefore changes what an old save means in the right
+direction, instead of leaving a machine carrying numbers from a version that no
+longer exists.
+
+**Coming home is a function of the damage, not a flag.** Whether a machine is
+ready, in the gantries, towed or rebuilt is computed from what it is carrying.
+There is nothing to remember to set, so there is nothing to forget.
+
+**A work order is sorted worst first, and a shift always spends something.** Both
+came out of a real stall: a one point job whose hours rounded to zero held up a
+leg replacement forever. Ordering by what is missing also happens to be the order
+a crew would actually work in.
+
 ## 2026-08-24, Milestone 12
 
 **A weapon is a row and the behaviour is a field.** Eight behaviours share one

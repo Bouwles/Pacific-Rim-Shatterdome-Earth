@@ -182,6 +182,29 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Damage cost (Milestone 13)
+
+Measured in the browser on WebGPU at High, seed 20260824, with a damaged machine
+in Hong Kong:
+
+| State                                | Draw calls | Frame time    | Frame rate |
+| ------------------------------------ | ---------- | ------------- | ---------- |
+| Undamaged machine, no marks worn     | 99 to 102  | 0.5 to 0.6 ms | 144        |
+| Damaged machine wearing battle marks | 100 to 103 | 0.5 to 0.7 ms | 144        |
+
+All marks share one draw call: they are thin instances on a single pooled mesh
+capped at twenty-four, which is the same ceiling the damage record itself keeps.
+
+**Nothing about visible damage is saved as geometry.** A scar is four numbers
+(component, severity, kind, seed) and the debris is grown from the seed, so a
+machine that has been through twenty fights costs the same to save as one fresh
+off the line. A full damage record for a machine serialises to well under two
+kilobytes, asserted in a unit test.
+
+A machine's components add eight zones to the arena where there was one. The cost
+is one more sphere sweep per volume per tick, against eight spheres rather than
+one, which does not register against the frame budget at fight scale.
+
 ## Ranged cost (Milestone 12)
 
 Measured in the browser on WebGPU at High, seed 20260824, with a fight live in

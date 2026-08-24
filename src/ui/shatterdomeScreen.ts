@@ -54,6 +54,8 @@ export interface FacilityPanelState {
 export interface BerthPanelState {
   readonly kind: "berth";
   readonly title: string;
+  /** Which machine stands here, for the repair action. Null for an empty berth. */
+  readonly jaegerId: string | null;
   readonly jaegerName: string | null;
   readonly manufacturer: string;
   readonly markDesignation: string;
@@ -65,6 +67,22 @@ export interface BerthPanelState {
   readonly heightMeters: number;
   readonly selected: boolean;
   readonly notes: string;
+  /** What the machine is doing: ready, under repair, being rebuilt. */
+  readonly status: string;
+  /** Structure left across every component, 0 to 100. */
+  readonly integrityPercent: number;
+  /** One line per component: what it is, what state it is in, what is left. */
+  readonly components: readonly { readonly name: string; readonly state: string; readonly percent: number }[];
+  /** Systems currently offline because the component carrying them is gone. */
+  readonly offline: readonly string[];
+  readonly scars: number;
+  /** The work order, or null when the machine needs nothing. */
+  readonly workOrder: {
+    readonly summary: string;
+    readonly lines: readonly string[];
+    readonly hours: number;
+    readonly cost: number;
+  } | null;
 }
 
 export interface ConnPodPanelState {
@@ -113,6 +131,8 @@ export interface ShatterdomeScreenState {
 
 export interface ShatterdomeScreenCallbacks {
   readonly onOrder: (facilityId: string) => void;
+  /** Puts one shift of work into the machine in this berth. */
+  readonly onRepair: (jaegerId: string) => void;
   readonly onClosePanel: () => void;
   readonly onResume: () => void;
   readonly onOpenSaves: () => void;
@@ -308,6 +328,14 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     notes.dataset["field"] = "berth-notes";
     notes.textContent = panel.notes;
     element.appendChild(notes);
+    // The work order is the whole repair bay: what is broken, what it costs,
+    // and a shift of work you can actually put into it.
+    const work = button("Work a shift", "secondary-button", () => {
+      if (panel.jaegerId) callbacks.onRepair(panel.jaegerId);
+    });
+    work.dataset["action"] = "repair";
+    work.disabled = panel.workOrder === null || panel.jaegerId === null;
+    element.appendChild(work);
   } else {
     element.appendChild(definitionList(connPodFields(panel)));
     const notes = document.createElement("p");
@@ -403,6 +431,19 @@ function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState)
 function berthFields(panel: BerthPanelState): Array<[string, string]> {
   return [
     ["berth-jaeger", panel.jaegerName ?? "Berth empty"],
+    ["berth-status", `${panel.status} · ${panel.integrityPercent}% structure`],
+    [
+      "berth-components",
+      panel.components.length === 0
+        ? "no record"
+        : panel.components.map((entry) => `${entry.name} ${entry.percent}% ${entry.state}`).join(" · "),
+    ],
+    ["berth-offline", panel.offline.length === 0 ? "all systems answering" : panel.offline.join(", ")],
+    [
+      "berth-scars",
+      panel.scars === 0 ? "unmarked" : `${panel.scars} ${panel.scars === 1 ? "mark" : "marks"}`,
+    ],
+    ["berth-work", panel.workOrder?.summary ?? "Nothing on the board."],
     ["berth-mark", `${panel.markDesignation} · ${panel.manufacturer}`],
     ["berth-mass", `${panel.massTons.toLocaleString()} t`],
     ["berth-power", `${panel.powerOutputMw} MW · cooling ${Math.round(panel.coolingCapacity * 100)}%`],

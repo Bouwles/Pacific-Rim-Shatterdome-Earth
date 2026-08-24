@@ -137,6 +137,8 @@ export interface WorldReadout {
   readonly strategicRegions: number;
   readonly rebases: number;
   readonly anchor: GeoPosition;
+  /** Why the selected machine cannot go out, or null when it can. */
+  readonly pilotNotice: string | null;
 }
 
 export interface WorldScreenCallbacks {
@@ -515,6 +517,13 @@ export function renderWorldScreen(
   pilotButton.textContent = "Take the machine out";
   pilotButton.addEventListener("click", () => callbacks.onPilot(pilotSelect.value));
   pilotRow.append(pilotLabel, pilotButton);
+  // A machine that cannot go out says so here, next to the button that would
+  // have sent it.
+  const pilotNotice = document.createElement("p");
+  pilotNotice.className = "world-notice";
+  pilotNotice.dataset.field = "pilot-notice";
+  pilotNotice.hidden = true;
+  pilotRow.appendChild(pilotNotice);
 
   // Controls first, readouts last. The readouts grow without bound as more of the
   // world reports itself; the buttons must stay reachable regardless, so it is the
@@ -554,6 +563,8 @@ export function renderWorldScreen(
 
   return {
     update(state) {
+      pilotNotice.hidden = state.pilotNotice === null;
+      pilotNotice.textContent = state.pilotNotice ?? "";
       set("latitude", formatDegrees(state.position.latitudeDeg, "N", "S"));
       set("longitude", formatDegrees(state.position.longitudeDeg, "E", "W"));
       set("altitude", `${state.position.altitudeMeters.toFixed(1)} m`);

@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 12. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 13. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -73,6 +73,8 @@ src/
     projectiles.ts     a fixed pool of rounds, swept movement, ballistic arcs, the combat bubble
     abilities.ts       status effects as a table, and pure weapon scoring for anything choosing
   jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
+    damage.ts          per-component structure, states, scars, routing, repair orders, the saved record
+    roster.ts          one record per machine: status, damage, outstanding work, recovery and rebuild
     locomotion.ts      states, acceleration, turn authority, ground queries, footfalls, reactions
     camera.ts          three rigs, comfort settings, impulse, obstruction, lossless rig switching
     inputBuffer.ts     short queue of presses waiting for a legal moment
@@ -752,6 +754,52 @@ exist.
 **Events are drained rather than collected from steps.** A trigger is pulled
 between two ticks, so anything a step returned would have missed every shot,
 reload and refusal. The arena keeps a drain cursor and the panel reads that.
+
+## Localized damage, scars and repair
+
+**A machine is a set of components, not a health bar.** `data/components.ts`
+holds eight: Conn-Pod, sensor mast, torso, reactor, two arms and two legs. Each
+carries its share of the machine's structure, its own armour, its own placement
+on the body, which damage kinds it fears, which systems it takes down when it is
+lost, and which weapon mounts it carries. The shares must divide exactly one
+machine and at least one component must be critical, both checked when the
+registry is built.
+
+**The arena fights components.** `jaegerZones` builds one zone per component and
+`jaegerLayout` places them, so a machine goes through the same swept-volume hit
+detection a creature does and a blow lands on the arm it hit rather than on "the
+machine". Health comes from the machine's damage record, so it walks into a
+fight carrying what it walked out of the last one with.
+
+**Damage kinds are routed by the component.** A neural weapon is worth three
+times as much against a Conn-Pod as against a leg; a piercing round is worth more
+against a reactor. Neither the weapon nor the component knows about the other:
+the multiplier is a field on the component and the kind is a field on the packet.
+
+**Losing a component costs something specific.** A destroyed arm silences the
+weapons mounted on it, with the refusal in words. A destroyed leg halves the
+speed and turns a walk home into a tow. A destroyed Conn-Pod or reactor ends the
+sortie. What is offline is derived from component health every time it is asked,
+never stored, so it cannot drift out of step.
+
+**Scars are four numbers.** Which component, how bad, what kind, and a seed. The
+view grows the debris from the seed, so a machine looks the same every time it
+loads without a single debris transform being saved. The list is bounded at
+twenty-four and keeps the worst rather than the newest.
+
+**A machine that loses is never deleted.** `jaegers/roster.ts` holds one record
+per machine with its status, its damage and the work it owes. Coming home is a
+function of the damage itself: unmarked machines are ready, a machine that can
+still walk goes into the gantries, and one that lost a leg or a critical
+component is towed and then rebuilt. Hours of work go in and structure comes
+back, worst component first, and a component that comes back whole loses its
+marks with the plate they were on.
+
+**The saved record is compact.** One fraction per component and the scar list,
+nothing else. Maximum health comes from the machine's own definition on load
+rather than from the file, so rebalancing a chassis does not leave old saves
+carrying old numbers, and a component this build has never heard of is dropped
+rather than resurrected.
 
 ## Quality presets
 

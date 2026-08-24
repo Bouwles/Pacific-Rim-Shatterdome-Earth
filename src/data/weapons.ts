@@ -1,3 +1,4 @@
+import type { WeaponMount } from "./components";
 import { ContentRegistry, type RegistryEntry } from "./registry";
 import type { DamagePacket } from "./moves";
 
@@ -91,6 +92,8 @@ export interface WeaponDefinition extends RegistryEntry {
   readonly salvoCount: number;
   readonly salvoIntervalTicks: number;
   readonly aim: AimRestriction;
+  /** Where it hangs. A weapon on a component that is gone cannot be fired. */
+  readonly mount: WeaponMount;
   /** Multiplier on damage and range underwater. Under one for anything that burns. */
   readonly underwaterScale: number;
   /** True when this can hurt anything that is not its target. */
@@ -123,6 +126,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "forward-arc",
+    mount: "arm.right",
     underwaterScale: 0.55,
     friendlyFire: true,
     damage: {
@@ -158,6 +162,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 3,
     salvoIntervalTicks: 6,
     aim: "locked-only",
+    mount: "shoulder.left",
     underwaterScale: 0.25,
     friendlyFire: true,
     damage: {
@@ -194,6 +199,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "any",
+    mount: "shoulder.right",
     underwaterScale: 0.1,
     friendlyFire: true,
     damage: {
@@ -229,6 +235,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "forward-arc",
+    mount: "arm.left",
     underwaterScale: 0.4,
     friendlyFire: true,
     damage: {
@@ -265,6 +272,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "forward-arc",
+    mount: "arm.left",
     underwaterScale: 1.35,
     friendlyFire: false,
     damage: {
@@ -304,6 +312,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "forward-arc",
+    mount: "arm.right",
     underwaterScale: 0.85,
     friendlyFire: false,
     damage: {
@@ -341,6 +350,7 @@ const WEAPONS: readonly WeaponDefinition[] = [
     salvoCount: 1,
     salvoIntervalTicks: 0,
     aim: "forward-arc",
+    mount: "chest",
     underwaterScale: 0.7,
     friendlyFire: true,
     damage: {

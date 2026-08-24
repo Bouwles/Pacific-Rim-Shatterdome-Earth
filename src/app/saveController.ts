@@ -3,6 +3,7 @@ import { SaveError } from "../saves/repository";
 import type { SaveService } from "../saves/saveService";
 import type { WorldSnapshot } from "../world/worldState";
 import type { ShatterdomeSnapshot } from "../shatterdome/facilityState";
+import type { RosterSnapshot } from "../jaegers/roster";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -51,6 +52,7 @@ export class SaveController {
     name: string,
     world?: WorldSnapshot,
     shatterdome?: ShatterdomeSnapshot,
+    roster?: RosterSnapshot,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -58,6 +60,7 @@ export class SaveController {
       thumbnail: await this.thumbnail(),
       world,
       shatterdome,
+      roster,
     });
   }
 
@@ -65,12 +68,14 @@ export class SaveController {
     kernel: SimulationKernel,
     world?: WorldSnapshot,
     shatterdome?: ShatterdomeSnapshot,
+    roster?: RosterSnapshot,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
       thumbnail: await this.thumbnail(),
       world,
       shatterdome,
+      roster,
     });
   }
 

@@ -367,6 +367,29 @@ past a weapon's reach the target is, how close is too close for indirect fire,
 that a forward-arc weapon needs you to turn, that a magazine is empty and the
 spares are gone, or that too many rounds are already in the air.
 
+### Damage and repair (Milestone 13)
+
+Two rows on the pilot panel report what the machine is carrying. **Damage** gives
+the structure left as a percentage and then names every component that is not
+whole, with what state it is in: scarred, damaged, barely holding, or gone.
+**Systems** says what is offline because the component carrying it was lost, what
+the damage is doing to how the machine walks and hits, and how many marks it is
+wearing.
+
+Nothing is bound to a new key: damage is something that happens to you. What
+changes is what the existing keys do. A weapon on an arm that is gone refuses to
+fire and says which arm took it with it. A machine with a bad leg walks and turns
+more slowly, and one with no leg is towed home rather than walking.
+
+A machine that cannot go out says so on the world panel, under the button that
+would have sent it, with how many hours it is from ready.
+
+In the Jaeger bay, walking up to a berth shows that machine's repair board: its
+status and structure, every component with what is left of it, what is offline,
+how many marks it wears, and the work order with hours and parts cost. **Work a
+shift** puts eight hours into it, worst component first. The button is disabled,
+visibly, when there is nothing to do.
+
 ## Not yet bound
 
 No squad-command or menu-navigation keys exist yet. See

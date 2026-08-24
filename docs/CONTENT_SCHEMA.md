@@ -565,6 +565,67 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Damage schemas (Milestone 13)
+
+### `ComponentDefinition` (src/data/components.ts)
+
+One row per part of a Jaeger. Generic across machines and scaled by each
+machine's own mass, so a new chassis is a row in `jaegers.ts` rather than a new
+component table.
+
+| Field                                                    | Meaning                                             | Constraint                                          |
+| -------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `heightFraction` / `lateralFraction` / `forwardFraction` | Where it sits, as fractions of the machine's height | height and radius must be above zero                |
+| `radiusFraction`                                         | How big a target it is                              | above zero                                          |
+| `healthShare`                                            | Share of the machine's structure                    | all shares together must total exactly one          |
+| `armor` / `damageMultiplier`                             | What it absorbs and what gets through               | armour between zero and one                         |
+| `vulnerableTo`                                           | Damage-kind routing, by kind                        | every multiplier above zero; anything unlisted is 1 |
+| `disables`                                               | Systems that stop when it is lost                   | see the system list below                           |
+| `mounts`                                                 | Weapon mounts carried here                          | lost with the component                             |
+| `critical`                                               | Whether losing it ends the sortie                   | at least one component must be critical             |
+| `repairHoursPerPoint` / `repairCostPerPoint`             | What it costs to put right                          | both above zero                                     |
+
+A component that disables nothing, carries no mount and is not critical is
+refused at registration: losing a part has to cost something.
+
+**Systems**: `pilot`, `power`, `cooling`, `sensors`, `targeting`, `movement`,
+`balance`, `weapons.left`, `weapons.right`, `grapple`.
+**Mounts**: `arm.left`, `arm.right`, `shoulder.left`, `shoulder.right`, `chest`.
+Every weapon names one, and a weapon whose mount is gone is refused in words.
+
+### Component states
+
+`intact` above 90 percent, `scarred` above 65, `damaged` above 35, `critical`
+above zero, `destroyed` at zero. Derived from health, never stored.
+
+### `Scar`
+
+`{ componentId, severity, kind, seed }`. Four numbers, and the only thing about
+visible damage that is saved. The view places the debris from the seed. Bounded
+at twenty-four per machine, keeping the worst rather than the newest.
+
+### `RepairOrder`
+
+`{ jaegerId, lines, totalHours, totalCost, scarsCleared, summary }`, with one
+line per damaged component carrying what is missing, its state, its hours, its
+cost and whether it is a replacement rather than a patch. A replacement costs
+half again. Lines are ordered worst first.
+
+### The roster (src/jaegers/roster.ts)
+
+One record per machine: `{ jaegerId, status, damage, hoursRemaining, sorties }`.
+Statuses are `ready`, `deployed`, `recovering`, `repairing`, `rebuilding`. A
+machine below 25 percent structure is rebuilt rather than repaired; one that lost
+a leg or a critical component is towed home first, which takes twelve hours.
+
+### What is saved
+
+`ROOT_SAVE_VERSION` is 6. The new `roster` section carries, per machine, its
+status, hours owed, sorties and a damage snapshot of one fraction per component
+plus the scar list. Migration step `"5"` gives a version 5 save a full roster of
+undamaged machines, which is the only honest reading of a file written when
+damage did not survive a fight.
+
 ## Ranged schemas (Milestone 12)
 
 ### `WeaponDefinition` (src/data/weapons.ts)

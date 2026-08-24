@@ -4,6 +4,7 @@ import { jaegerRegistry } from "../data/jaegers";
 import {
   CombatArena,
   combatProfileFor,
+  jaegerLayout,
   jaegerZones,
   kaijuCombatProfile,
   kaijuZones,
@@ -179,6 +180,7 @@ export function runCombatScenario(options: CombatScenarioOptions = {}): CombatSc
         profile: combatProfileFor(jaeger),
         pose: { east: 0, north: 0, up: 0, yawDeg: 0 },
         zones: jaegerZones(jaeger),
+        layout: jaegerLayout(jaeger),
         finisherThreshold: 0.2,
       },
       {

@@ -338,6 +338,27 @@ quality presets, the pilot panel, the input source and the combat view.
 - `npm run typecheck`, `lint`, `format:check`, `test` (875), `smoke` (108), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 13 - Localized Jaeger damage, scars, disabled systems and recovery
+
+**Depends on:** Milestone 10 (the attack framework), 11 (the fight) and 12 (damage kinds).
+**Status:** done.
+**Scope:** a component table covering Conn-Pod, sensor mast, torso, reactor, two arms and two legs;
+per-component structure, armour, states and damage-kind routing; systems and weapon mounts lost with
+the component that carried them; scars as four numbers with the debris grown from a seed; a roster
+that keeps every machine and turns a defeat into recovery, repair or a rebuild; a priced and timed
+work order on the berth with a shift of work you can put into it; and a save section carrying all of
+it. Created `src/data/components.ts`, `src/jaegers/damage.ts`, `src/jaegers/roster.ts`. Extended the
+arena, targeting, the weapon table, the save schema and migrations, the pilot panel, the world panel,
+the berth panel and the machine view.
+**Acceptance tests:**
+
+- Destroying the right arm disables only right-arm weapons and changes how the machine behaves.
+- A damaged Jaeger returns to the bay with matching scars and a calculated repair work order.
+- Repairing components updates stats, appearance, cost and completion time.
+- Defeat never deletes the machine, and no debris transform is ever saved.
+- `npm run typecheck`, `lint`, `format:check`, `test` (912), `smoke` (112), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

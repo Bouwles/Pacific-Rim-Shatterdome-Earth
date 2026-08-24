@@ -2,12 +2,13 @@ import { SIM_SCHEMA_VERSION, type SimSnapshot } from "../simulation/kernel";
 import { hashState } from "../simulation/hash";
 import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 import { SHATTERDOME_SCHEMA_VERSION, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
+import { validateRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 5;
+export const ROOT_SAVE_VERSION = 6;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -37,6 +38,8 @@ export interface RootSave {
   readonly world: WorldSnapshot;
   /** Facilities, construction in progress, and where the player was standing inside. */
   readonly shatterdome: ShatterdomeSnapshot;
+  /** Every machine, the damage it is carrying, and the work it is waiting on. */
+  readonly roster: RosterSnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -179,6 +182,7 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateSim(document["sim"]));
   errors.push(...validateWorldSection(document["world"]));
   errors.push(...validateShatterdomeSection(document["shatterdome"]));
+  errors.push(...validateRosterSnapshot(document["roster"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

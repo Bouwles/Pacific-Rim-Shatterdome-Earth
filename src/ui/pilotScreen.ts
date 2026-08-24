@@ -85,8 +85,20 @@ export interface MoveListEntry {
   readonly speed: string;
 }
 
+/** What the machine is carrying from earlier fights, component by component. */
+export interface PilotDamageState {
+  readonly integrityPercent: number;
+  readonly components: readonly { readonly name: string; readonly state: string; readonly percent: number }[];
+  readonly offline: readonly string[];
+  readonly scars: number;
+  /** What the damage is doing to how it moves and hits, in words. */
+  readonly mobility: string;
+}
+
 export interface PilotScreenState {
   readonly readout: PilotReadout;
+  /** Null only before a machine is taken out. */
+  readonly damage: PilotDamageState | null;
   readonly view: PilotViewStats | null;
   readonly groundHeightMeters: number | null;
   readonly headingErrorDeg: number;
@@ -269,6 +281,8 @@ export function renderPilotScreen(
   addRow("comfort", "Comfort");
   addRow("buffer", "Buffer");
   addRow("scale", "Scale refs");
+  addRow("damage", "Damage");
+  addRow("systems", "Systems");
 
   // Combat block. Hidden until there is something to fight, because an empty
   // target readout would imply a system that is not running.
@@ -542,6 +556,32 @@ export function renderPilotScreen(
         }
         volumes.checked = combatState.debugVolumes;
       }
+
+      const damage = state.damage;
+      const hurt = (damage?.components ?? []).filter((entry) => entry.percent < 100);
+      set(
+        "damage",
+        damage === null
+          ? "no record"
+          : hurt.length === 0
+            ? `${damage.integrityPercent}% structure, nothing marked`
+            : `${damage.integrityPercent}% structure · ` +
+              hurt.map((entry) => `${entry.name} ${entry.percent}% ${entry.state}`).join(" · "),
+      );
+      set(
+        "systems",
+        damage === null
+          ? "-"
+          : [
+              damage.offline.length === 0 ? "all answering" : `offline: ${damage.offline.join(", ")}`,
+              // The mobility line only earns its place when it says something the
+              // offline list has not already said.
+              damage.mobility === "all systems answering" ? null : damage.mobility,
+              damage.scars > 0 ? `${damage.scars} ${damage.scars === 1 ? "mark" : "marks"}` : null,
+            ]
+              .filter((part) => part !== null)
+              .join(" · "),
+      );
 
       set(
         "scale",

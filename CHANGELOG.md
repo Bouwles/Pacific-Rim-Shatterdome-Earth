@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-08-24, Milestone 13: Localized Jaeger damage, scars, disabled systems and recovery
+
+A machine is no longer a health bar. It is a Conn-Pod, a sensor mast, a torso, a reactor, two arms and two legs, and what happens to each of them is different.
+
+- Damage lands where it landed. Take a tail sweep across the shins and it is the left leg that comes back at seventy four percent, not "the machine" at ninety seven. Every component has its own structure, its own armour, and its own state, from scarred through damaged and barely holding to gone.
+- The kind of damage matters as much as the amount. A neural weapon is worth three times as much against a Conn-Pod as against a leg. A piercing round is worth almost twice as much against a reactor. Nothing in the code knows either of them by name; it is a multiplier on a row.
+- Losing a part costs something specific. Lose the right arm and the plasma caster and the chain sword go with it, and say so when you pull the trigger. Lose a leg and the machine walks and turns slower, and past a point it does not walk home at all. Lose the Conn-Pod or the reactor and the sortie is over.
+- Scars that stay. A blow heavy enough to leave a mark leaves one, on the part it hit, and the machine wears it afterwards. The mark is four numbers, and the torn plate is grown from a seed, so a machine that has been through twenty fights costs no more to save than one straight off the line.
+- Losing does not delete your machine. It comes back. If it can still walk it walks into the gantries; if it lost a leg or something critical it is towed, which takes twelve hours before anybody can start work; if it is barely there it is rebuilt rather than patched.
+- A repair board on every berth. Walk up to a machine in the bay and you get its structure, every component with what is left of it, what is offline, how many marks it wears, and a work order with real hours and a real parts bill, replacements costing half again over patching. Put a shift in and the crew takes the worst component first, because that is the order that gets the legs back before the paint. Finish a component and its marks come off with the plate.
+- A machine that cannot go out says so, under the button that would have sent it, with how many hours it is short.
+
+Two problems found before this shipped.
+
+The repair queue could stall forever behind a job whose hours rounded down to zero: a one point scratch on a sensor mast would hold up a leg replacement indefinitely. Work orders are now sorted worst first, and a shift always spends something.
+
+And on an undamaged machine the panel read "all answering · all systems answering" with a trailing separator hanging off the damage line, which is the sort of thing that is invisible in a test and obvious the moment you look at it.
+
 ## 2026-08-24, Milestone 12: Ranged weapons, ammunition, heat and signature abilities
 
 The machine has guns now, and they cost something. Seven weapons sit on the number row, and none of them is a button that deals damage forever.

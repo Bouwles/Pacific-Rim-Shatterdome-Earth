@@ -117,7 +117,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - pure weapon scoring that gives an AI, a coaching hint and a test the same answer plus a sentence of reasoning;
   - a ranged row on the pilot panel showing each weapon's magazine, spares and state, live rounds against the ceiling, and what is running on the target;
   - rounds drawn as thin instances on one pooled mesh, so a whole barrage costs one draw call.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (875 unit+integration), `smoke` (108 Playwright), `build` all pass.
+- **Damage that outlives the fight**, on every machine on the roster:
+  - eight components per machine (Conn-Pod, sensor mast, torso, reactor, two arms, two legs), each with its own structure, armour, placement, states and consequence for being lost;
+  - damage-kind routing, so a neural weapon is worth three times as much against a Conn-Pod as against a leg without either knowing about the other;
+  - systems and weapon mounts that go with the component carrying them: a lost right arm silences the weapons on it, by name and in words;
+  - a lost leg that slows the walk and the turn through the same profile the shared controller reads, and forces a tow home rather than a walk;
+  - scars as four numbers with the debris grown from a seed, bounded at twenty-four and keeping the worst, so nothing about visible damage is ever saved as geometry;
+  - a roster that never deletes a machine: coming home is ready, in the gantries, towed, or rebuilt, decided by the damage itself;
+  - a repair board on each berth with every component, what is offline, the marks it wears, and a work order priced and timed from the damage, worst component first;
+  - a shift of work you can put in, which finishes components, clears their marks and signs the machine off;
+  - a save section carrying status, hours owed, sorties and one fraction per component, with maximum health taken from the build rather than the file on load.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (912 unit+integration), `smoke` (112 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

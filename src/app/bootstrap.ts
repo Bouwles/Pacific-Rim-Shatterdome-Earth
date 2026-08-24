@@ -29,6 +29,16 @@ import {
 } from "../ui/worldScreen";
 import { GlobeView } from "../debug/globeView";
 import { WorldState } from "../world/worldState";
+import { Roster } from "../jaegers/roster";
+import {
+  componentFraction,
+  componentState,
+  disabledSystems,
+  mobilityPenalty,
+  recordScar,
+  structuralIntegrity,
+} from "../jaegers/damage";
+import { describeStatus } from "../jaegers/roster";
 import { FloatingOrigin } from "../world/floatingOrigin";
 import { neighborIds } from "../world/cubeSphere";
 import type { GeoPosition, LocalPosition } from "../world/coordinates";
@@ -70,13 +80,14 @@ import { createKaijuRegistry } from "../data/kaiju";
 import {
   CombatArena,
   combatProfileFor,
+  jaegerLayout,
   jaegerZones,
   kaijuCombatProfile,
   kaijuZones,
   type CombatEvent,
 } from "../combat/arena";
 import { CombatView } from "../engine/combatView";
-import type { MoveListEntry, PilotCombatState } from "../ui/pilotScreen";
+import type { MoveListEntry, PilotCombatState, PilotDamageState } from "../ui/pilotScreen";
 import { createPropRegistry, spawnProp, type PropInstance } from "../data/props";
 import type { SpaceQuery } from "../combat/finisher";
 import { moveLengthTicks, type MoveDefinition } from "../data/moves";
@@ -94,6 +105,7 @@ import {
   renderShatterdomeScreen,
   type FacilityRow,
   type ShatterdomePanelState,
+  type BerthPanelState,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
 
@@ -397,6 +409,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               trimmed,
               worldState.serialize(),
               shatterdomeState.serialize(),
+              roster.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -411,6 +424,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               name,
               worldState.serialize(),
               shatterdomeState.serialize(),
+              roster.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -429,6 +443,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             saveService.applyToKernel(result.document, kernel);
             worldState.restore(result.document.world);
             shatterdomeState.restore(result.document.shatterdome, knownRoomIds);
+            // Damage and scars come back with the machines that earned them.
+            roster.restore(result.document.roster);
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
             const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
@@ -528,6 +544,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const kaijuRegistry = createKaijuRegistry();
   const propRegistry = createPropRegistry();
   const weaponRegistry = createWeaponRegistry();
+  // The roster is where a machine's damage lives between fights. Nothing is ever
+  // removed from it: a machine that loses comes back as work rather than a gap.
+  const roster = new Roster();
   /** The ranged row: one key, one weapon, and L reloads whatever is empty. */
   const WEAPON_KEYS: Readonly<Record<string, string>> = {
     Digit7: "weapon.plasma-caster",
@@ -819,7 +838,36 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     return streamer?.sampleGroundHeight(position) ?? null;
   };
 
+  /**
+   * Writes the fight back onto the machine.
+   *
+   * This is what makes damage outlive the fight: the arena's zones are the
+   * machine's components, so what the fight did to them is what the roster
+   * carries away from it.
+   */
+  const recordDamage = (): string | null => {
+    const arena = combatArena;
+    const session = pilotSession;
+    if (!arena || !session) return null;
+    const record = roster.get(session.jaeger.id);
+    if (!record) return null;
+    const view = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (!view) return null;
+    for (const zone of view.zones) {
+      const component = record.damage.components.find((entry) => entry.componentId === zone.id);
+      if (component) component.health = Math.max(0, Math.min(component.maxHealth, zone.health));
+    }
+    record.damage.lostStructure = record.damage.components.reduce(
+      (total, entry) => total + (entry.maxHealth - entry.health),
+      0,
+    );
+    return roster.recover(session.jaeger.id).message;
+  };
+
   const clearTarget = (): void => {
+    // The machine keeps what the fight did to it.
+    const recovery = recordDamage();
+    if (recovery) pushCombatLine(recovery);
     // Nothing survives the fight it was fired in, so the pool is emptied while
     // the arena that owns it still exists.
     combatArena?.projectilePool().clear();
@@ -869,7 +917,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           heightMeters: session.jaeger.locomotion.heightMeters,
           profile: combatProfileFor(session.jaeger),
           pose: { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg },
-          zones: jaegerZones(session.jaeger),
+          // The machine walks into the fight carrying what it walked out with.
+          zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage),
+          layout: jaegerLayout(session.jaeger),
           finisherThreshold: 0.2,
         },
         {
@@ -1044,7 +1094,24 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           `t${event.tick} ${event.actorId} ${event.moveId ?? ""} · ${event.volumeId ?? ""} → ` +
             `${event.zoneId ?? ""} ${event.damage} dmg${event.reaction && event.reaction !== "none" ? ` · ${event.reaction}` : ""}`,
         );
-      } else if (event.type === "zone-destroyed") {
+      }
+      // A blow heavy enough to leave a mark leaves one, on the component it
+      // landed on. The mark is four numbers; the view grows the debris from it.
+      if ((event.type === "hit" || event.type === "zone-destroyed") && event.targetId === "jaeger") {
+        const session = pilotSession;
+        const record = session ? roster.get(session.jaeger.id) : undefined;
+        const component = record?.damage.components.find((entry) => entry.componentId === event.zoneId);
+        if (record && component && component.maxHealth > 0) {
+          recordScar(
+            record.damage,
+            component.componentId,
+            event.damage / component.maxHealth,
+            event.damageKind ?? "impact",
+            event.tick * 2_654_435_761,
+          );
+        }
+      }
+      if (event.type === "zone-destroyed") {
         pushCombatLine(`t${event.tick} ${event.actorId} lost ${event.zoneId ?? ""} (${event.reason ?? ""})`);
       } else if (event.type === "defeated") {
         pushCombatLine(`t${event.tick} ${event.actorId} is down`);
@@ -1212,16 +1279,46 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refreshWorld();
   };
 
+  /** Why the machine on the world panel cannot go out, or null when it can. */
+  let pilotNotice: string | null = null;
+
   const startPilot = (jaegerId: string): void => {
     if (viewMode !== "ground") return;
     const jaeger = jaegerRegistry.get(jaegerId) ?? jaegerRegistry.all()[0];
     if (!jaeger) return;
+    // A machine that is being rebuilt, towed, or missing something critical does
+    // not go out. The refusal is a sentence, the same as everywhere else.
+    const fitness = roster.canDeploy(jaeger.id);
+    if (!fitness.ok) {
+      pilotNotice = fitness.message;
+      refreshWorld();
+      return;
+    }
     stopPilot();
+    pilotNotice = null;
 
     const local = floatingOrigin.toLocal(worldState.playerPosition);
     const ground = localGroundHeight(local.east, local.north);
+    const record = roster.get(jaeger.id);
+    const penalty = record
+      ? mobilityPenalty(record.damage, roster.componentRegistry())
+      : { speedScale: 1, turnScale: 1, meleeScale: 1, summary: "all systems answering" };
+    // Damage changes how it walks by changing the numbers the shared controller
+    // reads, rather than by adding a second controller for damaged machines.
+    const damagedJaeger: typeof jaeger = {
+      ...jaeger,
+      locomotion: {
+        ...jaeger.locomotion,
+        walkSpeedMps: jaeger.locomotion.walkSpeedMps * penalty.speedScale,
+        runSpeedMps: jaeger.locomotion.runSpeedMps * penalty.speedScale,
+        strafeSpeedMps: jaeger.locomotion.strafeSpeedMps * penalty.speedScale,
+        turnRateDegPerSecond: jaeger.locomotion.turnRateDegPerSecond * penalty.turnScale,
+        turnInPlaceRateDegPerSecond: jaeger.locomotion.turnInPlaceRateDegPerSecond * penalty.turnScale,
+      },
+    };
+    roster.deploy(jaeger.id);
     pilotSession = new PilotSession({
-      jaeger,
+      jaeger: damagedJaeger,
       east: local.east,
       north: local.north,
       // Stand on the terrain if it is loaded, and on the last known altitude if
@@ -1385,12 +1482,66 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       .sort((a, b) => a.group.localeCompare(b.group) || a.displayName.localeCompare(b.displayName));
   };
 
+  /**
+   * What the machine is carrying, for the panel.
+   *
+   * Read live from the arena while a fight is running, so a leg going out shows
+   * up the moment it happens rather than when the pilot walks home.
+   */
+  const pilotDamageState = (): PilotDamageState | null => {
+    const session = pilotSession;
+    const record = session ? roster.get(session.jaeger.id) : undefined;
+    if (!session || !record) return null;
+    const components = roster.componentRegistry();
+    const live = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    const entries = record.damage.components.map((entry) => {
+      const zone = live?.zones.find((candidate) => candidate.id === entry.componentId);
+      const health = zone ? zone.health : entry.health;
+      const max = zone ? zone.maxHealth : entry.maxHealth;
+      return { componentId: entry.componentId, health, maxHealth: max, shock: 0 };
+    });
+    const integrity =
+      entries.reduce((total, entry) => total + entry.maxHealth, 0) === 0
+        ? 0
+        : entries.reduce((total, entry) => total + entry.health, 0) /
+          entries.reduce((total, entry) => total + entry.maxHealth, 0);
+    const view = { ...record.damage, components: entries };
+    return {
+      integrityPercent: Math.round(integrity * 100),
+      components: entries.map((entry) => ({
+        name: components.get(entry.componentId)?.displayName ?? entry.componentId,
+        state: componentState(entry),
+        percent: Math.round(componentFraction(entry) * 100),
+      })),
+      offline: disabledSystems(view, components).map((system) => system.replace(".", " ")),
+      scars: record.damage.scars.length,
+      mobility: mobilityPenalty(view, components).summary,
+    };
+  };
+
   /** Pushes the machine's own numbers at the panel. Throttled like every other readout. */
   const refreshPilot = (): void => {
     if (!pilotScreen || !pilotSession) return;
     const stats = jaegerView?.stats();
+    // The machine wears what it is carrying: marks come from the record, placed
+    // on the component that earned them.
+    const marks = pilotSession ? (roster.get(pilotSession.jaeger.id)?.damage.scars ?? []) : [];
+    const componentsRegistry = roster.componentRegistry();
+    jaegerView?.updateDamage(
+      marks.map((scar) => {
+        const component = componentsRegistry.get(scar.componentId);
+        return {
+          heightFraction: component?.heightFraction ?? 0.6,
+          lateralFraction: component?.lateralFraction ?? 0,
+          forwardFraction: component?.forwardFraction ?? 0,
+          severity: scar.severity,
+          seed: scar.seed,
+        };
+      }),
+    );
     pilotScreen.update({
       readout: pilotSession.readout(),
+      damage: pilotDamageState(),
       view: stats
         ? {
             decals: stats.decals,
@@ -1565,6 +1716,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       strategicRegions: records.filter((record) => record.tier === "strategic").length,
       rebases: floatingOrigin.rebases,
       anchor: floatingOrigin.anchor,
+      pilotNotice,
     });
     globeView?.refresh();
   };
@@ -2009,6 +2161,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
   };
 
+  /** The last thing the repair crew reported, shown on the berth panel. */
+  let repairNote: string | null = null;
+  /** One shift on the gantries. Long enough to be worth pressing, short enough to feel. */
+  const REPAIR_SHIFT_HOURS = 8;
+
   const berthPanelFor = (
     active: ShatterdomeSession,
     jaegerId: string | null,
@@ -2031,7 +2188,62 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       assetOrigin: manifest?.source.url === null ? "procedural placeholder" : "model",
       heightMeters: manifest?.nominalHeightMeters ?? 0,
       selected: active.state.selectedJaegerId === jaegerId,
-      notes: jaeger?.description ?? "This berth is empty.",
+      notes: repairNote ?? jaeger?.description ?? "This berth is empty.",
+      ...berthRepairState(jaegerId),
+    };
+  };
+
+  /**
+   * The repair board for one berth.
+   *
+   * Every number on it comes from the machine's own damage record, so a machine
+   * that came home with a torn arm shows the torn arm, what it costs to put
+   * right, and how long it takes.
+   */
+  const berthRepairState = (
+    jaegerId: string | null,
+  ): Pick<
+    BerthPanelState,
+    "jaegerId" | "status" | "integrityPercent" | "components" | "offline" | "scars" | "workOrder"
+  > => {
+    const record = jaegerId ? roster.get(jaegerId) : undefined;
+    if (!jaegerId || !record) {
+      return {
+        jaegerId: null,
+        status: "empty",
+        integrityPercent: 0,
+        components: [],
+        offline: [],
+        scars: 0,
+        workOrder: null,
+      };
+    }
+    const components = roster.componentRegistry();
+    const order = roster.repairOrder(jaegerId);
+    return {
+      jaegerId,
+      status: describeStatus(record.status),
+      integrityPercent: Math.round(structuralIntegrity(record.damage) * 100),
+      components: record.damage.components.map((entry) => ({
+        name: components.get(entry.componentId)?.displayName ?? entry.componentId,
+        state: componentState(entry),
+        percent: Math.round(componentFraction(entry) * 100),
+      })),
+      offline: disabledSystems(record.damage, components).map((system) => system.replace(".", " ")),
+      scars: record.damage.scars.length,
+      workOrder:
+        order.lines.length === 0
+          ? null
+          : {
+              summary: order.summary,
+              lines: order.lines.map(
+                (line) =>
+                  `${line.displayName}: ${line.missing} structure, ${line.hours} h, ${line.cost.toLocaleString("en-GB")}` +
+                  (line.replace ? " (replacement)" : ""),
+              ),
+              hours: order.totalHours,
+              cost: order.totalCost,
+            },
     };
   };
 
@@ -2086,6 +2298,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         );
         break;
       case "berth":
+        // A fresh look at a berth starts with the machine's own notes rather
+        // than whatever the crew last said about a different one.
+        repairNote = null;
         openInteriorPanel(berthPanelFor(session, outcome.jaegerId, outcome.label));
         break;
       default:
@@ -2219,6 +2434,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         active.orderUpgrade(facilityId as FacilityKind);
         // The order changes the room and the panel in the same breath.
         openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
+      onRepair: (jaegerId) => {
+        // One shift of work. The crew takes the worst component first, which is
+        // why a machine gets its legs back before its paint.
+        const outcome = roster.work(jaegerId, REPAIR_SHIFT_HOURS);
+        const record = roster.get(jaegerId);
+        repairNote =
+          outcome.messages[outcome.messages.length - 1] ??
+          (record
+            ? `${roster.definition(jaegerId).name} is ${describeStatus(record.status)}, ${Math.ceil(record.hoursRemaining)} hours from ready.`
+            : "Nothing to do.");
+        openInteriorPanel(berthPanelFor(active, jaegerId, roster.definition(jaegerId).name));
       },
       onClosePanel: () => openInteriorPanel(null),
       onResume: () => setInteriorPaused(false),

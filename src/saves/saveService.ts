@@ -6,6 +6,7 @@ import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 import { emptyEnvironmentSnapshot } from "../world/environment";
 import { createFacilityRegistry } from "../data/facilities";
 import { emptyShatterdomeSnapshot, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
+import { emptyRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -45,6 +46,8 @@ export interface SaveRequest {
   readonly world?: WorldSnapshot;
   /** Facilities and interior position. Omitted only by callers with no complex yet. */
   readonly shatterdome?: ShatterdomeSnapshot;
+  /** Machines and the damage they are carrying. Omitted by callers with no roster yet. */
+  readonly roster?: RosterSnapshot;
 }
 
 /**
@@ -101,6 +104,9 @@ export class SaveService {
     // A fresh complex rather than an absent one: the Shatterdome always exists,
     // even for a caller that has not opened it yet.
     const shatterdome = request.shatterdome ?? emptyShatterdomeSnapshot(createFacilityRegistry());
+    // A full roster of undamaged machines rather than an absent one: the
+    // machines exist whether or not the caller has taken one out.
+    const roster = request.roster ?? emptyRosterSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -110,7 +116,15 @@ export class SaveService {
       appVersion: this.appVersion,
       thumbnail: request.thumbnail ?? null,
     };
-    return { schemaVersion: ROOT_SAVE_VERSION, savedAt: this.now(), metadata, sim, world, shatterdome };
+    return {
+      schemaVersion: ROOT_SAVE_VERSION,
+      savedAt: this.now(),
+      metadata,
+      sim,
+      world,
+      shatterdome,
+      roster,
+    };
   }
 
   async save(slotId: string, kernel: SimulationKernel, request: SaveRequest = {}): Promise<RootSave> {
