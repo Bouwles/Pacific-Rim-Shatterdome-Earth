@@ -70,12 +70,14 @@ import {
 } from "../world/cityActivity";
 import { CityView } from "../engine/cityView";
 import { RegionDestruction } from "../world/destruction";
+import { AttackDirector, type Resolution } from "../world/director";
+import type { WarReadout } from "../ui/worldScreen";
 import { Creature, type CreatureDebug } from "../kaiju/creature";
 import type { BodyZoneId } from "../data/kaiju";
 import type { NavigationQuery } from "../kaiju/navigation";
 import { DEFAULT_DAY_LENGTH_TICKS } from "../world/worldClock";
 import { DebrisPool, debrisStream, MAX_CHUNKS_PER_COLLAPSE } from "../world/debris";
-import { geoToLocal, localToGeo } from "../world/coordinates";
+import { EARTH_SCALE, geoToLocal, localToGeo, surfaceDistanceMeters } from "../world/coordinates";
 import { PilotSession } from "../jaegers/pilotSession";
 import { JaegerView } from "../engine/jaegerView";
 import { PilotInputSource } from "../engine/pilotInput";
@@ -416,6 +418,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               worldState.serialize(),
               shatterdomeState.serialize(),
               roster.snapshot(),
+              attackDirector.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -431,6 +434,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               worldState.serialize(),
               shatterdomeState.serialize(),
               roster.snapshot(),
+              attackDirector.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -451,6 +455,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             shatterdomeState.restore(result.document.shatterdome, knownRoomIds);
             // Damage and scars come back with the machines that earned them.
             roster.restore(result.document.roster);
+            // And so does the war: escalation, threat and everything inbound.
+            attackDirector.restore(result.document.director);
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
             const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
@@ -497,11 +503,73 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // Injected as a function so the world layer never imports the content layer.
     climateProfileFor: (climate) => climateRegistry.getOrThrow(climate),
   });
+  /**
+   * The war.
+   *
+   * Authoritative and session-lived like the world itself: it keeps running
+   * whether the player is on the globe, in the Shatterdome or in a fight, and
+   * it is saved from wherever they happen to be.
+   */
+  /**
+   * How fast a carrier moves a machine, metres a second at real-world scale.
+   *
+   * The globe is a fiftieth of Earth, so a distance measured on it has to be
+   * scaled back up before it means anything as a flight time. Without that, a
+   * crossing of the Pacific reads as a couple of minutes.
+   */
+  const CARRIER_SPEED_MPS = 240;
+  /** Simulation ticks in one second of world time. */
+  const TICKS_PER_SECOND = 1;
+  const attackDirector = new AttackDirector({
+    regions: regionRegistry,
+    seed: kernel?.seed ?? 0,
+  });
+  /** Resolutions the player has not read yet, newest first. Bounded. */
+  const resolutionLog: Resolution[] = [];
+  /**
+   * The war's own clock.
+   *
+   * Simulation ticks plus any time the player skipped on the panel. Both paths
+   * go through one counter, because six hours passing is six hours of war
+   * whichever way the six hours happened.
+   */
+  let warClock = 0;
+  /** The last thing the director did, for the alert board. */
+  let directorNotice: string | null = null;
+
   advanceWorldTime = (ticks) => {
     worldState.advanceEnvironment(ticks);
     // Evacuation moves with world time too, so a city cleared while the player
     // was elsewhere is still cleared when they arrive.
     worldState.advanceAlerts(ticks);
+
+    advanceWar(ticks);
+  };
+
+  /**
+   * Moves the war forward by a number of ticks.
+   *
+   * New alerts raise the region's own alert level, which is what the city has
+   * always reacted to, so sirens and evacuation follow an inbound contact
+   * without the director knowing anything about either.
+   */
+  const advanceWar = (ticks: number): void => {
+    if (ticks <= 0) return;
+    warClock += ticks;
+    const created = attackDirector.advance(warClock, ticks);
+    for (const incident of created) {
+      worldState.setRegionAlert(incident.regionId, "watch", kernel?.tick ?? 0);
+      directorNotice = `${regionRegistry.get(incident.regionId)?.displayName ?? incident.regionId}: contact inbound.`;
+    }
+    for (const incident of attackDirector.incidents()) {
+      if (incident.status === "inbound") {
+        worldState.setRegionAlert(incident.regionId, "warning", kernel?.tick ?? 0);
+      }
+      if (incident.status === "landed") {
+        worldState.setRegionAlert(incident.regionId, "attack", kernel?.tick ?? 0);
+      }
+    }
+    attackDirector.prune(warClock);
   };
   // The complex is authoritative and session-lived, like the world: it is saved
   // from wherever the player happens to be, not only from inside it.
@@ -1312,6 +1380,30 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     return floatingOrigin.toLocal(geo);
   };
 
+  /**
+   * Answers an incident without flying to it.
+   *
+   * The strategic model decides what happened and hands back every contribution
+   * that went into it; the region takes the damage and the alert drops back to
+   * recovery. Nothing about the result is written in advance.
+   */
+  const resolveIncident = (incidentId: string, kind: "ai-defended" | "ignored"): void => {
+    const incident = attackDirector.incident(incidentId);
+    if (!incident) return;
+    const resolution = attackDirector.resolve(incident, kind);
+    resolutionLog.unshift(resolution);
+    while (resolutionLog.length > 5) resolutionLog.pop();
+
+    // The city takes the damage the model says it took, through the same
+    // regional record everything else writes to.
+    if (resolution.integrityLost > 0) {
+      worldState.applyRegionDamage(resolution.regionId, resolution.integrityLost, kernel?.tick ?? 0);
+    }
+    worldState.setRegionAlert(resolution.regionId, "recovery", kernel?.tick ?? 0);
+    directorNotice = resolution.summary;
+    refreshWorld();
+  };
+
   /** Presses an attack. The arena decides whether it is legal, and says why not. */
   const pressAttack = (slot: number): void => {
     let moveId = ATTACK_SLOTS[slot];
@@ -2049,8 +2141,63 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       rebases: floatingOrigin.rebases,
       anchor: floatingOrigin.anchor,
       pilotNotice,
+      war: warReadout(),
     });
     globeView?.refresh();
+  };
+
+  /**
+   * Flattens the war for the panel.
+   *
+   * Every number here comes from the director, including the forecast of doing
+   * nothing, which is the same model that will resolve it. The panel cannot
+   * show a war the simulation does not agree with.
+   */
+  const warReadout = (): WarReadout => {
+    const tick = kernel?.tick ?? 0;
+    const dayTicks = worldState.environment.clock.dayLengthTicks;
+    const toHours = (ticks: number): number => (ticks / dayTicks) * 24;
+    const alerts = attackDirector
+      .active()
+      .concat(attackDirector.incidents().filter((incident) => incident.status === "landed"))
+      .map((incident) => {
+        // Travel time is the real distance from where the player is standing.
+        const region = regionRegistry.get(incident.regionId);
+        const distance = region ? surfaceDistanceMeters(worldState.playerPosition, region.centre) : 0;
+        const travelTicks = Math.round((distance / EARTH_SCALE / CARRIER_SPEED_MPS) * TICKS_PER_SECOND);
+        const forecast = attackDirector.forecast(incident, tick, travelTicks);
+        return {
+          incidentId: incident.id,
+          regionName: forecast.regionName,
+          status: incident.status,
+          hoursToArrival: toHours(forecast.ticksToArrival),
+          travelHours: toHours(travelTicks),
+          reachable: forecast.reachable,
+          confidencePercent: Math.round(forecast.warningConfidence * 100),
+          composition: forecast.composition,
+          tells: forecast.tells,
+          objective: forecast.objective,
+          secondaryObjectives: forecast.secondaryObjectives,
+          ifIgnored: forecast.ignoredForecast.summary,
+          ifIgnoredLedger: forecast.ignoredForecast.ledger.map(
+            (line) => `${line.label}: ${Math.round(line.value * 100) / 100} (${line.reason})`,
+          ),
+        };
+      });
+
+    return {
+      escalationPercent: Math.round(attackDirector.escalation * 100),
+      breachPressurePercent: Math.round(attackDirector.breachPressure * 100),
+      crisisFrequency: attackDirector.crisisFrequency,
+      alerts,
+      resolutions: resolutionLog.map((resolution) => ({
+        summary: resolution.summary,
+        ledger: resolution.ledger.map(
+          (line) => `${line.label}: ${Math.round(line.value * 100) / 100} (${line.reason})`,
+        ),
+      })),
+      notice: directorNotice,
+    };
   };
 
   /**
@@ -2369,9 +2516,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onAdvanceHours: (hours: number) => {
           const ticks = Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24);
           worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
-          // Time passing over a damaged city is time the city spends recovering.
+          // Time passing over a damaged city is time the city spends recovering,
+          // and time the war spends happening.
           const regionId = worldState.activeRegionId;
           if (regionId) advanceRegionHours(regionId, hours);
+          advanceWar(ticks);
           refreshWorld();
         },
         onDiveToggle: () => {
@@ -2379,6 +2528,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshWorld();
         },
         onQualityChange: (level: string) => applyQuality(level as QualityLevel),
+        onResolveIncident: (incidentId: string, kind: "ai-defended" | "ignored") => {
+          resolveIncident(incidentId, kind);
+        },
+        onCrisisFrequency: (value: number) => {
+          // The player's own dial. Bounded by the director, not by the panel.
+          attackDirector.setCrisisFrequency(value);
+          refreshWorld();
+        },
         onRebuild: (groupId: string) => {
           const regionId = worldState.activeRegionId;
           const destruction = regionId ? destructionFor(regionId) : null;

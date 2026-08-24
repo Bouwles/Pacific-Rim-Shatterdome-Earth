@@ -142,6 +142,36 @@ export interface CityReadout {
   readonly rendered: boolean;
 }
 
+/** One incident on the alert board, already turned into words. */
+export interface AlertReadout {
+  readonly incidentId: string;
+  readonly regionName: string;
+  readonly status: string;
+  /** In-game hours until it reaches the shore. Negative once it has. */
+  readonly hoursToArrival: number;
+  readonly travelHours: number;
+  readonly reachable: boolean;
+  readonly confidencePercent: number;
+  readonly composition: string;
+  readonly tells: readonly string[];
+  readonly objective: string;
+  readonly secondaryObjectives: readonly string[];
+  /** What the model expects if nobody goes, and why, line by line. */
+  readonly ifIgnored: string;
+  readonly ifIgnoredLedger: readonly string[];
+}
+
+/** What the war looks like from the map. */
+export interface WarReadout {
+  readonly escalationPercent: number;
+  readonly breachPressurePercent: number;
+  readonly crisisFrequency: number;
+  readonly alerts: readonly AlertReadout[];
+  /** The last few resolutions, each already explained. */
+  readonly resolutions: readonly { readonly summary: string; readonly ledger: readonly string[] }[];
+  readonly notice: string | null;
+}
+
 export interface WorldReadout {
   readonly viewMode: WorldViewMode;
   readonly environment: EnvironmentReadout;
@@ -160,6 +190,8 @@ export interface WorldReadout {
   readonly anchor: GeoPosition;
   /** Why the selected machine cannot go out, or null when it can. */
   readonly pilotNotice: string | null;
+  /** The war. Null only before the director exists. */
+  readonly war: WarReadout | null;
 }
 
 export interface WorldScreenCallbacks {
@@ -177,6 +209,10 @@ export interface WorldScreenCallbacks {
   onAlertChange(level: string): void;
   /** Starts clearing and then rebuilding the named block. */
   onRebuild(groupId: string): void;
+  /** Leaves an incident to the regional defences, or ignores it outright. */
+  onResolveIncident(incidentId: string, kind: "ai-defended" | "ignored"): void;
+  /** The player's own dial on how often crises happen. */
+  onCrisisFrequency(value: number): void;
   /** Take the machine out. Ground view only: there is nothing to stand on from orbit. */
   onPilot(jaegerId: string): void;
   onExit(): void;
@@ -186,6 +222,9 @@ export interface WorldScreenHandle {
   update(readout: WorldReadout): void;
   dispose(): void;
 }
+
+/** What separates one ledger line from the next inside a tooltip. */
+const LEDGER_SEPARATOR = String.fromCharCode(10);
 
 function formatDegrees(value: number, positive: string, negative: string): string {
   const hemisphere = value >= 0 ? positive : negative;
@@ -433,6 +472,59 @@ export function renderWorldScreen(
   });
   rebuildRow.append(rebuildLabel, rebuildButton);
 
+  // The alert board. One entry per incident, each with what is known, what it
+  // costs to ignore, and the buttons that actually do those things.
+  const warSection = document.createElement("div");
+  warSection.className = "world-readout world-war";
+  warSection.dataset.section = "war";
+  warSection.hidden = true;
+  const warHeader = document.createElement("div");
+  warHeader.className = "world-row";
+  const warKey = document.createElement("span");
+  warKey.className = "world-key";
+  warKey.textContent = "War";
+  const warValue = document.createElement("span");
+  warValue.className = "world-value";
+  warValue.dataset.field = "war-state";
+  warHeader.append(warKey, warValue);
+
+  const frequencyRow = document.createElement("div");
+  frequencyRow.className = "world-teleport";
+  frequencyRow.dataset.section = "crisis-frequency";
+  const frequencyLabel = document.createElement("label");
+  frequencyLabel.className = "world-walk-label";
+  frequencyLabel.textContent = "Crisis frequency";
+  const frequencySelect = document.createElement("select");
+  frequencySelect.dataset.action = "crisis-frequency";
+  frequencySelect.setAttribute("aria-label", "How often crises happen");
+  for (const [value, label] of [
+    ["0.5", "Rare"],
+    ["1", "Standard"],
+    ["1.5", "Frequent"],
+    ["2", "Relentless"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (value === "1") option.selected = true;
+    frequencySelect.appendChild(option);
+  }
+  frequencySelect.addEventListener("change", () => {
+    callbacks.onCrisisFrequency(Number(frequencySelect.value) || 1);
+  });
+  frequencyLabel.appendChild(frequencySelect);
+  frequencyRow.appendChild(frequencyLabel);
+
+  const alertList = document.createElement("ul");
+  alertList.className = "world-alert-list";
+  alertList.dataset.field = "alert-list";
+
+  const resolutionList = document.createElement("ul");
+  resolutionList.className = "world-resolution-list";
+  resolutionList.dataset.field = "resolution-list";
+
+  warSection.append(warHeader, frequencyRow, alertList, resolutionList);
+
   const city = document.createElement("div");
   city.className = "world-readout world-city";
   city.dataset.section = "city";
@@ -586,6 +678,7 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    warSection,
     rebuildRow,
     pilotRow,
     alertRow,
@@ -614,6 +707,84 @@ export function renderWorldScreen(
 
   return {
     update(state) {
+      // The war, and the actions that answer it.
+      const war = state.war;
+      warSection.hidden = war === null;
+      if (war) {
+        warValue.textContent =
+          `escalation ${war.escalationPercent}% · breach pressure ${war.breachPressurePercent}%` +
+          (war.notice ? ` · ${war.notice}` : "");
+        if (Number(frequencySelect.value) !== war.crisisFrequency) {
+          frequencySelect.value = String(war.crisisFrequency);
+        }
+
+        alertList.replaceChildren();
+        if (war.alerts.length === 0) {
+          const quiet = document.createElement("li");
+          quiet.dataset.field = "alert-empty";
+          quiet.textContent = "Nothing inbound.";
+          alertList.appendChild(quiet);
+        }
+        for (const alert of war.alerts) {
+          const item = document.createElement("li");
+          item.className = "world-alert";
+          item.dataset.incident = alert.incidentId;
+
+          const headline = document.createElement("span");
+          headline.className = "world-alert-headline";
+          headline.dataset.field = "alert-headline";
+          headline.textContent =
+            `${alert.regionName}: ${alert.status}, ` +
+            (alert.hoursToArrival >= 0 ? `${alert.hoursToArrival.toFixed(1)} h out` : "ashore now") +
+            ` · ${alert.travelHours.toFixed(1)} h to get there` +
+            (alert.reachable ? "" : " · too far to reach in time");
+
+          const detail = document.createElement("span");
+          detail.className = "world-alert-detail";
+          detail.dataset.field = "alert-detail";
+          detail.textContent =
+            `${alert.composition} (${alert.confidencePercent}% confidence) · ${alert.objective}` +
+            (alert.secondaryObjectives.length > 0 ? ` then ${alert.secondaryObjectives.join(", ")}` : "") +
+            (alert.tells.length > 0 ? ` · ${alert.tells.join(" ")}` : "");
+
+          const forecast = document.createElement("span");
+          forecast.className = "world-alert-forecast";
+          forecast.dataset.field = "alert-forecast";
+          forecast.textContent = `If nobody goes: ${alert.ifIgnored}`;
+          forecast.title = alert.ifIgnoredLedger.join(LEDGER_SEPARATOR);
+
+          const defend = document.createElement("button");
+          defend.type = "button";
+          defend.className = "secondary-button";
+          defend.dataset.action = "incident-defend";
+          defend.textContent = "Let the defences handle it";
+          defend.addEventListener("click", () =>
+            callbacks.onResolveIncident(alert.incidentId, "ai-defended"),
+          );
+
+          const ignore = document.createElement("button");
+          ignore.type = "button";
+          ignore.className = "secondary-button";
+          ignore.dataset.action = "incident-ignore";
+          ignore.textContent = "Stand down";
+          ignore.addEventListener("click", () => callbacks.onResolveIncident(alert.incidentId, "ignored"));
+
+          item.append(headline, detail, forecast, defend, ignore);
+          alertList.appendChild(item);
+        }
+
+        resolutionList.replaceChildren();
+        for (const resolution of war.resolutions) {
+          const item = document.createElement("li");
+          item.className = "world-resolution";
+          item.dataset.field = "resolution";
+          item.textContent = resolution.summary;
+          // Every number that moved, and why it moved, on the element itself.
+          item.title = resolution.ledger.join(LEDGER_SEPARATOR);
+          resolutionList.appendChild(item);
+        }
+      }
+
       pilotNotice.hidden = state.pilotNotice === null;
       pilotNotice.textContent = state.pilotNotice ?? "";
       set("latitude", formatDegrees(state.position.latitudeDeg, "N", "S"));

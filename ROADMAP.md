@@ -402,6 +402,25 @@ the combat loop, which now lets the creature drive itself instead of attacking o
 - `npm run typecheck`, `lint`, `format:check`, `test` (998), `smoke` (120), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 16 - Dynamic attack director and simultaneous world crises
+
+**Depends on:** Milestone 04 (regions), 07 (cities), 14 (regional damage) and 15 (the creatures it sends).
+**Status:** done.
+**Scope:** global escalation and breach pressure; per-region threat, defence, cooldowns and a record of
+what the player does about each; seeded incident generation with origin, approach path, composition,
+mutation budget, warning confidence, target priorities, arrival time and secondary objectives;
+simultaneous alerts with travel-time and consequence forecasts; transparent strategic resolution with
+a ledger behind every number; anti-repetition, recovery windows, a difficulty curve and a player dial.
+Created `src/data/mutations.ts`, `src/world/director.ts`, `src/debug/directorScenario.ts`. Extended the
+save schema and migrations, the world panel and the world clock wiring.
+**Acceptance tests:**
+
+- Repeated seeds generate the same alert sequence when player decisions are identical.
+- The director creates overlapping emergencies without spawning a combat scene for either.
+- The panel explains rewards, regional damage and escalation after each resolution.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1032), `smoke` (125), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

@@ -153,7 +153,16 @@ describe("round trip through a kernel", () => {
     const keys = Object.keys(stored?.document ?? {}).sort();
 
     // No camera, no meshes, no materials, no UI state.
-    expect(keys).toEqual(["metadata", "roster", "savedAt", "schemaVersion", "shatterdome", "sim", "world"]);
+    expect(keys).toEqual([
+      "director",
+      "metadata",
+      "roster",
+      "savedAt",
+      "schemaVersion",
+      "shatterdome",
+      "sim",
+      "world",
+    ]);
     expect(Object.keys(stored?.document.sim ?? {}).sort()).toEqual([
       "entities",
       "schemaVersion",

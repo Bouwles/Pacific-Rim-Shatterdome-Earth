@@ -677,6 +677,35 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-25, Milestone 16
+
+**The director creates records, not scenes.** An incident is strategic state:
+where, what, when and how bad. Two overlapping emergencies cost two map entries,
+which is what makes simultaneous crises possible at all without a second arena.
+
+**An incident is a plan and never an outcome.** Nothing about what happens when
+it lands is written when the alert is created. That is the difference between a
+director and a script, and it is the failure mode the milestone names.
+
+**Resolution is a ledger, not a die.** Every contribution is a labelled line with
+a reason and the seeded stream only moves the margin, so a close-run thing can go
+either way while an overwhelming attack cannot be survived by luck. It also means
+the interface has nothing to invent: it prints the model's own working.
+
+**Refusing is the common case.** Rolls happen on a cadence, the chance stays well
+under one, regions go on cooldown, recent targets are weighted down, there is a
+ceiling on simultaneous incidents, and every resolution buys quiet. A director
+that always produces something is a director that punishes existing.
+
+**Mutations are the difficulty curve, and they are legible.** Escalation buys a
+budget, the budget buys modifiers with costs and exclusions, and each modifier
+carries a tell. Difficulty therefore arrives as a creature the player can be told
+about rather than as a hidden multiplier.
+
+**One clock for the war.** Two paths through time is how one of them ends up
+doing nothing, which is exactly what had happened before it was caught by hand,
+for the second milestone running.
+
 ## 2026-08-24, Milestone 15
 
 **Utility scoring, not a behaviour tree.** Every goal is a row with a pure score

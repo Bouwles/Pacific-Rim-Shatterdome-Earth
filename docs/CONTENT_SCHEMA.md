@@ -565,6 +565,53 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Attack director schemas (Milestone 16)
+
+### `MutationDefinition` (src/data/mutations.ts)
+
+| Field                                                       | Meaning                                                 | Constraint                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
+| `kind`                                                      | armour, offence, mobility, sensory, resilience or swarm | one of the six                                      |
+| `cost`                                                      | What it takes out of the director's budget              | a positive integer                                  |
+| `damageScale` / `armourScale` / `speedScale` / `senseScale` | Multipliers on the creature                             | above zero                                          |
+| `resistances`                                               | Extra resistance per damage kind                        | zero or more                                        |
+| `grantsMedia`                                               | Media it opens up, such as water for a walker           | read by navigation                                  |
+| `excludes`                                                  | Mutations it cannot appear with                         | must name registered mutations                      |
+| `minimumEscalation`                                         | When the director may start considering it              | within [0, 1]                                       |
+| `tell`                                                      | What a warning is allowed to say about it               | required: a warning has to be able to say something |
+
+A mutation that changes nothing at all is refused at registration.
+
+### `Incident` (src/world/director.ts)
+
+`{ id, regionId, originBearingDeg, originDistanceMeters, approachBearings[],
+combatants[], mutationBudget, warningConfidence, targetPriorities[], objective,
+secondaryObjectives[], createdTick, arrivalTick, status, strength }`. Statuses
+are `forecast`, `inbound`, `landed`, `resolved` and `expired`. Objectives are
+`defend`, `intercept`, `pursue`, `rescue`, `contain`, `escort`, `research` and
+`salvage`.
+
+### `Resolution`
+
+`{ incidentId, regionId, kind, held, integrityLost, escalationDelta, reward,
+ledger[], summary }`, where every `ledger` line is `{ label, value, reason }`.
+Resolution kinds are `player-defended`, `ai-defended`, `ignored` and
+`abandoned`.
+
+### `DirectorSnapshot`
+
+`{ schemaVersion, escalation, breachPressure, crisisFrequency, nextRollTick,
+quietUntilTick, incidentSeq, regions[], incidents[], recentRegionIds[],
+unresolved }`. A region record carries its threat, defence, last chosen tick,
+cooldown, and how many incidents there the player defended or ignored.
+
+### What is saved
+
+`ROOT_SAVE_VERSION` is 8. The new `director` section carries the whole war.
+Migration step `"7"` gives a version 7 save the campaign's opening state, which
+is the only honest reading of a file written before attacks existed as a
+strategic system.
+
 ## Kaiju framework schemas (Milestone 15)
 
 ### `LocomotionFamilyDefinition` (src/data/locomotionFamilies.ts)

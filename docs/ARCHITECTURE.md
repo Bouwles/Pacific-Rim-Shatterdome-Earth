@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 15. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 16. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -63,6 +63,7 @@ src/
     cityLayout.ts       district grammar to blocks, roads, lanes, zones, defences, destruction groups
     cityActivity.ts     alert levels, evacuation, and activity as densities rather than agents
     destruction.ts      per-block damage, hazards, rescue, safety scoring, clearing and rebuilding
+    director.ts         escalation, breach pressure, regional threat, incidents, transparent resolution
     debris.ts           a fixed pool of rubble: ballistic, frozen on settling, recycled by age
   combat/              ← the fight; no Babylon, no DOM, no wall clock
     arena.ts           fighters, resources, attack state, hit resolution, the event log
@@ -761,6 +762,44 @@ exist.
 **Events are drained rather than collected from steps.** A trigger is pulled
 between two ticks, so anything a step returned would have missed every shot,
 reload and refusal. The arena keeps a drain cursor and the panel reads that.
+
+## The attack director
+
+**The war is strategic state, not a scene.** `world/director.ts` holds global
+escalation, breach pressure, a threat and defence rating per region, cooldowns,
+what the player has been doing, and every live incident. It creates no meshes,
+no arenas and no views: two overlapping emergencies are two records.
+
+**An incident is a plan, never an outcome.** It carries an origin, an approach
+path, a composition of creatures with the mutations they arrived with, a
+mutation budget, a warning confidence, target priorities, an arrival tick and
+secondary objectives. What happens when it lands is decided when it lands.
+
+**Mutations are the difficulty curve, and they are visible.** `data/mutations.ts`
+is a registry with a cost, an effect and an exclusion list per entry. The
+director is handed a budget from escalation and pressure and spends it, so a
+harder attack is a creature carrying more rather than a creature with hidden
+numbers. Every mutation also carries a tell, which is what a warning is allowed
+to say about it.
+
+**It refuses far more often than it fires.** Rolls happen on a fixed cadence
+rather than every tick, the chance is well under one even at full pressure,
+every region has a long cooldown after being chosen, anywhere recently hit is
+weighted down, there is a hard ceiling on simultaneous incidents, and every
+resolution opens a recovery window. Nonstop alerts are noise, not difficulty.
+
+**Resolution is a transparent model.** Kaiju strength, regional defences, any
+machine on station and civilian density are each a ledger line with a reason,
+and the seeded stream only moves the margin. The same inputs always produce the
+same outcome, and the player can read every number that produced it.
+
+**The player has a dial.** Crisis frequency scales the roll chance, the ceiling
+on simultaneous incidents and the recovery window, bounded so it can never be
+turned off entirely or into a firehose.
+
+**One clock.** Time from simulation ticks and time skipped on the panel both go
+through the same call, because six hours passing is six hours of war whichever
+way the six hours happened.
 
 ## The kaiju framework
 

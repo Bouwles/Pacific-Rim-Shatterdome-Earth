@@ -182,6 +182,36 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Attack director cost (Milestone 16)
+
+Measured in the browser on WebGPU at High, seed 20260825, with four incidents
+running at once at the highest crisis frequency:
+
+| State                                 | Draw calls | Frame time    | Frame rate |
+| ------------------------------------- | ---------- | ------------- | ---------- |
+| Quiet war, nothing inbound            | 99 to 102  | 0.5 to 0.7 ms | 144        |
+| Four simultaneous alerts on the board | 99 to 102  | 0.5 to 0.7 ms | 144        |
+
+**Simultaneous crises cost nothing to draw.** Two overlapping emergencies are
+two records in a map; neither creates an arena, a view, a mesh or a scene. The
+only cost of an alert is a list item on a panel that is already there.
+
+The director's own arithmetic is bounded by design:
+
+- **Rolls happen on a fixed cadence** (every 1,800 ticks) rather than every
+  tick, so elapsed time contains the same number of chances however the frame
+  rate varies.
+- **A roll is one weighted pick across the region list**, which is eight
+  entries, and it usually refuses.
+- **Resolution is a handful of additions** and one seeded draw, producing a
+  ledger of six lines.
+- **Resolved incidents are pruned** once they are old enough, so the list is
+  bounded across a long campaign.
+
+**What is saved** is a snapshot of the same state: escalation, pressure, a
+record per region and every live incident. A mid-campaign director serialises to
+a few kilobytes.
+
 ## Kaiju behaviour cost (Milestone 15)
 
 Measured in the browser on WebGPU at High, seed 20260824, with a creature

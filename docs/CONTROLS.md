@@ -367,6 +367,35 @@ past a weapon's reach the target is, how close is too close for indirect fire,
 that a forward-arc weapon needs you to turn, that a magazine is empty and the
 spares are gone, or that too many rounds are already in the air.
 
+### The alert board (Milestone 16)
+
+The world panel carries the war. **War** gives global escalation and breach
+pressure, and the last thing the director did. **Crisis frequency** is the
+player's own dial: rare, standard, frequent or relentless. It scales how often
+attacks happen, how many can run at once and how long the quiet is afterwards,
+and it is bounded so it can never be turned off or turned into a firehose.
+
+Below that is one entry per incident, and each says:
+
+- which region, what state it is in, and how many in-game hours until it reaches
+  the shore;
+- how many hours it takes to get there from where the player is standing, and
+  plainly when that is longer than the time available;
+- what is coming and how confident the warning is, with the mutation tells the
+  warning is good enough to include;
+- the objective and any secondary objectives;
+- what the model expects if nobody goes, with every contribution behind that
+  expectation available on the line itself.
+
+Two buttons per incident. **Let the defences handle it** resolves it with the
+region's own defences; **Stand down** ignores it outright. Both run the same
+transparent model, and the resolution that comes back is listed underneath with
+its full ledger: kaiju strength, regional defences, civilian density, the margin
+on the day, city integrity, escalation and any funding.
+
+The **+1h** and **+6h** time controls advance the war as well as the clock, the
+weather and the city's recovery.
+
 ### Reading a creature (Milestone 15)
 
 Five rows on the pilot panel are the AI debug view. Nothing is bound to a new

@@ -295,6 +295,26 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Mutations (Milestone 16)
+
+Eight rows in `src/data/mutations.ts`. The director is handed a budget from
+escalation and pressure and spends it on these.
+
+| id                       | Kind       | Cost | Damage | Armour | Speed | Senses | Notable                           | From escalation |
+| ------------------------ | ---------- | ---- | ------ | ------ | ----- | ------ | --------------------------------- | --------------- |
+| mutation.carapace        | armour     | 2    | 1.0x   | 1.45x  | 0.9x  | 1.0x   | resists pierce and shear          | 0%              |
+| mutation.sprinter        | mobility   | 2    | 0.95x  | 0.85x  | 1.4x  | 1.0x   | excludes carapace and growth      | 0%              |
+| mutation.acid-blood      | offence    | 3    | 1.2x   | 1.0x   | 1.0x  | 1.0x   | nearly immune to corrosion        | 20%             |
+| mutation.deep-lungs      | mobility   | 2    | 1.0x   | 1.0x   | 1.05x | 1.0x   | grants the water                  | 15%             |
+| mutation.echo-organ      | sensory    | 2    | 1.0x   | 1.0x   | 1.0x  | 1.6x   | finds you through cover           | 25%             |
+| mutation.regenerator     | resilience | 4    | 1.0x   | 1.1x   | 1.0x  | 1.0x   | worse against anything unfinished | 40%             |
+| mutation.colossal-growth | resilience | 5    | 1.5x   | 1.3x   | 0.75x | 0.9x   | excludes sprinter                 | 55%             |
+| mutation.brood           | swarm      | 4    | 0.9x   | 1.0x   | 0.95x | 1.1x   | it does not come alone            | 50%             |
+
+Every mutation carries a tell, which is what a warning is allowed to say about
+it when the signal is good enough. A mutation that changes nothing, or one that
+excludes something not registered, is refused.
+
 ## Locomotion families (Milestone 15)
 
 Nine rows in `src/data/locomotionFamilies.ts`. Speeds are metres per second,

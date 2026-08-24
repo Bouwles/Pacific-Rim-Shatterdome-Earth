@@ -146,7 +146,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - bodies with armour plates that come off, organs that grant abilities and take them away when destroyed, appendages that can be severed for a real cost, resistances per damage kind, and phases that change how hard it hits and how fast it moves;
   - three archetypes that solve the same objective differently: a brawler that closes, an ambusher that waits and flanks, and a sapper that ignores the machine and digs to what it came for;
   - an AI debug view on the pilot panel showing the current goal and why, the alternatives weighed, every sensory contact, path state and body state.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (998 unit+integration), `smoke` (120 Playwright), `build` all pass.
+- **A war that runs whether you are watching or not**:
+  - global escalation and breach pressure that build on their own and are pushed back by every attack that is stopped;
+  - a threat and defence rating per region, cooldowns, and a record of which ones you turn up for and which you leave;
+  - seeded incidents carrying an origin, an approach path, what is coming, the mutations it is carrying, how trustworthy the warning is, what it is going for, when it arrives and what else it wants;
+  - eight mutations bought out of a budget that grows with escalation, each with a cost, an exclusion list and a tell a warning can repeat;
+  - several alerts at once, each with the hours until it lands, the hours to get there, and a plain statement when that is longer than the time available;
+  - a transparent resolution model for anything you do not fly to: kaiju strength, regional defences, civilian density and the margin on the day, each a line with a reason;
+  - anti-repetition, a hard ceiling on simultaneous incidents, and a recovery window after every resolution, so the alerts stop;
+  - a crisis frequency dial from rare to relentless, bounded so it cannot be turned off or turned into a firehose;
+  - one clock: time from the simulation and time skipped on the panel both advance the war.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1032 unit+integration), `smoke` (125 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

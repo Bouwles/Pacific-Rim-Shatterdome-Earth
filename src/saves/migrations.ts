@@ -10,6 +10,7 @@ import { createFacilityRegistry } from "../data/facilities";
 import { emptyShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { emptyRosterSnapshot } from "../jaegers/roster";
 import { emptyDamageSnapshot } from "../world/destruction";
+import { emptyDirectorSnapshot } from "../world/director";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -246,6 +247,28 @@ const addRegionDamage: MigrationStep = {
   },
 };
 
+/**
+ * Adds the attack director introduced by Milestone 16.
+ *
+ * A version 7 save has no war in it: attacks did not exist as a strategic
+ * system, so nothing was scheduled, nothing was escalating and no region had a
+ * threat rating. Every such file therefore comes back at the campaign's own
+ * opening state, which is the only honest reading of a file that never had one.
+ *
+ * Nothing else in the document is touched.
+ */
+const addDirectorSection: MigrationStep = {
+  id: "7",
+  fromVersion: 7,
+  toVersion: 8,
+  description: "Add the attack director: escalation, breach pressure, regional threat and incidents.",
+  apply: (document) => ({
+    ...document,
+    schemaVersion: 8,
+    director: emptyDirectorSnapshot(),
+  }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -267,6 +290,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addShatterdomeSection);
   registry.register(addRosterSection);
   registry.register(addRegionDamage);
+  registry.register(addDirectorSection);
   return registry;
 }
 

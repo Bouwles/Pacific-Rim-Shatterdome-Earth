@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-25, Milestone 16: Dynamic attack director and simultaneous world crises
+
+There is a war on now, and it happens whether you are looking at it or not.
+
+- Attacks arrive on their own. Somewhere out in the Pacific something comes through, and the first you know about it is a contact on the board with a region, a countdown and a confidence rating.
+- Several at once. Four cities can be waiting on you at the same time, each with how long until it reaches the shore and how long it takes you to get there, and it will tell you plainly when the second number is bigger than the first.
+- Warnings that are honest about what they do not know. A strong signal names what is coming. A weak one says there are two contacts and it cannot tell you what they are. It never makes something up to fill the gap.
+- Creatures that arrive carrying things. A budget that grows as the war escalates gets spent on mutations: heavier plate, a sprinter build, acid blood, lungs that let a walker take the water route, an organ that finds you through a hillside, tissue that closes while you watch. Each one has a tell, and a good enough warning passes it on.
+- You do not have to go. Leave it to the regional defences or stand down entirely, and a strategic model works out what happened: kaiju strength against coastal defences, civilian density making the fight harder, and a margin on the day that can swing a close one either way but cannot turn a rout into a win.
+- Every result explains itself. Hover a resolution and you get every number that produced it and the reason behind each: what the creature was worth, what the defences covered, what it cost the city, what it did to escalation, and what it paid.
+- It leaves you alone. Regions go on a long cooldown after being hit, nowhere gets chosen twice in a row, there is a hard ceiling on how many things can be happening at once, and every resolution buys a quiet stretch. Nonstop alerts are not difficulty.
+- A dial for how much of this you want: rare, standard, frequent or relentless. It cannot be turned off and it cannot be turned into a firehose.
+- The same seed and the same decisions give you the same war, every time. Different decisions give you a different one, which is the point.
+
+One problem found by hand: skipping six hours on the panel moved the clock, the weather and the rebuilding crews, and did absolutely nothing to the war. You could skip a week and arrive with nothing having happened. Both paths through time now go through the same call.
+
 ## 2026-08-24, Milestone 15: Kaiju framework, senses, behaviour and body zones
 
 Kaiju think now. Not well, but for reasons, and the reasons are different for each of them.

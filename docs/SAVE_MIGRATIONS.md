@@ -192,6 +192,21 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Version 7 to 8: the attack director (Milestone 16)
+
+Version 8 adds a `director` section: global escalation, breach pressure, the
+player's crisis frequency, the roll and recovery clocks, a threat record per
+region, and every incident that has not been pruned.
+
+A version 7 save has no war in it at all, because attacks were not yet a
+strategic system: nothing was scheduled, nothing was escalating, and no region
+had a threat rating. The migration therefore gives every such file the
+campaign's opening state. Nothing else in the document is touched.
+
+On restore, an incident or a region record naming somewhere this build no longer
+has is dropped rather than resurrected, and the crisis frequency is clamped back
+into its allowed range rather than trusted.
+
 ## Milestone 15 saves nothing new
 
 `ROOT_SAVE_VERSION` stays at 7. Everything the kaiju framework owns is live

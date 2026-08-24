@@ -4,6 +4,7 @@ import { WORLD_SCHEMA_VERSION } from "../../src/world/worldState";
 import { createFacilityRegistry } from "../../src/data/facilities";
 import { emptyShatterdomeSnapshot } from "../../src/shatterdome/facilityState";
 import { emptyRosterSnapshot } from "../../src/jaegers/roster";
+import { emptyDirectorSnapshot } from "../../src/world/director";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -38,6 +39,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     },
     shatterdome: emptyShatterdomeSnapshot(createFacilityRegistry()),
     roster: emptyRosterSnapshot(),
+    director: emptyDirectorSnapshot(),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },
