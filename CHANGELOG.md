@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-24, Milestone 12: Ranged weapons, ammunition, heat and signature abilities
+
+The machine has guns now, and they cost something. Seven weapons sit on the number row, and none of them is a button that deals damage forever.
+
+- Eight behaviours through one piece of code. A plasma caster arrives the instant you fire it. Missiles leave in a salvo of three. The mortar arcs, and refuses point blank. The rotary cannon empties ninety rounds into something at close range. The arc whip puts a line on a creature and holds it there. The chain sword runs for as long as you hold the key. The booster strike is a charge, not a shot. What changes between them is a row of data, not a branch in the code.
+- Ammunition that runs out and reloads that take time. Magazines, spare rounds, and one key that reloads whatever is emptiest. A weapon that has run dry says so and tells you whether there is anything left to load.
+- Heat and reactor power as the other two costs. Hold the chain sword and the machine gets hot, because a channel pays its heat sixty times a second rather than once a swing. Nothing fires for free: a weapon that costs no ammunition, no heat and no power is refused before the game will even start with it in the table.
+- Every refusal is a sentence. How far past a weapon's reach the target is, in metres. That the mortar needs a hundred and eighty metres of daylight. That the cannon only fires forward and you are facing the wrong way. That the missiles need a lock. That the magazine is empty. Nothing quietly does nothing.
+- Rounds that are real objects with a hard ceiling. The pool is sized by the quality preset and never grows; a barrage that would exceed it is refused out loud rather than thinned in silence. Each round is swept from where it was to where it is, so a shell cannot pass straight through something between two ticks.
+- Nothing left flying. A round is gone the moment it leaves the fight's own bubble, runs out of range, hits the ground, or reaches its lifetime. There is no shell still travelling over the Pacific ten minutes after the fight ended.
+- Status effects that keep working after the shot lands. Burning, shocked, bleeding, corroded, tethered. Each says what it does per tick, what it does to movement and output, and how it ends. Fire and corrosion go out in the sea.
+- A way for anything that is not a player to choose a weapon, and explain itself. One score and one sentence out of the same numbers both sides already have, so an AI, a training hint and a test cannot disagree.
+
+Four problems found by hand in the browser, none of which any of the automated suites had noticed.
+
+The worst one: every shot, reload and refusal was missing from the log. A combat step can only report what that step produced, and a trigger is pulled between two ticks, so all of it was being dropped on the floor. The arena now keeps a drain cursor and the panel reads that.
+
+Weapons fed by heat or reactor power read as "no ammunition", which looks exactly like a weapon that is out of ammunition. They say how they are fed instead.
+
+Status effects were logged by their internal ids, so the line under the readout read "status.bleeding" rather than telling you anything.
+
+And the coaching line, which is meant for advice, was being taken over by every routine shot going off as asked.
+
 ## 2026-08-24, Milestone 11: Melee combos, defence, counters, grapples and finishers
 
 There is a fight here now rather than a set of attacks. Walk into range, throw a jab into a cross into a heavy, and watch the combo counter climb. Or stand your ground and parry, or take hold of the thing and put it through a building.

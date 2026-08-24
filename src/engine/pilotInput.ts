@@ -32,7 +32,23 @@ export interface PilotInputCallbacks {
   readonly onChargeRelease?: () => void;
   /** Whether the finisher input is being held, checked every beat that asks. */
   readonly onFinisherHold?: (holding: boolean) => void;
+  /** A weapon key. The code is passed through; what it means is bootstrap's business. */
+  readonly onWeapon?: (code: string) => void;
+  /** Sustained weapons stop when the key comes up. */
+  readonly onWeaponRelease?: (code: string) => void;
 }
+
+/** Keys the ranged row answers to. */
+export const WEAPON_KEY_CODES = [
+  "Digit7",
+  "Digit8",
+  "Digit9",
+  "Digit0",
+  "KeyJ",
+  "KeyK",
+  "KeyO",
+  "KeyL",
+] as const;
 
 /** Keys the melee row answers to. */
 export const MELEE_KEY_CODES = ["KeyG", "KeyV", "KeyB", "KeyN", "KeyP"] as const;
@@ -190,6 +206,9 @@ export class PilotInputSource {
     for (const code of MELEE_KEY_CODES) {
       actions[code] = () => this.callbacks.onMelee?.(code);
     }
+    for (const code of WEAPON_KEY_CODES) {
+      actions[code] = () => this.callbacks.onWeapon?.(code);
+    }
     actions[CHARGE_KEY_CODE] = () => {
       this.chargingValue = true;
       this.callbacks.onChargeStart?.();
@@ -208,6 +227,9 @@ export class PilotInputSource {
       this.callbacks.onChargeRelease?.();
     }
     if (event.code === "KeyF") this.callbacks.onFinisherHold?.(false);
+    if ((WEAPON_KEY_CODES as readonly string[]).includes(event.code)) {
+      this.callbacks.onWeaponRelease?.(event.code);
+    }
   }
 
   private onMouseMove(event: MouseEvent): void {

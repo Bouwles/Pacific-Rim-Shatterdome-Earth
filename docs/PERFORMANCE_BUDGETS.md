@@ -182,6 +182,31 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Ranged cost (Milestone 12)
+
+Measured in the browser on WebGPU at High, seed 20260824, with a fight live in
+Hong Kong and rounds in the air:
+
+| State                                | Draw calls | Frame time    | Frame rate |
+| ------------------------------------ | ---------- | ------------- | ---------- |
+| Idle, weapons carried, nothing fired | 99 to 102  | 0.5 to 0.6 ms | 144        |
+| Salvo and cannon fire, rounds in air | 102 to 111 | 0.6 to 1.0 ms | 144        |
+
+Rounds cost one draw call between all of them: they are thin instances on a
+single pooled mesh whose buffer is allocated once at the quality preset's
+ceiling and never grows.
+
+**Projectile ceilings by preset**: low 48, medium 96, high 180, cinematic 320.
+The simulation refuses a shot when the pool is full and says so; it does not
+allocate under fire, and the renderer draws at most what the preset allows
+however many rounds are handed to it.
+
+Two rules keep ballistics off the frame budget entirely. Nothing is simulated
+more than 2,400 m from the fight, and nothing lives longer than 12 seconds
+whatever its speed. A round that leaves the bubble, runs out of range, hits the
+ground or outlives its clock is retired on the tick it does so, so there is no
+such thing as a shell still flying over the Pacific ten minutes later.
+
 ## Melee cost (Milestone 11)
 
 Measured in the browser on WebGPU at High, seed 20260824, with a fight live in

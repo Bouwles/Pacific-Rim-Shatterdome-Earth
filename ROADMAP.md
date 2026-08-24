@@ -316,6 +316,28 @@ arena, the pilot panel and the input source.
 - `npm run typecheck`, `lint`, `format:check`, `test` (824), `smoke` (101), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 12 - Ranged weapons, ammunition, heat and signature abilities
+
+**Depends on:** Milestone 10 (the attack framework) and Milestone 11 (the fight it extends).
+**Status:** done.
+**Scope:** a weapon table covering eight behaviours, magazines, reserves, reloads, cooldowns, heat,
+reactor draw, recoil, aim restrictions, underwater modifiers and friendly fire; a fixed projectile
+pool with swept movement, ballistic arcs and a combat bubble; status effects as a table on the combat
+clock; pure weapon scoring for anything that has to choose; a ranged row on the pilot panel with real
+magazines and states. Created `src/data/weapons.ts`, `src/combat/projectiles.ts`,
+`src/combat/abilities.ts`, `src/debug/weaponScenario.ts`. Extended the arena, the damage kinds, the
+quality presets, the pilot panel, the input source and the combat view.
+**Acceptance tests:**
+
+- Each weapon behaves differently through the same code, with ammunition, heat and reactor draw all
+  spent and reported, and every refusal a sentence rather than silence.
+- Ranged fire is never free: a weapon costing nothing at all is refused at registration.
+- A barrage fires far past the pool ceiling; the refusals are counted, the pool never grows, and
+  every round comes back.
+- Nothing is simulated outside a 2,400 m bubble or past a twelve second lifetime.
+- `npm run typecheck`, `lint`, `format:check`, `test` (875), `smoke` (108), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

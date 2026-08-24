@@ -53,6 +53,23 @@ export interface PilotCombatState {
   readonly finisherPhase: string;
   readonly holdingProp: string | null;
   readonly propSwingsLeft: number;
+  /** Ranged loadout: what is carried, what is left in it, and what is ready. */
+  readonly weapons: readonly {
+    readonly id: string;
+    readonly displayName: string;
+    readonly magazine: number;
+    readonly magazineSize: number;
+    /** How it is fed, so a heat weapon does not read as an empty magazine. */
+    readonly feed: "rounds" | "heat" | "reactor";
+    readonly reserve: number;
+    readonly ready: boolean;
+    readonly reloading: boolean;
+    readonly channelling: boolean;
+  }[];
+  /** Status effects burning or shocking away on the target. */
+  readonly targetStatuses: readonly string[];
+  readonly liveProjectiles: number;
+  readonly projectileCapacity: number;
 }
 
 /** One row of the move list. Written from the move table, never hand-authored. */
@@ -302,6 +319,8 @@ export function renderPilotScreen(
   addCombatRow("move", "Move");
   addCombatRow("combat-buffer", "Buffer");
   addCombatRow("melee", "Melee");
+  addCombatRow("weapons", "Weapons");
+  addCombatRow("rounds", "Rounds");
   addCombatRow("training", "Coaching");
 
   const hitLog = document.createElement("ul");
@@ -360,7 +379,8 @@ export function renderPilotScreen(
   hint.className = "pilot-hint";
   hint.textContent =
     "WASD drive · Shift run · Space booster · Q/E turn · Mouse or arrows look · C camera · T lock · M reduced motion · Esc leave. " +
-    "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode";
+    "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode. " +
+    "Ranged: 7 plasma · 8 missiles · 9 mortar · 0 cannon · J whip · K sword · O booster strike · L reload";
 
   panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, moves, hint);
   container.appendChild(panel);
@@ -482,6 +502,36 @@ export function renderPilotScreen(
           ]
             .filter((part) => part !== null)
             .join(" · "),
+        );
+        setCombat(
+          "weapons",
+          combatState.weapons.length === 0
+            ? "none carried"
+            : combatState.weapons
+                .map((weapon) => {
+                  const ammunition =
+                    weapon.magazineSize > 0
+                      ? `${weapon.magazine}/${weapon.magazineSize} (${weapon.reserve} spare)`
+                      : weapon.feed === "heat"
+                        ? "heat fed"
+                        : "reactor fed";
+                  const state = weapon.reloading
+                    ? "reloading"
+                    : weapon.channelling
+                      ? "running"
+                      : weapon.ready
+                        ? "ready"
+                        : "cooling";
+                  return `${weapon.displayName}: ${ammunition}, ${state}`;
+                })
+                .join(" · "),
+        );
+        setCombat(
+          "rounds",
+          `${combatState.liveProjectiles}/${combatState.projectileCapacity} in the air` +
+            (combatState.targetStatuses.length > 0
+              ? ` · target ${combatState.targetStatuses.join(", ")}`
+              : ""),
         );
         setCombat("training", combatState.training || "-");
         hitLog.replaceChildren();

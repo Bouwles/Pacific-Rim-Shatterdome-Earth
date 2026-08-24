@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 11. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 12. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -24,7 +24,7 @@ src/
     cityView.ts        the city drawn: one mesh per destruction group, pooled agents on lanes
     interiorView.ts    one Shatterdome room at a time: shell, fixtures, pooled staff, its own camera
     jaegerView.ts      the piloted machine: model, footstep decals, dust, scale references, its camera
-    combatView.ts      the creature, its body zones as a debug view, and where contacts landed
+    combatView.ts      the creature, its body zones as a debug view, where contacts landed, rounds in the air
     pilotInput.ts      keyboard and mouse for a piloted machine, as two plain snapshots
     onFootInput.ts     the only file that touches a key or a mouse event, turned into an input snapshot
   simulation/          ← authoritative kernel; imports nothing from Babylon or the DOM
@@ -70,6 +70,8 @@ src/
     defense.ts         dodges, blocks, perfect guards, parries, combo tracking, graded timing
     grapple.ts         eligibility, struggle, escape, throws, slams, safe failure on obstruction
     finisher.ts        beat state machine, hold and skip settings, placement safety query
+    projectiles.ts     a fixed pool of rounds, swept movement, ballistic arcs, the combat bubble
+    abilities.ts       status effects as a table, and pure weapon scoring for anything choosing
   jaegers/             ← how a machine moves and is looked at; no Babylon, no DOM
     locomotion.ts      states, acceleration, turn authority, ground queries, footfalls, reactions
     camera.ts          three rigs, comfort settings, impulse, obstruction, lossless rig switching
@@ -703,6 +705,53 @@ sectors that are actually streamed in.
 camera motion flattens every finisher framing to one wide shot, hold-to-complete
 turns repeated presses into a held input, and skipping sequences applies the
 whole outcome at once. All three produce the same damage.
+
+## Ranged weapons
+
+Two modules join `src/combat/`, and the arena grew a weapon side that reuses
+everything the melee side already had.
+
+**A weapon is a row, not a class.** `data/weapons.ts` holds seven weapons across
+eight behaviours, and the behaviour decides how a shot resolves rather than which
+code runs: a beam and a cone resolve on the tick they are fired, a projectile, a
+salvo, a mortar and an arc put bodies in the pool, a tether applies a status that
+holds, and a channel keeps paying for itself every tick until it is released.
+There is no switch on a weapon id anywhere.
+
+**Firing is never free, and that is enforced at registration.** A weapon that
+costs no ammunition, no heat and no reactor draw is refused when the registry is
+built, so permanent damage per second cannot be written by accident. Everything
+else is refused at the moment of firing, in a sentence: past its reach, too close
+for indirect fire, not in its forward arc, no lock where one is needed, empty,
+reloading, still cooling.
+
+**Rounds live in a fixed pool that never grows.** `combat/projectiles.ts` allocates
+its slots once at the quality preset's ceiling. A shot that would exceed it is
+refused and reported rather than allocating under fire or quietly thinning. Each
+round is swept from where it was to where it is against the same geometry a fist
+is swept against, so a fast shell cannot pass through a target between two ticks.
+
+**Nothing is simulated outside the fight.** A round is retired the moment it
+leaves a 2,400 m bubble, runs out of range, hits the ground, or reaches a hard
+twelve second lifetime. Clearing a target empties the pool.
+
+**Status effects are a table on the combat clock.** Burning, shocked, bleeding,
+corroded and tethered each say what they do per tick, what they do to movement
+and output, and how they end. Water puts out anything that burns or corrodes,
+which is the one place the environment reaches directly into a fight.
+
+**Choosing a weapon is a pure function.** `scoreWeapon` turns a situation and a
+weapon's own numbers into one score and one sentence, so an AI, a coaching hint
+and a test all reach the same answer without knowing any weapon by name.
+
+**The renderer reads the pool and owns none of it.** Live rounds are drawn as
+thin instances on a single pooled mesh sized at the preset's ceiling, so a
+barrage costs one draw call and cannot exceed what the simulation allows to
+exist.
+
+**Events are drained rather than collected from steps.** A trigger is pulled
+between two ticks, so anything a step returned would have missed every shot,
+reload and refusal. The arena keeps a drain cursor and the panel reads that.
 
 ## Quality presets
 

@@ -80,6 +80,7 @@ import type { MoveListEntry, PilotCombatState } from "../ui/pilotScreen";
 import { createPropRegistry, spawnProp, type PropInstance } from "../data/props";
 import type { SpaceQuery } from "../combat/finisher";
 import { moveLengthTicks, type MoveDefinition } from "../data/moves";
+import { createWeaponRegistry } from "../data/weapons";
 import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry } from "../data/jaegers";
@@ -526,6 +527,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const moveRegistry = createMoveRegistry();
   const kaijuRegistry = createKaijuRegistry();
   const propRegistry = createPropRegistry();
+  const weaponRegistry = createWeaponRegistry();
+  /** The ranged row: one key, one weapon, and L reloads whatever is empty. */
+  const WEAPON_KEYS: Readonly<Record<string, string>> = {
+    Digit7: "weapon.plasma-caster",
+    Digit8: "weapon.anti-kaiju-missile",
+    Digit9: "weapon.shoulder-mortar",
+    Digit0: "weapon.rotary-cannon",
+    KeyJ: "weapon.arc-whip",
+    KeyK: "weapon.chain-sword",
+    KeyO: "weapon.booster-strike",
+  };
   /** Props lying around the fight, spawned with the target. */
   let propInstances: PropInstance[] = [];
   let trainingLine = "";
@@ -808,6 +820,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   };
 
   const clearTarget = (): void => {
+    // Nothing survives the fight it was fired in, so the pool is emptied while
+    // the arena that owns it still exists.
+    combatArena?.projectilePool().clear();
     combatView?.dispose();
     combatView = undefined;
     combatArena = undefined;
@@ -841,6 +856,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     combatArena = new CombatArena({
       moves: moveRegistry,
       space: spaceQuery(),
+      seed: kernel?.seed ?? 0,
+      // The pool is the quality preset's, so a barrage refuses rather than
+      // costing frames on a machine that cannot afford it.
+      projectileCapacity: quality.maxProjectiles,
+      groundHeight: localGroundHeight,
       fighters: [
         {
           id: "jaeger",
@@ -875,6 +895,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightAt: localGroundHeight,
     });
     combatView.setDebugVolumes(combatDebugVolumes);
+
+    // The machine carries everything for now; loadouts are a later milestone.
+    for (const weapon of weaponRegistry.all()) combatArena.equipWeapon("jaeger", weapon);
 
     // Something to pick up. Placed to the side of the fight rather than under
     // it, so reaching one is a decision rather than an accident.
@@ -923,6 +946,40 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const definition = propRegistry.getOrThrow(best.instance.propId);
     const result = arena.takeProp("jaeger", definition, best.instance, best.distance);
     pushCombatLine(result.ok ? `Picked up the ${definition.displayName.toLowerCase()}.` : result.message);
+  };
+
+  /**
+   * The ranged row.
+   *
+   * Every refusal is a sentence in the log, because a weapon that quietly does
+   * nothing is indistinguishable from a broken one.
+   */
+  const pressWeapon = (code: string): void => {
+    const arena = combatArena;
+    if (!arena) return;
+    if (code === "KeyL") {
+      // Reload whatever is emptiest and can still be filled.
+      const view = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+      const empty = (view?.weapons ?? [])
+        .filter((weapon) => weapon.magazineSize > 0 && weapon.magazine < weapon.magazineSize)
+        .sort((a, b) => a.magazine - b.magazine)[0];
+      if (!empty) {
+        pushCombatLine("Nothing needs reloading.");
+        return;
+      }
+      const outcome = arena.reloadWeapon("jaeger", empty.id);
+      pushCombatLine(outcome.ok ? `Reloading the ${empty.displayName.toLowerCase()}.` : outcome.message);
+      if (!outcome.ok) trainingLine = outcome.message;
+      return;
+    }
+
+    const weaponId = WEAPON_KEYS[code];
+    if (!weaponId) return;
+    const outcome = arena.fireWeapon("jaeger", weaponId);
+    if (!outcome.ok) {
+      pushCombatLine(`refused: ${outcome.message}`);
+      trainingLine = outcome.message;
+    }
   };
 
   /** The melee row: grapple, dodge, parry and a prop swing. */
@@ -991,6 +1048,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         pushCombatLine(`t${event.tick} ${event.actorId} lost ${event.zoneId ?? ""} (${event.reason ?? ""})`);
       } else if (event.type === "defeated") {
         pushCombatLine(`t${event.tick} ${event.actorId} is down`);
+      } else if (
+        event.type === "weapon-fired" ||
+        event.type === "weapon-dry" ||
+        event.type === "weapon-reloaded" ||
+        event.type === "projectile-refused" ||
+        event.type === "status-applied"
+      ) {
+        // Coaching is for what a player should do about it. A shot going off as
+        // asked is not advice, so only the awkward ones reach that line.
+        if (event.reason && event.type !== "weapon-fired") trainingLine = event.reason;
+        // Weapons speak in sentences, the same as everything else in this log.
+        pushCombatLine(`t${event.tick} ${event.reason ?? event.type}`);
       } else if (event.type === "whiffed") {
         // A miss is feedback too, and it is the difference between "that did not
         // work" and "nothing happened".
@@ -1068,6 +1137,20 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       finisherPhase: jaegerView.finisherPhase,
       holdingProp: jaegerView.wieldingPropId,
       propSwingsLeft: jaegerView.wieldingSwingsLeft,
+      weapons: jaegerView.weapons.map((weapon) => ({
+        id: weapon.id,
+        displayName: weapon.displayName,
+        magazine: weapon.magazine,
+        magazineSize: weapon.magazineSize,
+        feed: weapon.feed,
+        reserve: weapon.reserve,
+        ready: weapon.cooldownTicksLeft === 0 && weapon.reloadTicksLeft === 0,
+        reloading: weapon.reloadTicksLeft > 0,
+        channelling: weapon.channelling,
+      })),
+      targetStatuses: kaijuView.statuses.map((status) => status.statusId.replace("status.", "")),
+      liveProjectiles: combatArena.projectilePool().live,
+      projectileCapacity: combatArena.projectilePool().capacity,
     };
   };
 
@@ -1178,6 +1261,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       onExit: stopPilot,
       onAttack: pressAttack,
       onMelee: pressMelee,
+      onWeapon: pressWeapon,
+      onWeaponRelease: (code: string) => {
+        // Sustained weapons stop when the key comes up; everything else ignores it.
+        if (WEAPON_KEYS[code] === "weapon.chain-sword") combatArena?.releaseWeapon("jaeger");
+      },
       onChargeStart: () => combatArena?.beginCharge("jaeger", "melee.charge.haymaker"),
       onChargeRelease: () => {
         const outcome = combatArena?.releaseCharge("jaeger");
@@ -1418,13 +1506,25 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       if (arena.tick % 240 === 0) {
         arena.press("kaiju", arena.tick % 480 === 0 ? "kaiju.claw.swipe" : "kaiju.tail.sweep");
       }
-      events.push(...arena.step());
+      arena.step();
     }
+    // Drained rather than collected from the steps: a trigger pulled between
+    // two ticks is still something that happened.
+    events.push(...arena.drain());
     consumeCombatEvents(events);
 
     const snapshot = arena.snapshot();
     const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
-    if (kaijuView && combatView) combatView.update(kaijuView, events, deltaSeconds);
+    if (kaijuView && combatView) {
+      combatView.update(kaijuView, events, deltaSeconds);
+      // Draw exactly what is live, and nothing that is not.
+      combatView.updateProjectiles(
+        arena
+          .projectilePool()
+          .active()
+          .map((round) => ({ east: round.east, north: round.north, up: round.up })),
+      );
+    }
     // The camera frames the creature while a lock is held.
     if (kaijuView) lastTargetPosition = { east: kaijuView.east, north: kaijuView.north, up: pose.up };
     void session;

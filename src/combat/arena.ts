@@ -55,6 +55,15 @@ import {
   type SpaceQuery,
 } from "./finisher";
 import { chargeScale } from "../data/moves";
+import { firesProjectiles, resolvesInstantly, type WeaponDefinition } from "../data/weapons";
+import { ProjectilePool, spreadStream, type ProjectileTargets } from "./projectiles";
+import {
+  advanceStatuses,
+  applyStatus,
+  createStatusRegistry,
+  type ActiveStatus,
+  type StatusDefinition,
+} from "./abilities";
 import type { PropDefinition, PropInstance } from "../data/props";
 import { zoneAtPoint, zonePosition, type TargetingPose } from "./targeting";
 
@@ -192,6 +201,30 @@ interface FighterState extends FighterSpec {
   finisherHolding: boolean;
   /** Set for one tick when this fighter was hit, so a finisher can be interrupted. */
   hitThisTick: boolean;
+  /** Weapons this fighter carries, with what is left in each. */
+  readonly weapons: Map<string, WeaponState>;
+  /** Status effects burning, shocking or corroding away on this fighter. */
+  readonly statuses: ActiveStatus[];
+  /** Reactor draw committed to a sustained weapon right now, megawatts. */
+  channelDrawMw: number;
+  /** Weapon being held down, or null. */
+  channelWeaponId: string | null;
+}
+
+/** Everything that changes about a weapon while it is being used. */
+export interface WeaponState {
+  readonly weapon: WeaponDefinition;
+  /** Rounds in the magazine. Weapons with no magazine sit at zero and ignore it. */
+  magazine: number;
+  reserve: number;
+  cooldownTicksLeft: number;
+  reloadTicksLeft: number;
+  /** Rounds of a salvo still to leave the tube, and when the next one goes. */
+  salvoLeft: number;
+  salvoTicksLeft: number;
+  /** Ticks this weapon has been held down, for sustained fire. */
+  channelTicks: number;
+  shotsFired: number;
 }
 
 export const COMBAT_EVENT_TYPES = [
@@ -212,6 +245,15 @@ export const COMBAT_EVENT_TYPES = [
   "finisher-ended",
   "prop-taken",
   "prop-broken",
+  "weapon-fired",
+  "weapon-refused",
+  "weapon-reloading",
+  "weapon-reloaded",
+  "weapon-dry",
+  "projectile-hit",
+  "projectile-refused",
+  "status-applied",
+  "status-ended",
   "reaction",
   "zone-destroyed",
   "defeated",
@@ -243,6 +285,13 @@ export interface CombatEvent {
 }
 
 export type AttackRejection =
+  | "no-ammo"
+  | "reloading"
+  | "weapon-cooling"
+  | "out-of-range"
+  | "too-close"
+  | "needs-lock"
+  | "no-weapon"
   | "grapple-refused"
   | "no-prop"
   | "no-space"
@@ -269,6 +318,15 @@ export interface ArenaOptions {
    * a city layout or a scene, and a test can hand it open ground.
    */
   readonly space?: SpaceQuery;
+  /**
+   * Ceiling on live projectiles. The pool is allocated once at this size and
+   * never grows, so a barrage is refused rather than allowed to eat a frame.
+   */
+  readonly projectileCapacity?: number;
+  /** Seed for spread, so a barrage is reproducible. */
+  readonly seed?: number;
+  /** Ground height for a point, used to retire rounds that hit the deck. */
+  readonly groundHeight?: (east: number, north: number) => number | null;
 }
 
 /** Turns a kaiju definition into fighter zones. */
@@ -312,12 +370,22 @@ export class CombatArena {
   private readonly moves: ContentRegistry<MoveDefinition>;
   private readonly space: SpaceQuery;
   private readonly fighters = new Map<string, FighterState>();
+  private readonly projectiles: ProjectilePool;
+  private readonly statusRegistry: ContentRegistry<StatusDefinition>;
+  private readonly seedValue: number;
+  private readonly groundHeight: (east: number, north: number) => number | null;
   private tickValue = 0;
   private readonly events: CombatEvent[] = [];
+  /** How far the panel has already read. See `drain`. */
+  private drainIndex = 0;
 
   constructor(options: ArenaOptions) {
     this.moves = options.moves;
     this.space = options.space ?? OPEN_GROUND;
+    this.projectiles = new ProjectilePool(options.projectileCapacity ?? 96);
+    this.statusRegistry = createStatusRegistry();
+    this.seedValue = options.seed ?? 20260824;
+    this.groundHeight = options.groundHeight ?? (() => null);
     for (const spec of options.fighters) this.add(spec);
   }
 
@@ -354,6 +422,10 @@ export class CombatArena {
       finisherSettings: DEFAULT_FINISHER_SETTINGS,
       finisherHolding: false,
       hitThisTick: false,
+      weapons: new Map(),
+      statuses: [],
+      channelDrawMw: 0,
+      channelWeaponId: null,
     });
   }
 
@@ -505,6 +577,184 @@ export class CombatArena {
   setFinisherHold(fighterId: string, holding: boolean): void {
     const fighter = this.fighters.get(fighterId);
     if (fighter) fighter.finisherHolding = holding;
+  }
+
+  /** Gives a fighter a weapon, loaded. */
+  equipWeapon(fighterId: string, weapon: WeaponDefinition): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return;
+    fighter.weapons.set(weapon.id, {
+      weapon,
+      magazine: weapon.magazine,
+      reserve: Math.max(0, weapon.reserve - weapon.magazine),
+      cooldownTicksLeft: 0,
+      reloadTicksLeft: 0,
+      salvoLeft: 0,
+      salvoTicksLeft: 0,
+      channelTicks: 0,
+      shotsFired: 0,
+    });
+  }
+
+  weaponState(fighterId: string, weaponId: string): WeaponState | undefined {
+    return this.fighters.get(fighterId)?.weapons.get(weaponId);
+  }
+
+  /**
+   * Whether a weapon may be fired right now, and why not when it may not.
+   *
+   * Every reason is a sentence, because a weapon that silently does nothing is
+   * indistinguishable from a bug.
+   */
+  checkWeapon(fighterId: string, weaponId: string): AttackRequest {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return reject("unknown-move", `No fighter "${fighterId}".`);
+    const state = fighter.weapons.get(weaponId);
+    if (!state) return reject("no-weapon", `${fighter.displayName} is not carrying that.`);
+    const weapon = state.weapon;
+
+    if (fighter.defeated) return reject("defeated", `${fighter.displayName} is out of the fight.`);
+    if (fighter.reaction?.losesControl && fighter.reactionTicksLeft > 0) {
+      return reject("no-control", `${fighter.displayName} is ${fighter.reaction.displayName.toLowerCase()}.`);
+    }
+    if (fighter.grapple.phase === "held" && fighter.grapple.victimId === fighter.id) {
+      return reject("no-control", `${fighter.displayName} is being held.`);
+    }
+    if (state.reloadTicksLeft > 0) {
+      return reject("reloading", `${weapon.displayName} is reloading.`);
+    }
+    if (state.cooldownTicksLeft > 0) {
+      return reject("weapon-cooling", `${weapon.displayName} is not ready yet.`);
+    }
+    if (fighter.overheated) {
+      return reject("overheated", `${fighter.displayName} is over temperature.`);
+    }
+    if (weapon.magazine > 0 && state.magazine <= 0) {
+      return reject("no-ammo", `${weapon.displayName} is empty. Reload, or use something else.`);
+    }
+
+    const target = this.firstOpponent(fighterId);
+    if (target) {
+      const distance = Math.hypot(
+        target.pose.east - fighter.pose.east,
+        target.pose.north - fighter.pose.north,
+      );
+      if (distance > weapon.rangeMeters) {
+        return reject(
+          "out-of-range",
+          `${Math.round(distance)} m is past the ${weapon.displayName.toLowerCase()}'s reach of ${weapon.rangeMeters} m.`,
+        );
+      }
+      if (distance < weapon.minimumRangeMeters) {
+        return reject(
+          "too-close",
+          `Too close for the ${weapon.displayName.toLowerCase()}: it needs ${weapon.minimumRangeMeters} m.`,
+        );
+      }
+      if (weapon.aim === "forward-arc") {
+        const bearing = normalizeDegrees(
+          (Math.atan2(target.pose.east - fighter.pose.east, target.pose.north - fighter.pose.north) * 180) /
+            Math.PI,
+        );
+        if (Math.abs(signedDelta(fighter.pose.yawDeg, bearing)) > 60) {
+          return reject("out-of-range", `${weapon.displayName} only fires forward. Turn to face it.`);
+        }
+      }
+    }
+    if (weapon.aim === "locked-only" && !target) {
+      return reject("needs-lock", `${weapon.displayName} needs a lock.`);
+    }
+
+    return { ok: true, move: this.moves.getOrThrow("melee.light.jab"), cancelled: null };
+  }
+
+  /**
+   * Fires a weapon.
+   *
+   * Instant behaviours resolve here; anything that puts a body in the world goes
+   * through the pool, and a salvo queues the rest of its rounds rather than
+   * spawning them all on one tick.
+   */
+  fireWeapon(fighterId: string, weaponId: string): AttackRequest {
+    const check = this.checkWeapon(fighterId, weaponId);
+    const fighter = this.fighters.get(fighterId);
+    const state = fighter?.weapons.get(weaponId);
+    if (!fighter || !state) return check;
+    if (!check.ok) {
+      this.pushEvent({
+        type: "weapon-refused",
+        actorId: fighterId,
+        moveId: weaponId,
+        reason: check.message,
+      });
+      return check;
+    }
+
+    const weapon = state.weapon;
+    state.cooldownTicksLeft = weapon.cooldownTicks;
+    fighter.heat = Math.min(fighter.profile.heatMax, fighter.heat + weapon.heatCost);
+    if (fighter.heat >= fighter.profile.heatMax * fighter.profile.overheatFraction) {
+      fighter.overheated = true;
+      this.pushEvent({ type: "overheated", actorId: fighterId, moveId: weaponId });
+    }
+    // Recoil pushes the machine back, which is what stops a heavy weapon being
+    // free to fire while advancing.
+    if (weapon.recoilMps > 0) {
+      fighter.knockbackMps = Math.max(fighter.knockbackMps, weapon.recoilMps);
+      fighter.knockbackDirectionDeg = normalizeDegrees(fighter.pose.yawDeg + 180);
+    }
+    if (weapon.behavior === "channel") {
+      fighter.channelWeaponId = weaponId;
+      fighter.channelDrawMw = weapon.reactorDrawMw;
+      state.channelTicks = 0;
+    }
+
+    this.spendAmmunition(fighter, state);
+    this.pushEvent({
+      type: "weapon-fired",
+      actorId: fighterId,
+      moveId: weaponId,
+      reason: `${weapon.displayName} fires.`,
+    });
+
+    if (resolvesInstantly(weapon)) {
+      this.resolveInstantWeapon(fighter, weapon);
+    } else if (firesProjectiles(weapon)) {
+      state.salvoLeft = Math.max(1, weapon.salvoCount);
+      state.salvoTicksLeft = 0;
+    }
+    return check;
+  }
+
+  /** Stops a sustained weapon. */
+  releaseWeapon(fighterId: string): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return;
+    fighter.channelWeaponId = null;
+    fighter.channelDrawMw = 0;
+  }
+
+  /** Starts a reload. Refuses when there is nothing left to load. */
+  reloadWeapon(fighterId: string, weaponId: string): AttackRequest {
+    const fighter = this.fighters.get(fighterId);
+    const state = fighter?.weapons.get(weaponId);
+    if (!fighter || !state) return reject("no-weapon", "Not carrying that.");
+    const weapon = state.weapon;
+    if (weapon.magazine <= 0) return reject("no-weapon", `${weapon.displayName} has no magazine to reload.`);
+    if (state.reserve <= 0) {
+      return reject("no-ammo", `No ${weapon.displayName.toLowerCase()} rounds left at all.`);
+    }
+    if (state.magazine >= weapon.magazine) {
+      return reject("no-ammo", `${weapon.displayName} is already full.`);
+    }
+    state.reloadTicksLeft = weapon.reloadTicks;
+    this.pushEvent({ type: "weapon-reloading", actorId: fighterId, moveId: weaponId });
+    return { ok: true, move: this.moves.getOrThrow("melee.light.jab"), cancelled: null };
+  }
+
+  /** Live projectiles, for the renderer and for the stress test. */
+  projectilePool(): ProjectilePool {
+    return this.projectiles;
   }
 
   moveTo(fighterId: string, pose: Partial<TargetingPose>): void {
@@ -717,6 +967,9 @@ export class CombatArena {
     for (const fighter of this.fighters.values()) this.advanceMovement(fighter);
     for (const fighter of this.fighters.values()) this.resolveHits(fighter);
     for (const fighter of this.fighters.values()) this.advanceHolds(fighter);
+    for (const fighter of this.fighters.values()) this.advanceWeapons(fighter);
+    this.advanceProjectiles();
+    for (const fighter of this.fighters.values()) this.advanceStatusEffects(fighter);
     for (const fighter of this.fighters.values()) this.advanceResources(fighter);
 
     this.tickValue += 1;
@@ -732,6 +985,20 @@ export class CombatArena {
 
   log(): readonly CombatEvent[] {
     return this.events;
+  }
+
+  /**
+   * Everything that has happened since the last drain.
+   *
+   * A step can only report what a step produced, and firing a weapon happens
+   * between steps: pressing a trigger, a reload and an immediate refusal all
+   * land here. Anything showing the player what happened reads this rather than
+   * the return of `step`, so a shot cannot go missing from the log it caused.
+   */
+  drain(): readonly CombatEvent[] {
+    const since = this.drainIndex;
+    this.drainIndex = this.events.length;
+    return this.events.slice(since);
   }
 
   private consumeBuffer(fighter: FighterState): void {
@@ -1287,6 +1554,308 @@ export class CombatArena {
     return clear;
   }
 
+  /**
+   * Weapons, tick by tick: cooldowns, reloads, the rest of a salvo, and the
+   * running cost of anything being held down.
+   */
+  private advanceWeapons(fighter: FighterState): void {
+    for (const state of fighter.weapons.values()) {
+      if (state.cooldownTicksLeft > 0) state.cooldownTicksLeft -= 1;
+      if (state.reloadTicksLeft > 0) {
+        state.reloadTicksLeft -= 1;
+        if (state.reloadTicksLeft === 0) {
+          const wanted = state.weapon.magazine - state.magazine;
+          const loaded = Math.min(wanted, state.reserve);
+          state.magazine += loaded;
+          state.reserve -= loaded;
+          this.pushEvent({
+            type: "weapon-reloaded",
+            actorId: fighter.id,
+            moveId: state.weapon.id,
+            damage: state.magazine,
+          });
+        }
+      }
+
+      // The rest of a salvo leaves the tube over the next few ticks rather than
+      // all at once, which is what makes a salvo readable in the air.
+      if (state.salvoLeft > 0) {
+        if (state.salvoTicksLeft > 0) {
+          state.salvoTicksLeft -= 1;
+        } else {
+          this.launchProjectile(fighter, state.weapon, state.weapon.salvoCount - state.salvoLeft);
+          state.salvoLeft -= 1;
+          state.salvoTicksLeft = state.weapon.salvoIntervalTicks;
+        }
+      }
+    }
+
+    // A sustained weapon spends while it runs and stops when it cannot pay.
+    const channelId = fighter.channelWeaponId;
+    if (channelId) {
+      const state = fighter.weapons.get(channelId);
+      if (!state) {
+        fighter.channelWeaponId = null;
+      } else {
+        state.channelTicks += 1;
+        fighter.heat = Math.min(fighter.profile.heatMax, fighter.heat + state.weapon.heatCost);
+        if (fighter.heat >= fighter.profile.heatMax * fighter.profile.overheatFraction) {
+          fighter.overheated = true;
+          fighter.channelWeaponId = null;
+          fighter.channelDrawMw = 0;
+          this.pushEvent({ type: "overheated", actorId: fighter.id, moveId: channelId });
+        } else {
+          this.resolveInstantWeapon(fighter, state.weapon);
+        }
+      }
+    }
+  }
+
+  /** Puts one round of a weapon in the world. */
+  private launchProjectile(fighter: FighterState, weapon: WeaponDefinition, shotIndex: number): void {
+    const target = this.firstOpponent(fighter.id);
+    const spawned = this.projectiles.spawn({
+      weapon,
+      ownerId: fighter.id,
+      targetId: target?.id ?? null,
+      east: fighter.pose.east,
+      north: fighter.pose.north,
+      up: fighter.pose.up + fighter.heightMeters * 0.6,
+      yawDeg: fighter.pose.yawDeg,
+      pitchDeg: 0,
+      shotIndex,
+      rng: spreadStream(this.seedValue + this.tickValue + shotIndex, weapon.id),
+    });
+    if (!spawned) {
+      // A refused shot is reported rather than swallowed: a weapon quietly
+      // firing nothing because a pool was full is the worst kind of bug.
+      this.pushEvent({
+        type: "projectile-refused",
+        actorId: fighter.id,
+        moveId: weapon.id,
+        reason: "Too many rounds in the air already. Wait for some to land.",
+      });
+    }
+  }
+
+  /** Advances every round and turns what connected into damage. */
+  private advanceProjectiles(): void {
+    const ids = [...this.fighters.keys()];
+    const targets: ProjectileTargets = {
+      spheresFor: (fighterId) => {
+        const fighter = this.fighters.get(fighterId);
+        return fighter && !fighter.defeated ? this.targetSpheres(fighter) : [];
+      },
+      fighterIds: ids,
+      groundHeight: this.groundHeight,
+      bubbleCentre: () => {
+        const first = this.fighters.values().next().value as FighterState | undefined;
+        return { east: first?.pose.east ?? 0, north: first?.pose.north ?? 0 };
+      },
+    };
+
+    const result = this.projectiles.advance(COMBAT_TICK_SECONDS, targets);
+    for (const hit of result.hits) {
+      const attacker = this.fighters.get(hit.projectile.ownerId);
+      const target = this.fighters.get(hit.targetId);
+      const weapon = this.weaponById(hit.projectile.weaponId);
+      if (!attacker || !target || !weapon) continue;
+      this.applyWeaponHit(attacker, target, weapon, hit.contact);
+      this.pushEvent({
+        type: "projectile-hit",
+        actorId: attacker.id,
+        targetId: target.id,
+        moveId: weapon.id,
+        contact: hit.contact,
+      });
+    }
+  }
+
+  /** Beams, cones and tethers land the moment they are fired. */
+  private resolveInstantWeapon(fighter: FighterState, weapon: WeaponDefinition): void {
+    const target = this.firstOpponent(fighter.id);
+    if (!target) return;
+    const distance = Math.hypot(target.pose.east - fighter.pose.east, target.pose.north - fighter.pose.north);
+    if (distance > weapon.rangeMeters) return;
+
+    if (weapon.behavior === "cone") {
+      const bearing = normalizeDegrees(
+        (Math.atan2(target.pose.east - fighter.pose.east, target.pose.north - fighter.pose.north) * 180) /
+          Math.PI,
+      );
+      // The wedge is the weapon's own spread, so a cone weapon's spread is its
+      // width rather than its inaccuracy.
+      if (Math.abs(signedDelta(fighter.pose.yawDeg, bearing)) > weapon.spreadDeg * 0.5) return;
+    }
+
+    const contact = {
+      east: target.pose.east,
+      up: target.pose.up + target.heightMeters * 0.55,
+      north: target.pose.north,
+    };
+    this.applyWeaponHit(fighter, target, weapon, contact);
+
+    // A tether holds rather than only hurting.
+    if (weapon.behavior === "tether") {
+      applyStatus(target.statuses, "status.tethered", 180, 1);
+      this.pushEvent({
+        type: "status-applied",
+        actorId: target.id,
+        targetId: fighter.id,
+        moveId: weapon.id,
+        reason: this.statusSentence("status.tethered", target.displayName),
+      });
+    }
+  }
+
+  /**
+   * Damage from a weapon.
+   *
+   * Goes through the same zone, armour and reaction path a fist does, with the
+   * weapon's own underwater scale applied first: this is the one place the sea
+   * reaches directly into what a weapon is worth.
+   */
+  private applyWeaponHit(
+    attacker: FighterState,
+    target: FighterState,
+    weapon: WeaponDefinition,
+    contact: Point3,
+  ): void {
+    const packet = weapon.damage;
+    const zonePick = target.kaiju ? zoneAtPoint(target.kaiju, target.pose, contact) : null;
+    const zone = target.zones.find((entry) => entry.id === (zonePick?.zone.id ?? "core")) ?? target.zones[0];
+
+    const outcome = resolveReaction(packet, {
+      poiseAccumulated: target.poise,
+      poiseCapacity: target.profile.poiseCapacity,
+      guardRemaining: target.guarding ? target.guard : null,
+      alreadyReeling: target.reactionTicksLeft > 0,
+      coreHealthFraction: this.coreFraction(target),
+      finisherThreshold: target.finisherThreshold,
+    });
+    target.poise = outcome.poiseAccumulated;
+    if (outcome.guardRemaining !== null) target.guard = outcome.guardRemaining;
+
+    const underwater = this.space.waterDepthMeters(target.pose.east, target.pose.north) > 20;
+    const scale = underwater ? weapon.underwaterScale : 1;
+    let dealt = 0;
+    if (zone && zone.health > 0) {
+      dealt = Math.max(0, packet.amount * (1 - zone.armor) * zone.damageMultiplier * scale);
+      zone.health = Math.max(0, zone.health - dealt);
+      zone.shock = Math.min(1, zone.shock + packet.componentShock);
+    }
+    target.hitThisTick = true;
+
+    if (weapon.status) {
+      applyStatus(
+        target.statuses,
+        weapon.status.statusId,
+        weapon.status.durationTicks,
+        weapon.status.maxStacks,
+      );
+      this.pushEvent({
+        type: "status-applied",
+        actorId: target.id,
+        targetId: attacker.id,
+        moveId: weapon.id,
+        reason: this.statusSentence(weapon.status.statusId, target.displayName),
+      });
+    }
+
+    this.pushEvent({
+      type: "hit",
+      actorId: attacker.id,
+      targetId: target.id,
+      moveId: weapon.id,
+      zoneId: zone?.id ?? null,
+      damage: Math.round(dealt),
+      reaction: outcome.reaction.id,
+      contact,
+      reason: underwater ? "underwater" : null,
+    });
+
+    if (outcome.reaction.durationTicks > 0) {
+      target.reaction = outcome.reaction;
+      target.reactionTicksLeft = outcome.reaction.durationTicks;
+      if (outcome.reaction.losesControl) target.attack = null;
+      target.knockbackMps = outcome.knockbackMps;
+      target.knockbackDirectionDeg = normalizeDegrees(
+        (Math.atan2(target.pose.east - attacker.pose.east, target.pose.north - attacker.pose.north) * 180) /
+          Math.PI,
+      );
+    }
+
+    if (zone && zone.health <= 0) {
+      this.pushEvent({
+        type: "zone-destroyed",
+        actorId: target.id,
+        targetId: attacker.id,
+        zoneId: zone.id,
+        reason: zone.onDestroyed,
+      });
+      if (zone.onDestroyed === "kill" && !target.defeated) {
+        target.defeated = true;
+        target.attack = null;
+        this.pushEvent({ type: "defeated", actorId: target.id, targetId: attacker.id });
+      }
+    }
+  }
+
+  /** Burning, shocked and the rest, ticking on whoever is carrying them. */
+  private advanceStatusEffects(fighter: FighterState): void {
+    if (fighter.statuses.length === 0) return;
+    const inWater = this.space.waterDepthMeters(fighter.pose.east, fighter.pose.north) > 12;
+    const tick = advanceStatuses(fighter.statuses, this.statusRegistry, inWater);
+
+    if (tick.damage > 0) {
+      const zone = fighter.zones.find((entry) => entry.health > 0) ?? fighter.zones[0];
+      if (zone) zone.health = Math.max(0, zone.health - tick.damage);
+    }
+    for (const ended of tick.ended) {
+      this.pushEvent({
+        type: "status-ended",
+        actorId: fighter.id,
+        reason: `${fighter.displayName} is no longer ${this.statusWord(ended)}.`,
+      });
+    }
+  }
+
+  /** One status, in words, for the log and the coaching line. */
+  private statusSentence(statusId: string, subject: string): string {
+    return `${subject} is ${this.statusWord(statusId)}.`;
+  }
+
+  private statusWord(statusId: string): string {
+    return (this.statusRegistry.get(statusId)?.displayName ?? statusId).toLowerCase();
+  }
+
+  private weaponById(weaponId: string): WeaponDefinition | undefined {
+    for (const fighter of this.fighters.values()) {
+      const state = fighter.weapons.get(weaponId);
+      if (state) return state.weapon;
+    }
+    return undefined;
+  }
+
+  /** Takes a round out of the magazine, and reports the moment it runs dry. */
+  private spendAmmunition(fighter: FighterState, state: WeaponState): void {
+    const weapon = state.weapon;
+    if (weapon.magazine <= 0) return;
+    state.magazine = Math.max(0, state.magazine - 1);
+    state.shotsFired += 1;
+    if (state.magazine === 0) {
+      this.pushEvent({
+        type: "weapon-dry",
+        actorId: fighter.id,
+        moveId: weapon.id,
+        reason:
+          state.reserve > 0
+            ? `${weapon.displayName} is empty. Reload.`
+            : `${weapon.displayName} is out of ammunition entirely.`,
+      });
+    }
+  }
+
   private advanceResources(fighter: FighterState): void {
     const profile = fighter.profile;
     fighter.stamina = Math.min(
@@ -1393,6 +1962,25 @@ export class CombatArena {
         finisherBeat: fighter.finisher.beatIndex,
         finisherCamera: fighter.finisher.camera,
         openingTicksLeft: fighter.openingTicksLeft,
+        weapons: [...fighter.weapons.values()].map((state) => ({
+          id: state.weapon.id,
+          displayName: state.weapon.displayName,
+          behavior: state.weapon.behavior,
+          magazine: state.magazine,
+          magazineSize: state.weapon.magazine,
+          reserve: state.reserve,
+          cooldownTicksLeft: state.cooldownTicksLeft,
+          reloadTicksLeft: state.reloadTicksLeft,
+          shotsFired: state.shotsFired,
+          feed: state.weapon.magazine > 0 ? "rounds" : state.weapon.heatCost > 0 ? "heat" : "reactor",
+          channelling: fighter.channelWeaponId === state.weapon.id,
+        })),
+        statuses: fighter.statuses.map((entry) => ({
+          statusId: entry.statusId,
+          ticksLeft: entry.ticksLeft,
+          stacks: entry.stacks,
+        })),
+        channelDrawMw: fighter.channelDrawMw,
         activeMove: fighter.attack?.move.id ?? null,
         activeMoveTick: fighter.attack?.tick ?? 0,
         activePhase: fighter.attack ? phaseAt(fighter.attack.move, fighter.attack.tick) : null,
@@ -1425,6 +2013,8 @@ export class CombatArena {
       hash = fold(hash, event.tick);
       hash = fold(hash, event.damage);
     }
+    hash = fold(hash, this.projectiles.spawned);
+    hash = fold(hash, this.projectiles.retired);
     return hash >>> 0;
   }
 
@@ -1483,12 +2073,36 @@ export interface ArenaFighterView {
   readonly finisherBeat: number;
   readonly finisherCamera: string | null;
   readonly openingTicksLeft: number;
+  readonly weapons: readonly ArenaWeaponView[];
+  readonly statuses: readonly ArenaStatusView[];
+  readonly channelDrawMw: number;
   readonly activeMove: string | null;
   readonly activeMoveTick: number;
   readonly activePhase: string | null;
   readonly buffered: readonly string[];
   readonly zones: readonly ArenaZoneView[];
   readonly finisherOpen: boolean;
+}
+
+export interface ArenaWeaponView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly behavior: string;
+  readonly magazine: number;
+  readonly magazineSize: number;
+  readonly reserve: number;
+  readonly cooldownTicksLeft: number;
+  readonly reloadTicksLeft: number;
+  readonly shotsFired: number;
+  /** What firing it costs. A heat weapon is not an empty one. */
+  readonly feed: "rounds" | "heat" | "reactor";
+  readonly channelling: boolean;
+}
+
+export interface ArenaStatusView {
+  readonly statusId: string;
+  readonly ticksLeft: number;
+  readonly stacks: number;
 }
 
 export interface ArenaSnapshot {

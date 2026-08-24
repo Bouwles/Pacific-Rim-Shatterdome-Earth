@@ -43,6 +43,7 @@ export interface CombatViewOptions {
 export interface CombatViewStats {
   readonly zoneMarkers: number;
   readonly hitMarkers: number;
+  readonly roundsDrawn: number;
   readonly modelResolved: boolean;
   readonly debugVolumes: boolean;
   readonly meshes: number;
@@ -86,6 +87,10 @@ export class CombatView {
   private readonly zoneMesh: Mesh;
   private readonly zoneBuffer: Float32Array;
   private zoneCount = 0;
+
+  private readonly roundMesh: Mesh;
+  private readonly roundBuffer: Float32Array;
+  private roundCount = 0;
 
   private readonly hitMesh: Mesh;
   private readonly hitBuffer: Float32Array;
@@ -140,6 +145,18 @@ export class CombatView {
     this.hitMesh.thinInstanceSetBuffer("matrix", this.hitBuffer, 16);
     this.hitMesh.thinInstanceCount = 0;
     this.hitMesh.alwaysSelectAsActiveMesh = true;
+
+    // Rounds in the air. One pooled mesh at the quality preset's own ceiling, so
+    // what is drawn can never exceed what the simulation allows to exist.
+    this.roundMesh = MeshBuilder.CreateSphere("combat.rounds", { diameter: 2, segments: 6 }, this.scene);
+    this.roundMesh.material = this.material("combat.rounds", new Color3(1, 0.86, 0.5), 0.85);
+    this.roundMesh.parent = this.root;
+    this.roundMesh.isPickable = false;
+    this.roundBuffer = new Float32Array(options.quality.maxProjectiles * 16);
+    parkAll(this.roundBuffer);
+    this.roundMesh.thinInstanceSetBuffer("matrix", this.roundBuffer, 16);
+    this.roundMesh.thinInstanceCount = 0;
+    this.roundMesh.alwaysSelectAsActiveMesh = true;
 
     this.ready = this.resolveModel(options.resolver, options.assets);
   }
@@ -241,10 +258,39 @@ export class CombatView {
     }
   }
 
+  /**
+   * Draws whatever the pool says is live.
+   *
+   * The renderer reads the simulation and never the other way round: a round
+   * that is not in the pool cannot be drawn, and one that is drawn cannot
+   * outlive the pool slot it came from.
+   */
+  updateProjectiles(rounds: readonly { east: number; north: number; up: number }[]): void {
+    if (this.disposed) return;
+    const capacity = this.roundBuffer.length / 16;
+    const count = Math.min(rounds.length, capacity);
+    for (let index = 0; index < count; index += 1) {
+      const round = rounds[index];
+      if (!round) continue;
+      composeInto(this.roundBuffer, index, round.east, round.up, round.north, 4);
+    }
+    const previous = this.roundCount;
+    this.roundCount = count;
+    this.roundMesh.thinInstanceCount = count;
+    if (count !== previous) {
+      this.roundMesh.thinInstanceSetBuffer("matrix", this.roundBuffer, 16);
+      this.roundMesh.thinInstanceCount = count;
+      this.roundMesh.thinInstanceRefreshBoundingInfo(false);
+    } else if (count > 0) {
+      this.roundMesh.thinInstanceBufferUpdated("matrix");
+    }
+  }
+
   stats(): CombatViewStats {
     return {
       zoneMarkers: this.debugVolumesValue ? this.zoneCount : 0,
       hitMarkers: this.hitMarkers.length,
+      roundsDrawn: this.roundCount,
       modelResolved: this.resolved !== null,
       debugVolumes: this.debugVolumesValue,
       meshes: this.scene.meshes.filter((mesh) => mesh.name.startsWith("combat.")).length,
@@ -269,6 +315,7 @@ export class CombatView {
     this.placeholder = null;
     this.zoneMesh.dispose();
     this.hitMesh.dispose();
+    this.roundMesh.dispose();
     for (const material of this.materials) material.dispose();
     this.materials.length = 0;
     this.bodyRoot.dispose();

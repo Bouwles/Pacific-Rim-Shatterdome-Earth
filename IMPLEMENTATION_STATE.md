@@ -107,7 +107,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - finishers as short beat machines with camera framings, held-input checks, interruption, banked damage, and a space query that refuses to start one anywhere unsafe;
   - a move list written from the move table, in plain language with no frame data anywhere in it, and a coaching line that says what just happened;
   - reduced camera motion, hold-to-complete and skip-sequences, all producing the same outcome.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (824 unit+integration), `smoke` (101 Playwright), `build` all pass.
+- **Ranged weapons on the same framework**, on the number row while piloting:
+  - seven weapons across eight behaviours (projectile, beam, cone, arc, salvo, mortar, tether, channel) in one table, with magazines, reserves, reloads, cooldowns, heat, reactor draw, recoil, spread, aim restrictions, underwater modifiers and friendly fire;
+  - firing that is never free: a weapon costing no ammunition, no heat and no reactor draw is refused when the registry is built, so permanent damage per second cannot be written by accident;
+  - refusals in plain language for range, minimum range, forward arc, missing lock, empty magazine, reloading and cooling, on the coaching line and in the log;
+  - a fixed projectile pool sized by the quality preset (48 to 320), swept against the same geometry a fist is, arcing for indirect fire, and refusing rather than growing when it is full;
+  - a 2,400 m combat bubble and a twelve second lifetime, so nothing is simulated outside the fight it belongs to;
+  - five status effects running on the combat clock, with water putting out what burns and corrodes;
+  - pure weapon scoring that gives an AI, a coaching hint and a test the same answer plus a sentence of reasoning;
+  - a ranged row on the pilot panel showing each weapon's magazine, spares and state, live rounds against the ceiling, and what is running on the target;
+  - rounds drawn as thin instances on one pooled mesh, so a whole barrage costs one draw call.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (875 unit+integration), `smoke` (108 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

@@ -565,6 +565,57 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Ranged schemas (Milestone 12)
+
+### `WeaponDefinition` (src/data/weapons.ts)
+
+One row per weapon. Eight behaviours share one code path: `projectile`, `beam`,
+`cone`, `arc`, `salvo`, `mortar`, `tether`, `channel`.
+
+| Field                                             | Meaning                                                        | Constraint                                                       |
+| ------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `behavior`                                        | How the shot resolves                                          | one of the eight above                                           |
+| `magazine` / `reserve` / `reloadTicks`            | Rounds carried, spares, and how long a reload takes            | a reserve must be at least a magazine; a magazine needs a reload |
+| `cooldownTicks`                                   | Ticks before it may fire again                                 | zero or more                                                     |
+| `heatCost` / `reactorDrawMw`                      | What one shot costs in heat and in power                       | see the rule below                                               |
+| `recoilMps`                                       | How hard firing pushes the machine back                        | zero or more                                                     |
+| `rangeMeters` / `minimumRangeMeters`              | The band it works in                                           | indirect fire must have a minimum range                          |
+| `projectileSpeedMps`                              | How fast a body travels                                        | zero for anything that resolves instantly                        |
+| `spreadDeg` / `salvoCount` / `salvoIntervalTicks` | Scatter, bodies per pull, and the gap between them             | a salvo of one is refused                                        |
+| `aim`                                             | `any`, `forward-arc` or `locked-only`                          | enforced when firing, with the reason in words                   |
+| `underwaterScale`                                 | What it is worth in the sea                                    | above zero                                                       |
+| `friendlyFire`                                    | Whether it can hit an ally                                     | read by ability scoring                                          |
+| `damage`                                          | Amount, kind, zone bias and reaction                           | one of the eleven damage kinds                                   |
+| `tags`                                            | Ability tags: `breach`, `pull`, `sustained`, `burst`, and more | at least one                                                     |
+| `status`                                          | Status effect it leaves behind, its length and stack ceiling   | must name a registered status                                    |
+| `coaching`                                        | Plain language for the panel and the move list                 | required                                                         |
+
+**Ranged fire is never free.** A weapon that costs no ammunition, no heat and no
+reactor draw is refused at registration rather than becoming permanent damage
+per second. Registration also refuses indirect fire with no minimum range, a
+beam with a projectile speed, a salvo of one, a reserve smaller than a magazine,
+and a magazine that reloads instantly.
+
+### `StatusDefinition` (src/combat/abilities.ts)
+
+`{ id, displayName, damagePerTick, damageKind, movementScale, damageOutputScale,
+disables, quenchedByWater, description }`. A status that does nothing at all is
+refused. Water puts out anything marked `quenchedByWater`, which is the one place
+the environment reaches directly into a fight. Five are registered: burning,
+shocked, bleeding, corroded and tethered.
+
+### Damage kinds
+
+Extended from four to eleven, shared by melee and ranged: `impact`, `crush`,
+`shear`, `pierce`, `heat`, `energy`, `plasma`, `corrosive`, `electrical`,
+`radiation`, `neural`.
+
+### Nothing new is saved
+
+`ROOT_SAVE_VERSION` stays at 5. Magazines, heat and running status effects are
+live state that belongs to the fight they happened in. Damage that survives a
+battle arrives with Milestone 13.
+
 ## Melee schemas (Milestone 11)
 
 ### `MoveDefinition` additions

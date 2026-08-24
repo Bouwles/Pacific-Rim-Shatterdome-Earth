@@ -295,6 +295,38 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Ranged weapons (Milestone 12)
+
+Seven rows in `src/data/weapons.ts`, covering all eight behaviours. Times are in
+ticks at sixty ticks a second.
+
+| id                        | Behaviour  | Magazine | Reload | Cooldown | Heat | Reactor | Band          | Aim         | Damage     | Leaves   |
+| ------------------------- | ---------- | -------- | ------ | -------- | ---- | ------- | ------------- | ----------- | ---------- | -------- |
+| weapon.plasma-caster      | beam       | none     | -      | 90       | 34   | 60 MW   | 0 to 620 m    | forward arc | 520 plasma | burning  |
+| weapon.anti-kaiju-missile | salvo of 3 | 6 (18)   | 180    | 24       | 6    | 4 MW    | 60 to 900 m   | locked only | 300 impact | -        |
+| weapon.shoulder-mortar    | mortar     | 4 (12)   | 150    | 60       | 8    | 2 MW    | 180 to 1100 m | any         | 420 crush  | -        |
+| weapon.rotary-cannon      | projectile | 90 (270) | 210    | 3        | 1.4  | 6 MW    | 0 to 420 m    | forward arc | 42 pierce  | -        |
+| weapon.arc-whip           | tether     | none     | -      | 150      | 22   | 40 MW   | 0 to 260 m    | forward arc | 120 energy | shocked  |
+| weapon.chain-sword        | channel    | none     | -      | 120      | 0.55 | 26 MW   | 0 to 55 m     | forward arc | 70 shear   | bleeding |
+| weapon.booster-strike     | cone       | none     | -      | 300      | 40   | 55 MW   | 0 to 120 m    | forward arc | 380 impact | -        |
+
+The chain sword's heat is per tick rather than per swing, because a channel pays
+it sixty times a second for as long as it is held. The arc whip is the one
+weapon that is better underwater (1.35x); the mortar is close to useless there
+(0.1x).
+
+## Status effects (Milestone 12)
+
+Five rows in `src/combat/abilities.ts`.
+
+| id              | Per tick       | Movement | Output | Ends early |
+| --------------- | -------------- | -------- | ------ | ---------- |
+| status.burning  | 3.2 heat       | -        | -      | in water   |
+| status.shocked  | 0.8 electrical | 0.55x    | 0.85x  | -          |
+| status.bleeding | 2.1 shear      | 0.95x    | -      | -          |
+| status.corroded | 1.4 corrosive  | -        | -      | in water   |
+| status.tethered | -              | 0.25x    | -      | -          |
+
 ## Melee, defence and grapple moves (Milestone 11)
 
 Ten rows joined the move table. Times are in ticks at sixty ticks a second.

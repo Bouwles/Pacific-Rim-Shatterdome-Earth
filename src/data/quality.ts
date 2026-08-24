@@ -68,6 +68,11 @@ export interface QualityPreset extends RegistryEntry {
    */
   readonly maxScaleReferences: number;
   /**
+   * Hard ceiling on live projectiles. The pool is allocated at this size and
+   * never grows, so a barrage refuses rather than stuttering.
+   */
+  readonly maxProjectiles: number;
+  /**
    * Staff instances drawn in the Shatterdome room the player is standing in.
    * Only the active room is ever populated, so this is a per-room ceiling rather
    * than a complex-wide one.
@@ -95,6 +100,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxInteriorStaff: 6,
     maxFootstepDecals: 12,
     maxScaleReferences: 24,
+    maxProjectiles: 48,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "No shadows or reflections, one wave octave, a thinner city. Every telegraph is still drawn.",
   },
@@ -115,6 +121,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxInteriorStaff: 14,
     maxFootstepDecals: 28,
     maxScaleReferences: 60,
+    maxProjectiles: 96,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "Shadows on, cheap reflections, two wave octaves.",
   },
@@ -135,6 +142,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxInteriorStaff: 26,
     maxFootstepDecals: 56,
     maxScaleReferences: 120,
+    maxProjectiles: 180,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "The default. Full wave detail and a full-resolution shadow map.",
   },
@@ -155,6 +163,7 @@ const PRESETS: readonly QualityPreset[] = [
     maxInteriorStaff: 40,
     maxFootstepDecals: 96,
     maxScaleReferences: 220,
+    maxProjectiles: 320,
     telegraphs: [...REQUIRED_TELEGRAPHS],
     notes: "For capture rather than play. Not expected to hold 60 fps in a heavy fight.",
   },
@@ -198,6 +207,9 @@ export function validateQualityPreset(preset: QualityPreset): string[] {
     errors.push("maxScaleReferences must be at least 8: scale is information, not detail");
   }
   if (preset.maxFootstepDecals < 4) errors.push("maxFootstepDecals must be at least 4");
+  // A salvo weapon puts three rounds in the air at once and a rotary cannon
+  // several a second. Fewer than this and a weapon silently stops working.
+  if (preset.maxProjectiles < 24) errors.push("maxProjectiles must be at least 24");
   // An empty room is not a cheaper room, it is an abandoned one, and a complex
   // with nobody in it tells the player something false about the game.
   if (preset.maxInteriorStaff < 1) errors.push("maxInteriorStaff must be at least 1");

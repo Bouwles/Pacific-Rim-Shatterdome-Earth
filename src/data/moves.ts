@@ -38,7 +38,28 @@ export type CancelTag = (typeof CANCEL_TAGS)[number];
 export const ARMOR_LEVELS = ["none", "light", "super"] as const;
 export type ArmorLevel = (typeof ARMOR_LEVELS)[number];
 
-export const DAMAGE_KINDS = ["impact", "crush", "energy", "plasma"] as const;
+/**
+ * What a hit is made of.
+ *
+ * Armour answers different kinds differently, which is the whole reason the list
+ * is longer than "damage". Shear and pierce arrived with ranged weapons; heat,
+ * corrosive, electrical, radiation and neural shock are here because component
+ * damage reads them, and adding them one milestone at a time would have meant
+ * two migrations instead of none.
+ */
+export const DAMAGE_KINDS = [
+  "impact",
+  "crush",
+  "shear",
+  "pierce",
+  "heat",
+  "energy",
+  "plasma",
+  "corrosive",
+  "electrical",
+  "radiation",
+  "neural",
+] as const;
 export type DamageKind = (typeof DAMAGE_KINDS)[number];
 
 /** What a clean hit does to whoever took it. Reused by every attacker. */

@@ -677,6 +677,38 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-24, Milestone 12
+
+**A weapon is a row and the behaviour is a field.** Eight behaviours share one
+fire path, and which one a weapon uses is data rather than a branch. Adding a
+ninth is a row and a case in one resolver, not a new system next to the old one.
+
+**Ranged fire is refused at registration if it costs nothing.** The rule that
+matters most in this milestone is the one that cannot be forgotten later: a
+weapon with no ammunition cost, no heat cost and no reactor draw never reaches
+the game. Free damage per second is a design mistake that is impossible to
+notice once it is shipped, so the registry refuses it before anything runs.
+
+**The projectile pool refuses rather than grows.** Growing under fire is how a
+barrage becomes a frame spike, and thinning silently is how a weapon quietly
+stops working with nobody knowing why. The pool has a ceiling from the quality
+preset, the refusal is an event, and the count is on the panel.
+
+**Rounds are retired by a bubble rather than by a lifetime alone.** Range and a
+twelve second clock are not enough on their own: a fast round can outrun the
+fight it belongs to. Anything more than 2,400 m from the centre of the fight is
+gone, which is what makes "no ballistics simulated outside combat" structural.
+
+**Events are drained, not returned by the step.** `step()` could only ever
+report what happened inside it, and firing a weapon happens between two ticks.
+Every shot, reload and refusal was being lost. The arena keeps a cursor and
+anything showing the player what happened reads from that instead.
+
+**Channel heat is per tick.** A sustained weapon that charged its heat per
+activation would be free to hold forever, and one charging a swing's worth every
+tick cooks the reactor in half a second. Per tick at a per tick rate is the only
+version where holding it is a real decision.
+
 ## 2026-08-24, Milestone 11
 
 **Defences are rows in the move table, not a parallel system.** A dodge, a block

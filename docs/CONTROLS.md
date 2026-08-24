@@ -343,7 +343,31 @@ yet; the attack director that will do so arrives with a later milestone.
 Audio reports its real state. Browsers refuse to start audio outside a user
 gesture, so it says `blocked` rather than pretending to be running.
 
+### Ranged weapons (Milestone 12)
+
+| Input  | Action                                                                    |
+| ------ | ------------------------------------------------------------------------- |
+| 7      | Plasma caster. A beam that arrives instantly and sets the target burning  |
+| 8      | Anti-kaiju missile. A salvo of three, one magazine round per pull         |
+| 9      | Shoulder mortar. Indirect fire, and it refuses anything closer than 180 m |
+| 0      | Rotary cannon. A deep magazine, low damage per round, forward arc only    |
+| J      | Arc whip. A tether that holds the target on a line rather than killing it |
+| K hold | Chain sword. Runs for as long as it is held and bleeds heat while it does |
+| O      | Booster strike. A close-range charge that costs reactor power             |
+| L      | Reload whichever weapon is emptiest and can still be filled               |
+
+Two readouts cover them. **Weapons** lists every carried weapon with its
+magazine, its spare rounds and whether it is ready, cooling or reloading; a
+weapon fed by heat or by the reactor says so rather than reading as an empty
+one. **Rounds** says how many are in the air against the ceiling the quality
+preset allows, and names any status effect running on the target.
+
+Every refusal is a sentence, in the hit log and on the coaching line: how far
+past a weapon's reach the target is, how close is too close for indirect fire,
+that a forward-arc weapon needs you to turn, that a magazine is empty and the
+spares are gone, or that too many rounds are already in the air.
+
 ## Not yet bound
 
-No weapon, squad-command or menu-navigation keys exist yet. See
+No squad-command or menu-navigation keys exist yet. See
 [../ROADMAP.md](../ROADMAP.md).

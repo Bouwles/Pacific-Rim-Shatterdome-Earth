@@ -191,3 +191,10 @@ facility grammar.
 One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
+
+## Milestone 12 saves nothing new
+
+`ROOT_SAVE_VERSION` stays at 5. Magazines, spare rounds, heat, cooldowns, rounds
+in the air and running status effects are all live state belonging to the fight
+they happened in, and a fight is not saved. Damage that outlives a battle is the
+subject of the next milestone, and that is what will move the version.
