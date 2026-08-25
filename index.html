@@ -610,6 +610,76 @@
           monospace;
         color: #a9c3d6;
       }
+      #uiRoot .sd-panel-subheading {
+        margin: 14px 0 6px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(127, 214, 255, 0.16);
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #7fd6ff;
+      }
+      #uiRoot .sd-balance-list {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 2px 12px;
+        margin: 0 0 8px;
+        padding: 0;
+        font:
+          11px/1.6 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-breakdown-list {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .sd-breakdown-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-breakdown-amount {
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-breakdown-in .sd-breakdown-amount {
+        color: #8fdcae;
+      }
+      #uiRoot .sd-breakdown-out .sd-breakdown-amount {
+        color: #e2a0a0;
+      }
+      #uiRoot .sd-breakdown-track {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 6px;
+        margin-top: 3px;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.12);
+        overflow: hidden;
+      }
+      #uiRoot .sd-breakdown-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.45);
+      }
+      #uiRoot .sd-breakdown-in .sd-breakdown-fill {
+        background: rgba(143, 220, 174, 0.5);
+      }
+      #uiRoot .sd-breakdown-out .sd-breakdown-fill {
+        background: rgba(226, 160, 160, 0.5);
+      }
       #uiRoot .sd-market-empty {
         font-size: 12px;
         color: #7f9fb4;

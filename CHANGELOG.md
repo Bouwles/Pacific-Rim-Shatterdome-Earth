@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-29, Milestone 23: An economy with books you can read
+
+Money stopped being a number on a panel and became something with a history.
+
+- Six resources, and each one has to earn its place: funding, structural alloy, components, reactor material, kaiju tissue and research data. Nothing gets added that buys the same things as something already there, and the registry refuses it if you try.
+- Tissue is graded rather than weighed. One exotic sample is worth more than a truckload of common, because what makes it valuable is what it came off, not how much of it there is.
+- Every credit that moves leaves a line. What day, what for, where it came from, and what the balance was afterwards. There is no other way to change a balance, so the ledger cannot fall out of step with the money.
+- Income comes from formulas, not from a table somebody typed. A bigger city, a worse creature, a later point in the war and a better result all pay more, and none of that had to be written down twice.
+- Six ways to be paid: government contracts, coastal defence rewards for the fights you sat out, salvage rights, exploration finds, manufacturer retainers once a yard rates you, and facility income from a complex that earns while you are not looking.
+- Repairs cost money now. A shift in the gantries is billed for the share of the job it covers, broken into labour, materials, an urgency surcharge if you want it now, and whatever is insured. Having the alloy already in stores makes it cheaper. A better bay makes it cheaper. Short of funds, the machine waits, and it says so.
+- A difficulty dial that touches income and nothing else. Generous, standard and lean change what the war pays you, never how hard a kaiju hits, because those are two different decisions and merging them takes one of them away from you.
+- Nothing pays twice. Every settled reward carries a reference, and the same result handed back after a retry, a reload or a client reconnecting changes nothing.
+- The books, on the contracts terminal. What you hold, what the last thirty days brought in and took out, a breakdown by source with a bar so you can see which line is doing the damage, and the last dozen entries in plain words.
+- Balanced against a simulation rather than a hunch: 360 in-game days, four ways of playing, run on a seed so it comes out the same every time. Flying everything pays best, picking your battles makes steady progress, standing down a lot is worse and still survivable, and a lean campaign with too much on the pad goes into debt and starts putting off repairs.
+
+An old save keeps its money. Version 12 files carried funding, salvage and samples on the market; those come across as funding, alloy and research data rather than being thrown away.
+
 ## 2026-08-28, Milestone 22: Facilities, construction queues and a complex that grows
 
 The headquarters is somewhere you build now, rather than a set of rooms with tiers.

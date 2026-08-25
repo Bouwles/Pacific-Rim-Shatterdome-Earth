@@ -204,7 +204,7 @@ describe("city save migration", () => {
     };
 
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["3", "4", "5", "6", "7", "8", "9", "10", "11"]);
+    expect(result.applied).toEqual(["3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRootSave(result.document)).toEqual([]);
 

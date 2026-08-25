@@ -265,6 +265,30 @@ export interface MarketPanelState {
   readonly fleet: readonly string[];
   /** The last thing the office said. Null before anything is signed. */
   readonly note: string | null;
+  /** Every balance held, named and in the order the resource list declares. */
+  readonly balances: readonly string[];
+  /**
+   * Where the money came from and went over the recent past, biggest first.
+   *
+   * A player looking at a falling balance should be able to see which line is
+   * doing it rather than guess, so this is a breakdown by source and not a
+   * single net figure.
+   */
+  readonly breakdown: readonly LedgerBreakdownRow[];
+  /** What the ledger actually recorded, newest first. */
+  readonly ledger: readonly string[];
+  /** Net over the window, and where it is heading if nothing changes. */
+  readonly outlook: string;
+}
+
+/** One source's contribution over the window the panel is showing. */
+export interface LedgerBreakdownRow {
+  readonly label: string;
+  readonly amountText: string;
+  /** True for money in, so the row can be read at a glance. */
+  readonly income: boolean;
+  /** 0 to 1 of the largest row, for the bar. */
+  readonly share: number;
 }
 
 export type ShatterdomePanelState =
@@ -598,6 +622,34 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     note.dataset["field"] = "market-note";
     note.setAttribute("aria-live", "polite");
     element.appendChild(note);
+
+    // The books. Balances, then what moved them, then the lines themselves, so
+    // a player can go from "I am poorer" to "this is why" without leaving the
+    // panel they got poorer in.
+    const booksHeading = document.createElement("h4");
+    booksHeading.className = "sd-panel-subheading";
+    booksHeading.textContent = "Books";
+    element.appendChild(booksHeading);
+
+    const balances = document.createElement("ul");
+    balances.className = "sd-balance-list";
+    balances.dataset["field"] = "market-balances";
+    element.appendChild(balances);
+
+    const outlook = document.createElement("p");
+    outlook.className = "sd-panel-summary";
+    outlook.dataset["field"] = "market-outlook";
+    element.appendChild(outlook);
+
+    const breakdown = document.createElement("ul");
+    breakdown.className = "sd-breakdown-list";
+    breakdown.dataset["field"] = "market-breakdown";
+    element.appendChild(breakdown);
+
+    const ledger = document.createElement("ul");
+    ledger.className = "sd-market-orders";
+    ledger.dataset["field"] = "market-ledger";
+    element.appendChild(ledger);
   } else {
     element.appendChild(definitionList(connPodFields(panel)));
     const notes = document.createElement("p");
@@ -609,6 +661,46 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
 
   refreshPanelElement(element, panel, callbacks);
   return element;
+}
+
+function emptyLine(text: string): HTMLElement {
+  const line = document.createElement("li");
+  line.className = "sd-market-empty";
+  line.textContent = text;
+  return line;
+}
+
+/**
+ * One line of the breakdown, with a bar.
+ *
+ * The bar is drawn against the largest row rather than against the total, so a
+ * single dominant expense still shows the smaller ones as something rather than
+ * as nothing.
+ */
+function buildBreakdownRow(row: LedgerBreakdownRow): HTMLElement {
+  const item = document.createElement("li");
+  item.className = row.income ? "sd-breakdown-row sd-breakdown-in" : "sd-breakdown-row sd-breakdown-out";
+  item.dataset["source"] = row.label;
+
+  const head = document.createElement("div");
+  head.className = "sd-breakdown-head";
+  const label = document.createElement("span");
+  label.className = "sd-breakdown-label";
+  label.textContent = row.label;
+  const amount = document.createElement("span");
+  amount.className = "sd-breakdown-amount";
+  amount.textContent = row.amountText;
+  head.append(label, amount);
+  item.appendChild(head);
+
+  const track = document.createElement("div");
+  track.className = "sd-breakdown-track";
+  const fill = document.createElement("div");
+  fill.className = "sd-breakdown-fill";
+  fill.style.width = `${Math.round(Math.max(0, Math.min(1, row.share)) * 100)}%`;
+  track.appendChild(fill);
+  item.appendChild(track);
+  return item;
 }
 
 function buildQueueRow(row: QueueRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
@@ -1170,6 +1262,38 @@ function refreshPanelElement(
       panel.fleet.length === 0 ? "No machines assigned." : `Fleet: ${panel.fleet.join(", ")}`,
     );
     setField(element, "market-note", panel.note ?? "");
+
+    const balances = element.querySelector<HTMLElement>('[data-field="market-balances"]');
+    if (balances) {
+      balances.replaceChildren(
+        ...panel.balances.map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
+    setField(element, "market-outlook", panel.outlook);
+
+    const breakdown = element.querySelector<HTMLElement>('[data-field="market-breakdown"]');
+    if (breakdown) {
+      breakdown.replaceChildren(
+        ...(panel.breakdown.length === 0
+          ? [emptyLine("Nothing has moved yet.")]
+          : panel.breakdown.map((row) => buildBreakdownRow(row))),
+      );
+    }
+
+    const ledger = element.querySelector<HTMLElement>('[data-field="market-ledger"]');
+    if (ledger) {
+      ledger.replaceChildren(
+        ...(panel.ledger.length === 0 ? ["No entries yet."] : panel.ledger).map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
     return;
   }
 

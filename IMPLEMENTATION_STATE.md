@@ -210,7 +210,19 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - facility effects reaching authoritative behaviour, so an upgraded repair bay actually repairs faster;
   - visible construction: lighting, signage, cranes, deliveries and crews on site while work is running;
   - a proof that no prerequisite chain can strand a room, walked from an empty complex.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1377 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **An economy with a ledger**, spent from one place and readable from the contracts terminal:
+  - six resources, each declaring its sources and its sinks, with a registry that refuses a resource whose sinks duplicate another's;
+  - kaiju tissue graded common, rare and exotic rather than weighed, so rarity rather than bulk decides what a sample is worth;
+  - `earn` and `spend` as the only ways any balance moves, each writing a ledger line carrying the day, source, reason and resulting balance;
+  - a bounded ledger that a campaign of any length cannot grow without limit, with summaries by source and a forecast taken from what actually happened;
+  - references that make a settled reward unrepeatable across a retry, a reload, or a client reconnecting, carried in the save;
+  - income from pure formulas: government contracts, coastal defence rewards, salvage rights, exploration finds, manufacturer retainers and facility income;
+  - repair quotes itemised into labour, materials bought in, urgency surcharge and the insured share, cheaper with stores on hand and a better bay;
+  - a difficulty dial scaling income only, deliberately not touching anything about a fight;
+  - the market delegating every balance to the economy, so there is one balance and one history rather than two that have to agree;
+  - a books view: what is held, thirty days of income and spending broken down by source with bars, the trend, and the last dozen entries in plain words;
+  - a headless 360-day balance simulation across four player strategies, run from a seed, asserting solvency, that ordinary play progresses without buying the catalogue, and that an over-extended lean programme struggles.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1436 unit+integration), `smoke` (132 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

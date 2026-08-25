@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-824 unit and integration tests across 52 files, plus 101 Playwright browser tests.
+1436 unit and integration tests, plus 132 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,37 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 23 acceptance evidence
+
+Measured at seed 20260829, in the browser by hand and in the unit, integration
+and balance suites. The balance figures below are one 360-day run per strategy,
+deterministic from that seed.
+
+| Acceptance item                                                 | Evidence                                                                                                                                                  |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Common play supports steady progress                            | Pick-battles ends a year on +4,534,929 with no days in debt and 78 sorties flown                                                                          |
+| Repair and purchase decisions stay meaningful                   | That surplus is under two machines' worth against a catalogue of 2.9M to 7.8M, and 78 of 78 repairs were paid for out of it                               |
+| Every way of playing survives                                   | Fly-everything +10,542,261, explorer +2,030,269, stand-down -581,289 with 2 days in debt and 2 repairs put off. Worse, not fatal                          |
+| An over-extended programme struggles                            | Lean, flying everything, 70k a day upkeep: 59 days in debt and 60 repairs deferred                                                                        |
+| Difficulty scales income and nothing else                       | Generous 9,534,340, standard 4,534,929, lean 868,703 from identical play: same sorties, same repairs needed, different pay                                |
+| No income source is a grind                                     | Half again the sorties is not half again the money; asserted as a ratio rather than eyeballed                                                             |
+| Every balance-affecting change appears in an inspectable ledger | `earn` and `spend` are the only mutation paths and both write a line; a refused spend writes nothing and moves nothing                                    |
+| The ledger and the balance agree over hundreds of days          | Asserted for all four strategies at 360 days, with the ledger bounded at 400 lines so a long campaign cannot grow it without limit                        |
+| A reward cannot be paid twice                                   | Refused on retry, after a save and reload, and for a reconnecting client replaying the same result five times: balance 50,000, ledger one line            |
+| Resources each earn their place                                 | Six kinds, each with declared sources and sinks; the registry refuses a resource whose sinks duplicate another's, and a test walks every pair             |
+| Repair cost varies with damage, rarity, stores, bay and urgency | Each asserted separately, and the itemised lines are asserted to sum to the total rather than to look plausible                                           |
+| The player can see where the money went                         | Live: the contracts terminal shows six named balances, "Last 30 days: ... in, ... out, net ...", a breakdown by source with bars, and the ledger in words |
+| An old save keeps its money                                     | Version 12 funding, salvage and samples come across as funding, alloy and research data; the ledger starts empty rather than inventing a history          |
+
+Two defects found while building it. The first balance pass had three of four
+strategies ending a year deeply in debt, because a sortie paid roughly a tenth of
+what a day of upkeep cost; the second pass over-corrected far enough that every
+strategy ended rich enough for money to stop mattering, which is the same failure
+from the other side. The figures above are the third pass. Separately, the
+reconciliation check itself was wrong: it decided whether the ledger had been
+trimmed by counting funding lines, while the ledger trims across every resource,
+so it reported a mismatch that was not there.
 
 ## Milestone 22 acceptance evidence
 

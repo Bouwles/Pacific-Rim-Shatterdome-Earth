@@ -547,6 +547,31 @@ cranes, deliveries and crews on site. Created `src/shatterdome/construction.ts`,
 - `npm run typecheck`, `lint`, `format:check`, `test` (1377), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 23 - Economy, contracts, salvage, passive facilities and repair costs
+
+**Depends on:** Milestone 18 (the market that held the money), 22 (the facilities that now earn and cost).
+**Status:** done.
+**Scope:** six resources with declared sources and sinks and a registry that refuses two resources that
+buy the same things; a ledger where every balance-affecting change lands, bounded so a long campaign
+cannot grow it without limit, carrying the references that make a settled reward unrepeatable; an
+`Economy` whose `earn` and `spend` are the only ways a balance moves; income from formulas rather than
+tables, covering government contracts, coastal defence rewards, salvage rights, exploration finds,
+manufacturer retainers and facility income; repair quotes broken into labour, materials, urgency and
+insurance; a difficulty dial that scales income and nothing else; a headless 360-day balance simulation
+over four player strategies; and a books view on the contracts terminal showing balances, a breakdown by
+source and the ledger itself. Created `src/world/resources.ts`, `src/world/ledger.ts`,
+`src/world/economy.ts`, `src/debug/economyScenario.ts`. Extended `src/world/market.ts` to delegate every
+balance to the economy, the repair path in `src/app/bootstrap.ts` to charge for a shift of work, the
+save envelope to version 13, and the contracts terminal panel.
+**Acceptance tests:**
+
+- A 360-day simulation across four strategies: all four stay solvent, ordinary play ends ahead without
+  buying the catalogue, and an over-extended lean programme goes into debt and defers repairs.
+- Ledger and balance reconcile over hundreds of days, and the ledger stays bounded.
+- A settled reward cannot be paid twice by retry, reload or a reconnecting client.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1436), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

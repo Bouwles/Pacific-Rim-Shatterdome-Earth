@@ -295,6 +295,32 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Resources (Milestone 23)
+
+Six in `src/world/resources.ts`. Each declares what pays it in and what spends
+it, and the registry refuses a resource whose sinks are already covered by
+another: a resource that buys nothing new is that resource under a second name.
+
+| Id                | Unit    | Paid in by                                              | Spent on                                         |
+| ----------------- | ------- | ------------------------------------------------------- | ------------------------------------------------ |
+| `funding`         | credits | contracts, defence rewards, retainers, facility income  | machines, construction, upkeep, repairs, modules |
+| `alloy`           | tons    | salvage rights                                          | repairs, construction                            |
+| `components`      | units   | salvage rights, manufacturer retainers                  | repairs, modules                                 |
+| `reactorMaterial` | units   | government contracts, exploration finds                 | construction, modules                            |
+| `tissue`          | samples | salvage rights, graded common, rare or exotic           | research conversion                              |
+| `researchData`    | units   | research conversion, facility income, exploration finds | research                                         |
+
+Tissue is graded rather than weighed: `TISSUE_VALUE` is 1, 4 and 12 for common,
+rare and exotic, so one exotic sample beats a truckload of common.
+
+## Ledger sources (Milestone 23)
+
+Fourteen in `src/world/ledger.ts`, a table so a new source is a row rather than
+a case: `government-contract`, `defence-reward`, `salvage-rights`,
+`exploration-find`, `manufacturer-deal`, `facility-income`,
+`research-conversion`, `machine-purchase`, `construction`, `repair`, `upkeep`,
+`module`, `refund`, `adjustment`.
+
 ## Facilities (Milestone 22)
 
 Fifteen branches in `src/data/facilities.ts`, twenty nine tiers between them.

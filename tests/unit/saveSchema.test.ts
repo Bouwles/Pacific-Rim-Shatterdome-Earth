@@ -8,6 +8,7 @@ import { emptyDirectorSnapshot } from "../../src/world/director";
 import { emptyMarketSnapshot } from "../../src/world/market";
 import { emptyCrewSnapshot } from "../../src/pilots/crew";
 import { emptySquadSnapshot } from "../../src/allies/squad";
+import { emptyEconomySnapshot } from "../../src/world/economy";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -47,6 +48,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     market: emptyMarketSnapshot(),
     crew: emptyCrewSnapshot(),
     squad: emptySquadSnapshot(),
+    economy: emptyEconomySnapshot(),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },

@@ -144,8 +144,10 @@ import {
   type ProgressionPanelState,
   type CrewPanelState,
   type BerthPanelState,
+  type MarketPanelState,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
+import { RESOURCE_DEFINITIONS, type ResourceKind } from "../world/resources";
 
 export interface AppHandle {
   dispose(): void;
@@ -453,6 +455,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               market.snapshot(),
               crew.snapshot(),
               squad.snapshot(),
+              market.economy.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -473,6 +476,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               market.snapshot(),
               crew.snapshot(),
               squad.snapshot(),
+              market.economy.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -501,6 +505,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             crew.restore(result.document.crew);
             // What the allied crews became, and what they fly.
             squad.restore(result.document.squad);
+            // Every balance and the ledger behind it, last so that the economy's
+            // own record wins: the market restores the three figures it used to
+            // own, and this restores all six plus the history and the references
+            // that stop a settled reward being paid a second time.
+            market.economy.restore(result.document.economy);
             marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
@@ -950,7 +959,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }
     // The sortie pays into the same treasury the market spends from, once,
     // from the mission's own ledger.
-    market.credit(results.funding, results.salvageTons, results.samples);
+    market.credit(results.funding, results.salvageTons, results.samples, `sortie.${active.id}`);
 
     // And the allied crews, guarded by the same mission id everything else uses.
     for (const line of squad.completeSortie({
@@ -4016,8 +4025,87 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       }),
       fleet: owned.map((record) => `${record.name} (${record.serial})`),
       note: contractsNote,
+      ...ledgerPanelFor(),
     };
   };
+
+  /**
+   * The books, as the contracts terminal shows them.
+   *
+   * Read straight off the economy every time the panel is built, so the figures
+   * on screen are the figures the game is spending from. The window is the last
+   * thirty days, which is long enough for a trend and short enough that a bad
+   * month is visible rather than averaged away.
+   */
+  const LEDGER_WINDOW_DAYS = 30;
+  const ledgerPanelFor = (): Pick<MarketPanelState, "balances" | "breakdown" | "ledger" | "outlook"> => {
+    const economy = market.economy;
+    const today = worldState.environment.clock.dayNumber;
+    const from = Math.max(0, today - LEDGER_WINDOW_DAYS);
+    const summary = economy.summarise("funding", from, today);
+
+    const balances = RESOURCE_DEFINITIONS.map((resource) => {
+      const held = economy.balance(resource.id);
+      const shown =
+        resource.id === "funding" ? formatMoney(held) : `${Math.round(held * 10) / 10} ${resource.unit}`;
+      return `${resource.displayName}: ${shown}`;
+    });
+
+    const largest = summary.bySource.reduce((most, row) => Math.max(most, Math.abs(row.amount)), 0);
+    const breakdown = summary.bySource.map((row) => ({
+      label: ledgerSourceLabel(row.source),
+      amountText: `${row.amount >= 0 ? "+" : "-"}${formatMoney(Math.abs(row.amount))}`,
+      income: row.amount >= 0,
+      share: largest > 0 ? Math.abs(row.amount) / largest : 0,
+    }));
+
+    const perDay = economy.ledger.forecast("funding", from, today, LEDGER_WINDOW_DAYS);
+    const heading =
+      perDay > 0
+        ? `up about ${formatMoney(Math.round(perDay))} a day`
+        : perDay < 0
+          ? `down about ${formatMoney(Math.round(-perDay))} a day`
+          : "flat";
+    const outlook =
+      `Last ${LEDGER_WINDOW_DAYS} days: ${formatMoney(summary.income)} in, ` +
+      `${formatMoney(Math.abs(summary.expense))} out, ` +
+      `net ${summary.net >= 0 ? "+" : "-"}${formatMoney(Math.abs(summary.net))}. Trending ${heading}.`;
+
+    const ledger = economy.ledger
+      .all()
+      .slice(-12)
+      .reverse()
+      .map((entry) => {
+        const unit =
+          entry.resource === "funding"
+            ? formatMoney(Math.abs(entry.amount))
+            : `${Math.round(Math.abs(entry.amount) * 10) / 10} ${resourceUnit(entry.resource)}`;
+        return `Day ${entry.day}: ${entry.amount >= 0 ? "+" : "-"}${unit} · ${entry.reason}`;
+      });
+
+    return { balances, breakdown, ledger, outlook };
+  };
+
+  /** A source id as a person would say it. A table, so a new source is a row. */
+  const LEDGER_SOURCE_LABELS: Readonly<Record<string, string>> = {
+    "government-contract": "Contracts",
+    "defence-reward": "Coastal defence",
+    "salvage-rights": "Salvage",
+    "exploration-find": "Exploration",
+    "manufacturer-deal": "Yard retainers",
+    "facility-income": "Facilities",
+    "research-conversion": "Research",
+    "machine-purchase": "Machines bought",
+    construction: "Construction",
+    repair: "Repairs",
+    upkeep: "Upkeep",
+    module: "Modules",
+    refund: "Refunds",
+    adjustment: "Adjustments",
+  };
+  const ledgerSourceLabel = (source: string): string => LEDGER_SOURCE_LABELS[source] ?? source;
+  const resourceUnit = (kind: ResourceKind): string =>
+    RESOURCE_DEFINITIONS.find((entry) => entry.id === kind)?.unit ?? "";
 
   /** Signs for a machine. The refusal is the message, never a silent no-op. */
   const purchaseOffer = (offerId: string): void => {
@@ -4362,6 +4450,28 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         // between a facility and a menu unlock, and a complex short of power
         // or people gets less of that upgrade rather than none of it.
         const shiftHours = REPAIR_SHIFT_HOURS * repairRate();
+
+        // A shift has to be paid for before it is worked. The bill is the share
+        // of the outstanding job this shift covers, so a player who can only
+        // afford part of a repair gets part of a repair rather than a refusal,
+        // and a machine sitting in the gantries unpaid for is a decision they
+        // are making rather than a state the game put them in.
+        const before = roster.repairOrder(jaegerId);
+        if (before.totalHours > 0 && before.totalCost > 0) {
+          const share = Math.min(1, shiftHours / before.totalHours);
+          const due = Math.max(1, Math.round(before.totalCost * share));
+          const paid = market.economy.spend("funding", due, {
+            source: "repair",
+            reason: `${roster.definition(jaegerId).name}: one shift in the gantries.`,
+            day: worldState.environment.clock.dayNumber,
+          });
+          if (!paid.ok) {
+            repairNote = `Cannot pay for the shift: ${paid.message}. The machine waits.`;
+            openInteriorPanel(berthPanelFor(active, jaegerId, roster.definition(jaegerId).name));
+            return;
+          }
+        }
+
         const outcome = roster.work(jaegerId, shiftHours);
         const record = roster.get(jaegerId);
         repairNote =

@@ -16,7 +16,7 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 12`
+- `ROOT_SAVE_VERSION = 13`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
@@ -40,6 +40,7 @@ migration, or the reverse.
 | 10      | Adds the `market` section                                       | Money, salvage, research samples, standing with each yard, which offers have been signed, what is on order, and where the rotation is.                                                                                                                   |
 | 11      | Adds the `crew` section                                         | Per pilot: status, stress, injuries carried, the link tracks built with everybody they have flown with, and the ids of sorties already paid out.                                                                                                         |
 | 12      | Adds the `squad` section                                        | Per allied crew: the machine they fly, sorties flown beside the player, confidence, standing order, perks learned, and the sorties already settled.                                                                                                      |
+| 13      | Adds the `economy` section                                      | Every resource held, the difficulty the campaign is being run at, and the ledger behind each balance, including the references that stop a settled reward being paid twice.                                                                              |
 
 ## Detection
 
@@ -221,6 +222,29 @@ Two rules the restore enforces rather than trusts. A project naming a facility
 this build no longer has is dropped. And a project that was active comes back
 queued, holding no crews: it is given crews again on the first tick after
 loading, so nothing is mid-tick across a save.
+
+## Version 12 to 13: the economy (Milestone 23)
+
+Version 13 adds an `economy` section: every resource the programme holds, the
+difficulty it is being run at, and the ledger of how each balance got where it
+is, including the references that make a settled reward unrepeatable.
+
+A version 12 save carried funding, salvage and research samples inside the
+market section. Those are read across rather than thrown away: funding stays
+funding, salvage tons become structural alloy, and research samples become
+research data. Components, reactor material and tissue start at zero, because a
+file from a build with no such resources cannot honestly claim any.
+
+What such a file cannot have is a history. The ledger starts empty, and the
+first line written after loading is the first line there has ever been. That is
+deliberate: inventing entries for spending nobody recorded would make the books
+say something untrue about what happened.
+
+Two rules the restore enforces rather than trusts. A ledger line naming a
+resource or a source this build does not have is dropped rather than
+resurrected, so removing a source cannot make an old file unloadable. And the
+settled references come back with the ledger, because a reward already paid has
+to stay paid across a reload: that is the whole point of them.
 
 ## Version 11 to 12: the allied crews (Milestone 21)
 

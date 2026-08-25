@@ -12,6 +12,7 @@ import type { MissionSnapshot } from "../missions/mission";
 import { emptyMarketSnapshot, type MarketSnapshot } from "../world/market";
 import { emptyCrewSnapshot, type CrewSnapshot } from "../pilots/crew";
 import { emptySquadSnapshot, type SquadSnapshot } from "../allies/squad";
+import { emptyEconomySnapshot, type EconomySnapshot } from "../world/economy";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -63,6 +64,8 @@ export interface SaveRequest {
   readonly crew?: CrewSnapshot;
   /** The allied crews. Omitted by callers with no squad. */
   readonly squad?: SquadSnapshot;
+  /** Resources and the ledger. Omitted by callers with no economy. */
+  readonly economy?: EconomySnapshot;
 }
 
 /**
@@ -130,6 +133,7 @@ export class SaveService {
     // And so does a crew, for the same reason.
     const crew = request.crew ?? emptyCrewSnapshot();
     const squad = request.squad ?? emptySquadSnapshot();
+    const economy = request.economy ?? emptyEconomySnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -152,6 +156,7 @@ export class SaveService {
       market,
       crew,
       squad,
+      economy,
     };
   }
 

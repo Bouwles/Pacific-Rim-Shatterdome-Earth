@@ -14,6 +14,7 @@ import { emptyDirectorSnapshot } from "../world/director";
 import { emptyMarketSnapshot } from "../world/market";
 import { emptyCrewSnapshot } from "../pilots/crew";
 import { emptySquadSnapshot } from "../allies/squad";
+import { emptyEconomySnapshot } from "../world/economy";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -353,6 +354,46 @@ const addSquadSection: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 12, squad: emptySquadSnapshot() }),
 };
 
+/**
+ * Version 12 to 13: the economy.
+ *
+ * Adds an `economy` section: every resource the programme holds, the difficulty
+ * it is being run at, and the ledger of how each balance got where it is,
+ * including the references that stop a reward being paid twice.
+ *
+ * A version 12 save carried funding, salvage and samples inside the market
+ * section. Those are read across rather than thrown away: the funding a player
+ * had is the funding they keep, salvage becomes structural alloy, and samples
+ * become research data. What such a file cannot have is a history, so the
+ * ledger starts empty and the first line written after loading is the first
+ * line there has ever been.
+ */
+const addEconomySection: MigrationStep = {
+  id: "12",
+  fromVersion: 12,
+  toVersion: 13,
+  description: "Add the economy: resources, difficulty and the ledger.",
+  apply: (document) => {
+    const market = (document as Record<string, unknown>)["market"] as
+      { funding?: number; salvageTons?: number; researchSamples?: number } | undefined;
+    const snapshot = emptyEconomySnapshot();
+    const carried = {
+      ...snapshot,
+      pool: {
+        ...snapshot.pool,
+        funding: numberOr(market?.funding, 0),
+        alloy: numberOr(market?.salvageTons, 0),
+        researchData: numberOr(market?.researchSamples, 0),
+      },
+    };
+    return { ...document, schemaVersion: 13, economy: carried };
+  },
+};
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -379,6 +420,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addMarketSection);
   registry.register(addCrewSection);
   registry.register(addSquadSection);
+  registry.register(addEconomySection);
   return registry;
 }
 

@@ -7,6 +7,7 @@ import {
   type ManufacturerDefinition,
 } from "../data/manufacturers";
 import { createSeededRng, hashStringToSeed, type Rng } from "../simulation/rng";
+import { Economy } from "./economy";
 
 /**
  * The market, and the money.
@@ -92,6 +93,14 @@ export interface MarketSnapshot {
 
 export interface MarketOptions {
   readonly seed: number;
+  /**
+   * Where the money lives.
+   *
+   * Injected so the market and everything else spend out of one balance with
+   * one history. A caller that passes nothing gets its own, which is what keeps
+   * every existing test working unchanged.
+   */
+  readonly economy?: Economy;
   readonly chassis?: ContentRegistry<JaegerDefinition>;
   readonly manufacturers?: ContentRegistry<ManufacturerDefinition>;
   readonly startingFunding?: number;
@@ -139,7 +148,27 @@ export class Market {
   private readonly pendingDeliveries: PendingDelivery[] = [];
   private readonly unlockedPaths = new Map<string, AcquisitionPath>();
 
-  readonly treasury: Treasury;
+  private readonly economyValue: Economy;
+
+  /**
+   * The balances, as the market has always reported them.
+   *
+   * A view onto the economy rather than a second copy: reading it is reading
+   * the one balance, and writing to it is not how anything changes any more.
+   */
+  get treasury(): Treasury {
+    const pool = this.economyValue.pool;
+    return {
+      funding: pool.funding,
+      salvageTons: pool.alloy,
+      researchSamples: pool.researchData,
+    };
+  }
+
+  /** The economy this market spends out of. */
+  get economy(): Economy {
+    return this.economyValue;
+  }
   private rotationValue = 0;
   private daysIntoRotation = 0;
 
@@ -147,11 +176,13 @@ export class Market {
     this.chassisRegistry = options.chassis ?? jaegerRegistry;
     this.makerRegistry = options.manufacturers ?? createManufacturerRegistry();
     this.seedValue = options.seed;
-    this.treasury = {
-      funding: options.startingFunding ?? 6_000_000,
-      salvageTons: 0,
-      researchSamples: 0,
-    };
+    this.economyValue =
+      options.economy ?? new Economy({ startingFunding: options.startingFunding ?? 6_000_000 });
+    if (options.economy && options.startingFunding !== undefined) {
+      // An economy handed in already has a balance; the starting figure is only
+      // meaningful when the market is making its own.
+      void options.startingFunding;
+    }
     for (const maker of this.makerRegistry.all()) {
       this.reputationByMaker.set(maker.id, maker.baseReputation);
     }
@@ -308,7 +339,12 @@ export class Market {
       };
     }
 
-    this.treasury.funding -= offer.price;
+    this.economyValue.spend("funding", offer.price, {
+      source: "machine-purchase",
+      reason: `Bought ${offer.chassisId} from ${offer.manufacturerId}.`,
+      day: this.rotationValue,
+      reference: `purchase.${offer.id}`,
+    });
     this.purchased.add(offer.id);
     const delivery: PendingDelivery = {
       offerId: offer.id,
@@ -395,7 +431,14 @@ export class Market {
       total += (this.chassisRegistry.get(chassisId)?.upkeepPerDay ?? 0) * days;
     }
     const charged = Math.round(total);
-    this.treasury.funding -= charged;
+    if (charged > 0) {
+      this.economyValue.spend("funding", charged, {
+        source: "upkeep",
+        reason: `Upkeep on ${chassisIds.length} machine${chassisIds.length === 1 ? "" : "s"}.`,
+        day: this.rotationValue,
+        allowDebt: true,
+      });
+    }
     return charged;
   }
 
@@ -410,15 +453,41 @@ export class Market {
     if (cost > this.treasury.funding) {
       return { ok: false, message: `Cannot afford ${reason}: ${cost - this.treasury.funding} short.` };
     }
-    this.treasury.funding -= cost;
+    this.economyValue.spend("funding", cost, {
+      source: "construction",
+      reason,
+      day: this.rotationValue,
+    });
     return { ok: true, message: `Paid ${cost} for ${reason}.` };
   }
 
   /** Pays in what a sortie earned. One call, one credit. */
-  credit(funding: number, salvageTons = 0, researchSamples = 0): void {
-    this.treasury.funding += Math.max(0, Math.round(funding));
-    this.treasury.salvageTons += Math.max(0, salvageTons);
-    this.treasury.researchSamples += Math.max(0, Math.round(researchSamples));
+  credit(funding: number, salvageTons = 0, researchSamples = 0, reference?: string): void {
+    const day = this.rotationValue;
+    if (funding > 0) {
+      this.economyValue.earn("funding", Math.round(funding), {
+        source: "government-contract",
+        reason: "Sortie settled.",
+        day,
+        reference: reference ? `${reference}.funding` : null,
+      });
+    }
+    if (salvageTons > 0) {
+      this.economyValue.earn("alloy", salvageTons, {
+        source: "salvage-rights",
+        reason: "Salvage recovered.",
+        day,
+        reference: reference ? `${reference}.alloy` : null,
+      });
+    }
+    if (researchSamples > 0) {
+      this.economyValue.earn("researchData", Math.round(researchSamples), {
+        source: "salvage-rights",
+        reason: "Samples worked up.",
+        day,
+        reference: reference ? `${reference}.data` : null,
+      });
+    }
   }
 
   adjustReputation(manufacturerId: string, delta: number): number {
@@ -454,9 +523,11 @@ export class Market {
   restore(snapshot: MarketSnapshot): void {
     this.rotationValue = Math.max(0, Math.round(snapshot.rotation));
     this.daysIntoRotation = Math.max(0, snapshot.daysIntoRotation);
-    this.treasury.funding = snapshot.funding;
-    this.treasury.salvageTons = Math.max(0, snapshot.salvageTons);
-    this.treasury.researchSamples = Math.max(0, Math.round(snapshot.researchSamples));
+    this.economyValue.setBalances({
+      funding: snapshot.funding,
+      alloy: Math.max(0, snapshot.salvageTons),
+      researchData: Math.max(0, Math.round(snapshot.researchSamples)),
+    });
 
     for (const [id, value] of Object.entries(snapshot.reputation)) {
       // A yard this build no longer has is dropped rather than resurrected.

@@ -8,12 +8,13 @@ import { validateMissionSnapshot, type MissionSnapshot } from "../missions/missi
 import { validateMarketSnapshot, type MarketSnapshot } from "../world/market";
 import { validateCrewSnapshot, type CrewSnapshot } from "../pilots/crew";
 import { validateSquadSnapshot, type SquadSnapshot } from "../allies/squad";
+import { validateEconomySnapshot, type EconomySnapshot } from "../world/economy";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 12;
+export const ROOT_SAVE_VERSION = 13;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -55,6 +56,8 @@ export interface RootSave {
   readonly crew: CrewSnapshot;
   /** The allied crews: what they fly, what they have learned, and their standing orders. */
   readonly squad: SquadSnapshot;
+  /** Every resource, the difficulty, and the ledger of how each balance got there. */
+  readonly economy: EconomySnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -206,6 +209,7 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateMarketSnapshot(document["market"]));
   errors.push(...validateCrewSnapshot(document["crew"]));
   errors.push(...validateSquadSnapshot(document["squad"]));
+  errors.push(...validateEconomySnapshot(document["economy"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

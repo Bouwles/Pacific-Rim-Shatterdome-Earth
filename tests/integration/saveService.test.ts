@@ -156,6 +156,7 @@ describe("round trip through a kernel", () => {
     expect(keys).toEqual([
       "crew",
       "director",
+      "economy",
       "market",
       "metadata",
       "mission",

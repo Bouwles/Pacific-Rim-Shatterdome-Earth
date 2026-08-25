@@ -261,7 +261,7 @@ describe("the war survives a save", () => {
       roster: { machines: [] },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["7", "8", "9", "10", "11"]);
+    expect(result.applied).toEqual(["7", "8", "9", "10", "11", "12"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(result.document.director.incidents).toEqual([]);
     expect(result.document.director.escalation).toBeGreaterThan(0);
