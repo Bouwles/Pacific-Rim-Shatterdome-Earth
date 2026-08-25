@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-26, Milestone 20: Copilots, drift links, drawbacks and injury
+
+The two people in the Conn-Pod are the character sheet now. You still have none.
+
+- Five pilots who are genuinely different to fly with. Each is at home in some machines and not others, has tags that read well or badly against a partner, and comes with one thing that makes them difficult.
+- A drawback each, and every one of them says exactly when it bites. Anvil walks a long range machine into knife fights. Ledger flies the damage report instead of the fight when the machine is hurt. Kingfisher argues at neural speed with anybody careful. Quartz spends a long approach thinking about the specimen. Tallow cannot fly beside somebody already injured.
+- Every drawback is on screen before you commit, on the alert board above the Deploy button, marked by whether it applies to that sortie. Nothing is discovered from the result.
+- Drift is worked out from the machine, the weather, the length of the flight, how well the pair know each other, how much they have been through lately, and what they are carrying, and it shows you every term that produced the number.
+- Links that grow from things you did: flying together, coming home cleanly, drift training, and talking to somebody off duty. The cheap ones are capped per day, so a relationship is built rather than farmed.
+- A perk each that grows with the link and changes what that person is rather than adding a percentage. Anvil braces the machine before an exchange. Ledger runs the reactor the way it was meant to be run. Kingfisher steps off the line and answers. Quartz knows where the tissue gives. Tallow brings the machine and the block back in one piece.
+- Swapping the pair changes the machine. The same Jaeger under two crews has different poise, different heat, different speed and different reach, through the same system its own levels and modules use.
+- Injuries that hurt nobody permanently. A concussion grounds somebody for nine days. A shoulder tear lets them fly but not swing. Burned hands let them fly but not aim. The medical bay shortens a recovery and never removes it.
+- Somebody hurt is a scheduling problem, not a deleted character. Stand a pilot down for three days, treat what they are carrying, and take the best available substitute in the meantime, ordered by who knows the remaining pilot best.
+- Nobody is the best answer everywhere. Every pilot has a machine they are wrong for, and the ordering of pairs changes when the machine does.
+
+Four problems found by hand. The drift percentage saturated at exactly one for two different pairs, which made the headline number useless for telling crews apart. Injuries were far too common: ten in twelve sorties, with the crew grounded for two thirds of a campaign. Standing somebody down did not actually stop you assigning them on the next click. And the list of drawbacks never appeared on the alert board, because it was being attached next to an element that was not in the document yet.
+
 ## 2026-08-25, Milestone 19: Levels, passives, modules and prestige
 
 Machines get better by being flown now, and the ones you keep flying become yours.

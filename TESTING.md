@@ -263,6 +263,31 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
 
+## Milestone 20 acceptance evidence
+
+Measured on WebGPU at seed 20260826 on High, in the browser by hand and in the
+unit and integration suites.
+
+| Acceptance item                                                      | Evidence                                                                                                                                                                                   |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Swapping copilots produces visible handling and tactical differences | Live: the same Jaeger went from "70 percent link, effectiveness 76" under Anvil and Ledger to "35 percent link, effectiveness 61" under Ledger and Kingfisher, and readiness fell 90 to 80 |
+| The difference reaches the fight rather than only the panel          | Perk effects arrive as the same growth object levels and modules use: Anvil and Ledger raise poise and heat, Kingfisher and Quartz raise mobility and damage                               |
+| A drawback triggers only under documented conditions                 | Each trigger kind is tested firing and not firing: a role, a hurt machine, a grating partner, a long approach, and a partner already injured                                               |
+| A drawback is displayed before deployment                            | Live: the alert board listed both pilots' drawbacks above the Deploy button, with Kingfisher's marked as applying and its full explanation shown                                           |
+| Link progress survives save and load                                 | Round trip keeps links, stress, injuries and history, and recomputes the level from the experience rather than trusting the file                                                           |
+| Link cannot advance twice from one mission result                    | The crew keeps the ids of settled missions; the second call reports "already been logged" and changes nothing, and it still refuses after a reload                                         |
+| Injuries are nonlethal, with treatment, restrictions and substitutes | The worst is three weeks; treatment shortens and never removes; a grounded pilot is replaced by the best available substitute, ordered by who knows the partner                            |
+| The player avatar has no hidden statistics                           | Nothing was added to the on-foot player. Every difference between two sorties comes from the two people in the Conn-Pod                                                                    |
+| No copilot is best everywhere                                        | Every pilot has at least one role they are not at home in, and the ordering of pairs changes between machines                                                                              |
+
+Four defects found by hand. Drift strength saturated at exactly 1.0 for two
+different pairs, which made the headline number useless for telling crews apart.
+Injuries were far too common and too severe: ten in twelve sorties, with the crew
+grounded for two thirds of the campaign. A pilot stood down for recovery could
+still be assigned, which made the button advice rather than an order. And the
+list of drawbacks on the alert board never appeared, because it was inserted next
+to an element that had not been added to the document yet.
+
 ## Milestone 19 acceptance evidence
 
 Measured on WebGPU at seed 20260825 on High, in the browser by hand and in the

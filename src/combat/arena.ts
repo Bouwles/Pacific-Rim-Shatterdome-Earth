@@ -131,7 +131,7 @@ export function combatProfileFor(jaeger: JaegerDefinition, growth?: MachineGrowt
     staminaRegenPerSecond: 11,
     heatMax: 100,
     heatDissipationPerSecond: (6 + mass.coolingCapacity * 14) * heat,
-    poiseCapacity: (90 + mass.massTons / 24) * structure,
+    poiseCapacity: (90 + mass.massTons / 24) * structure * (growth?.poise ?? 1),
     guardMax: (120 + mass.massTons / 30) * structure,
     guardRegenPerSecond: 7 * heat,
     overheatFraction: 0.92,

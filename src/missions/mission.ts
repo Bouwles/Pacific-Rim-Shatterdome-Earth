@@ -1,5 +1,5 @@
 import { ContentRegistry } from "../data/registry";
-import { assessDrift, type PilotDefinition } from "../data/pilots";
+import { assessDrift, type DrawbackReport, type DriftContext, type PilotDefinition } from "../data/pilots";
 import type { JaegerDefinition } from "../data/jaegers";
 import type { WeaponDefinition } from "../data/weapons";
 import {
@@ -53,6 +53,10 @@ export interface ReadinessReport {
   /** 0 to 1. Everything together. */
   readonly readiness: number;
   readonly driftStrength: number;
+  /** Every drawback either pilot carries, and whether it bites on this sortie. */
+  readonly drawbacks: readonly DrawbackReport[];
+  /** Each term that moved the drift number, so the planner can show its working. */
+  readonly driftFactors: readonly { readonly label: string; readonly delta: number }[];
   readonly machineIntegrity: number;
   /** In-game seconds to reach the region. */
   readonly travelSeconds: number;
@@ -440,6 +444,13 @@ export function assessPlan(options: {
   readonly plan: DeploymentPlan;
   readonly jaeger: JaegerDefinition | undefined;
   readonly pilots: readonly (PilotDefinition | undefined)[];
+  /**
+   * Everything outside the two people that changes how they drift: what the
+   * machine is, what the weather is doing, how long the flight is, how well
+   * they know each other and what they are carrying. Optional, so a caller that
+   * knows none of it still gets an assessment.
+   */
+  readonly driftContext?: DriftContext;
   readonly machineIntegrity: number;
   readonly machineReady: boolean;
   readonly machineStatus: string;
@@ -461,7 +472,15 @@ export function assessPlan(options: {
   if (!options.jaeger) refusals.push("No machine selected.");
   if (!options.machineReady) refusals.push(`The machine is ${options.machineStatus}.`);
 
-  const drift = assessDrift(options.pilots[0], options.pilots[1]);
+  const drift = assessDrift(options.pilots[0], options.pilots[1], {
+    // The planner already knows most of this, so it is passed rather than
+    // guessed: a drawback that depends on the weather has to see the weather.
+    machineIntegrity: options.machineIntegrity,
+    weatherPenalty: options.weatherPenalty,
+    travelSeconds: options.distanceMeters / Math.max(1, options.carrierSpeedMps),
+    machineRole: options.jaeger?.role,
+    ...options.driftContext,
+  });
   if (drift.refused) refusals.push(drift.summary);
 
   if (options.plan.weaponIds.length === 0) {
@@ -512,6 +531,8 @@ export function assessPlan(options: {
   return {
     readiness,
     driftStrength: drift.strength,
+    drawbacks: drift.drawbacks,
+    driftFactors: drift.factors,
     machineIntegrity: options.machineIntegrity,
     travelSeconds,
     logisticsLoad,

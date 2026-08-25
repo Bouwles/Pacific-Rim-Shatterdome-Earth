@@ -7,6 +7,7 @@ import type { RosterSnapshot } from "../jaegers/roster";
 import type { DirectorSnapshot } from "../world/director";
 import type { MissionSnapshot } from "../missions/mission";
 import type { MarketSnapshot } from "../world/market";
+import type { CrewSnapshot } from "../pilots/crew";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -59,6 +60,7 @@ export class SaveController {
     director?: DirectorSnapshot,
     mission?: MissionSnapshot | null,
     market?: MarketSnapshot,
+    crew?: CrewSnapshot,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -70,6 +72,7 @@ export class SaveController {
       director,
       mission,
       market,
+      crew,
     });
   }
 
@@ -81,6 +84,7 @@ export class SaveController {
     director?: DirectorSnapshot,
     mission?: MissionSnapshot | null,
     market?: MarketSnapshot,
+    crew?: CrewSnapshot,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
@@ -91,6 +95,7 @@ export class SaveController {
       director,
       mission,
       market,
+      crew,
     });
   }
 

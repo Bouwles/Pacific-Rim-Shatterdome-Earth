@@ -12,6 +12,7 @@ import { emptyRosterSnapshot } from "../jaegers/roster";
 import { emptyDamageSnapshot } from "../world/destruction";
 import { emptyDirectorSnapshot } from "../world/director";
 import { emptyMarketSnapshot } from "../world/market";
+import { emptyCrewSnapshot } from "../pilots/crew";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -305,6 +306,30 @@ const addMarketSection: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 10, market: emptyMarketSnapshot() }),
 };
 
+/**
+ * Version 10 to 11: the people.
+ *
+ * Adds a `crew` section: one record per pilot carrying their status, recent
+ * stress, injuries being carried, the link tracks they have built with everybody
+ * they have flown with, and the ids of sorties already paid out.
+ *
+ * A version 10 save has none of that, because pilots were a table to be read
+ * rather than people with a history. Every such file therefore comes back with a
+ * crew who are all fit, unstressed, and strangers to each other, which is the
+ * only honest reading of a file that never recorded otherwise.
+ *
+ * The settled-mission list starts empty. That is safe because it only ever
+ * prevents double payment, and a save written before this existed has no
+ * mission result waiting to be applied.
+ */
+const addCrewSection: MigrationStep = {
+  id: "10",
+  fromVersion: 10,
+  toVersion: 11,
+  description: "Add the crew: links, stress, injuries, and the sorties already paid out.",
+  apply: (document) => ({ ...document, schemaVersion: 11, crew: emptyCrewSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -329,6 +354,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addDirectorSection);
   registry.register(addMissionSlot);
   registry.register(addMarketSection);
+  registry.register(addCrewSection);
   return registry;
 }
 

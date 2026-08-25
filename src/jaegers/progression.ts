@@ -87,6 +87,14 @@ export interface MachineGrowth {
   readonly heat: number;
   /** Multiplier on walk, run and turn rates. Deliberately the smallest of the four. */
   readonly mobility: number;
+  /**
+   * Multiplier on how much punishment the machine absorbs before it staggers.
+   *
+   * Levels do not move this. It exists because a crew can: a pair who brace
+   * before an exchange keep the machine on its feet, and that is a thing about
+   * the people rather than about the machine.
+   */
+  readonly poise: number;
   /** How many module slots are open at this level and rank. */
   readonly moduleSlots: number;
   /** One line a person can read, for the panel and the service history. */
@@ -99,6 +107,7 @@ export const NO_GROWTH: MachineGrowth = {
   damage: 1,
   heat: 1,
   mobility: 1,
+  poise: 1,
   moduleSlots: 0,
   label: "Level 1, no prestige",
 };
@@ -176,6 +185,14 @@ export interface GrowthInput {
   /** Multipliers contributed by chosen passives and fitted modules. */
   readonly passiveBonus?: Partial<Omit<MachineGrowth, "moduleSlots" | "label">>;
   readonly moduleBonus?: Partial<Omit<MachineGrowth, "moduleSlots" | "label">>;
+  /**
+   * Multipliers contributed by the pair in the Conn-Pod.
+   *
+   * The same shape as the other two, so who is flying composes with what the
+   * machine is exactly the way a passive or a module does, and the fight reads
+   * one object either way.
+   */
+  readonly crewBonus?: Partial<Omit<MachineGrowth, "moduleSlots" | "label">>;
 }
 
 /**
@@ -194,7 +211,8 @@ export function growthFor(input: GrowthInput): MachineGrowth {
     const levelled = 1 + PER_LEVEL_GAIN[key] * steps;
     const passive = input.passiveBonus?.[key] ?? 1;
     const module = input.moduleBonus?.[key] ?? 1;
-    return levelled * (scaledByRank ? rank : 1) * passive * module;
+    const crew = input.crewBonus?.[key] ?? 1;
+    return levelled * (scaledByRank ? rank : 1) * passive * module * crew;
   };
 
   return {
@@ -205,6 +223,8 @@ export function growthFor(input: GrowthInput): MachineGrowth {
     // outruns everything stops being a heavy machine, and speed is the one axis
     // where a large multiplier would break the fights rather than tilt them.
     mobility: axis("mobility", false),
+    // Poise is the crew's alone: no level, rank, passive or module moves it.
+    poise: (input.passiveBonus?.poise ?? 1) * (input.moduleBonus?.poise ?? 1) * (input.crewBonus?.poise ?? 1),
     moduleSlots: moduleSlotsAt(level, prestige),
     label: describeGrowth(level, prestige),
   };

@@ -967,6 +967,50 @@ rather than from the file, so rebalancing a chassis does not leave old saves
 carrying old numbers, and a component this build has never heard of is dropped
 rather than resurrected.
 
+## The crew: drift, links, perks and injury
+
+The player's avatar has no statistics and never will. Everything that makes one
+sortie different from another comes from the two people in the Conn-Pod, which
+is where the character building lives.
+
+`src/data/pilots.ts` is who somebody is: specialisms, stability, skill,
+preferred chassis roles, compatibility tags, a drawback with a structured
+trigger, a signature perk with ranks, injury resistance and a dialogue profile.
+`src/pilots/crew.ts` is how they are: status, recent stress, injuries carried,
+one link track per pair, and the ids of sorties already paid out. It is the
+roster's shape applied to people, deliberately, and like the roster it holds no
+Babylon object, no DOM node and no wall clock.
+
+**Drift** is one function, `assessDrift(first, second, context)`. Context is
+entirely optional, so the two-argument call every earlier milestone makes still
+answers exactly what it used to. What it adds is everything outside the two
+people: what the machine is and what state it is in, the weather, the length of
+the approach, the link level, recent stress and carried injuries. It returns the
+strength, the effectiveness, every factor that moved the number, and both
+pilots' drawbacks with whether each is biting.
+
+**Drawbacks** are evaluated from a table of one function per trigger kind rather
+than a switch, so adding a trigger is a row plus a union variant. Every drawback
+is reported whether or not it fires, and the planner shows all of them before
+launch: a drawback the player only learns about from the result is a trap.
+
+**Perks** produce named effects from a fixed vocabulary. The five machine axes
+reach the fight through the same `MachineGrowth` object that levels, passives and
+modules use, as `crewBonus`; the other three, salvage, samples and repair hours,
+belong to the sortie's own ledger. `poise` was added to growth for this: levels
+never move it, and a pair who brace before an exchange do.
+
+**Links** grow only from things the player did: a sortie flown together, a clean
+result, drift training, and a conversation off duty. The cheap sources are capped
+per day, so a relationship is built rather than farmed. A link belongs to the
+pair and is written to both records in one call, so the two can never disagree.
+
+**Injuries** are nonlethal by construction. The worst outcome in the table is
+three weeks of recovery, and most of them leave somebody able to fly badly rather
+than unable to fly, which is what makes an injury a decision. Treatment shortens
+a recovery and can never remove it. The draw is seeded from the mission id and
+the pilot, so a reload cannot reroll who got hurt.
+
 ## Progression: levels, passives, modules and prestige
 
 `src/jaegers/progression.ts` is pure arithmetic over plain numbers. No RNG, no

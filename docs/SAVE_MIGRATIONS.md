@@ -16,10 +16,11 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 10`
+- `ROOT_SAVE_VERSION = 11`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
+- `CREW_SCHEMA_VERSION = 1`
 
 ## Version history
 
@@ -36,6 +37,7 @@ migration, or the reverse.
 | 8       | Adds the `director` section                                     | Escalation, breach pressure, per-region threat and cooldown, and every live incident.                                                                                                                                                                    |
 | 9       | Adds the `mission` section                                      | The sortie in progress, or null when nobody is out.                                                                                                                                                                                                      |
 | 10      | Adds the `market` section                                       | Money, salvage, research samples, standing with each yard, which offers have been signed, what is on order, and where the rotation is.                                                                                                                   |
+| 11      | Adds the `crew` section                                         | Per pilot: status, stress, injuries carried, the link tracks built with everybody they have flown with, and the ids of sorties already paid out.                                                                                                         |
 
 ## Detection
 
@@ -200,6 +202,28 @@ facility grammar.
 One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
+
+## Version 10 to 11: the people (Milestone 20)
+
+Version 11 adds a `crew` section: one record per pilot carrying their status,
+recent stress, the injuries they are carrying with days left on each, one link
+track per person they have flown with, and the ids of sorties already paid out.
+
+A version 10 save has none of that, because pilots were a table to be read rather
+than people with a history. Every such file comes back with a crew who are all
+fit, unstressed and strangers to each other, which is the only honest reading of
+a file that never recorded otherwise.
+
+The settled-mission list starts empty on migration. That is safe because it only
+ever prevents double payment, and a file written before this existed has no
+mission result waiting to be applied.
+
+Four rules the restore enforces rather than trusts. A link level is recomputed
+from the experience that earned it, so an edited level does not survive. An
+injury this build no longer ships is dropped rather than resurrected. A link to
+somebody who is not on the roster any more is forgotten. And nobody comes back
+mid-sortie: a pilot saved as deployed loads as ready, because a fight is not
+saved.
 
 ## Milestone 19 does not move the version
 

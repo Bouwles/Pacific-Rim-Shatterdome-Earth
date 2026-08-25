@@ -677,6 +677,58 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-26, Milestone 20
+
+**The player has no statistics, and the crew is the character sheet.** Nothing
+was added to the on-foot avatar. Every difference between two sorties in the same
+machine comes from the two people in the Conn-Pod, which is the only place a
+build decision lives.
+
+**Drift takes an optional context, so the old call still means what it meant.**
+`assessDrift(a, b)` answers exactly what it answered before this milestone
+existed; `assessDrift(a, b, context)` adds the machine, the weather, the
+approach, the link and what they are carrying. Every earlier caller and test
+kept working unchanged, which is what made extending it safe rather than
+replacing it.
+
+**Drawback triggers are a union with one evaluator each, in a table.** Adding a
+condition is a variant plus a row. The alternative, a switch inside the drift
+calculation, would have put five unrelated rules in the one function everything
+else depends on.
+
+**Every drawback is reported whether or not it fires.** The planner shows both
+pilots' drawbacks before the Deploy button, marked by whether they apply today. A
+drawback the player only discovers from the result is a trap rather than a
+decision, and a system built on hidden downsides teaches people not to trust the
+readiness number at all.
+
+**Perks speak a fixed vocabulary of eight named effects.** Five are machine axes
+and ride the same growth object levels, passives and modules use; three belong to
+the sortie's ledger. A perk cannot promise something nothing reads, and the
+registry refuses one that tries.
+
+**`poise` was added to growth for the crew specifically.** No level, rank,
+passive or module moves it. It exists so that a pair who brace before an exchange
+change something about the machine that the machine itself cannot buy.
+
+**A link belongs to the pair and is written to both sides at once.** Storing it
+per person and hoping the two agree is the same class of bug as storing a level
+beside the experience that earned it, which the previous milestone already had to
+avoid.
+
+**One mission result can never be banked twice, and the guard is saved.** The
+crew keeps the ids of settled missions and refuses a repeat in words. Because the
+list is in the save, a reload cannot pay a sortie a second time either.
+
+**Injuries are nonlethal by construction, not by tuning.** The table's worst
+entry is three weeks of recovery. Most leave somebody able to fly badly rather
+than unable to fly, because an injury that only removes a name from a list is a
+delay, and one that changes who is worth sending is a decision.
+
+**Injury draws are seeded from the mission id and the pilot.** Who got hurt on a
+given sortie is the same in every session of the same campaign, and reloading
+cannot reroll it, which is the same rule the market board follows.
+
 ## 2026-08-25, Milestone 19
 
 **Growth is multipliers on numbers that already exist.** Everything progression

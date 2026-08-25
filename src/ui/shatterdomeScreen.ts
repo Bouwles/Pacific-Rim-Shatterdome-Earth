@@ -78,6 +78,8 @@ export interface BerthPanelState {
   readonly scars: number;
   /** Levels, rank, passives, modules and goals. Null for an empty berth. */
   readonly progression: ProgressionPanelState | null;
+  /** Who flies it, and what that is worth. Null for an empty berth. */
+  readonly crew: CrewPanelState | null;
   /** The work order, or null when the machine needs nothing. */
   readonly workOrder: {
     readonly summary: string;
@@ -113,6 +115,46 @@ export interface ModuleRow {
   readonly stored: boolean;
   /** Null when it can be fitted; otherwise why it cannot. */
   readonly refusal: string | null;
+}
+
+/** One person, as the Conn-Pod roster shows them. */
+export interface CrewRow {
+  readonly pilotId: string;
+  readonly name: string;
+  readonly callsign: string;
+  /** Assigned to this machine right now. */
+  readonly assigned: boolean;
+  /** Level of the link with the other assigned pilot. */
+  readonly linkLevel: number;
+  /**
+   * How far into the next level that link is, as "banked of needed".
+   *
+   * Shown because a conversation is worth a fraction of a level: without this
+   * the panel reads as though talking to somebody did nothing at all.
+   */
+  readonly linkProgress: string;
+  /** Status, stress and anything they are carrying, in one line. */
+  readonly condition: string;
+  /** What their perk currently does, or what it is waiting for. */
+  readonly perk: string;
+  /** Their drawback, and whether it applies to this machine. */
+  readonly drawback: string;
+  readonly drawbackFiring: boolean;
+  /** Null when they can be assigned; otherwise why not. */
+  readonly refusal: string | null;
+  /** Ids of untreated injuries, so the bay can be offered. */
+  readonly treatable: readonly string[];
+}
+
+/** Who is in the Conn-Pod, and everything about changing that. */
+export interface CrewPanelState {
+  /** The pair, and what they are worth together in this machine. */
+  readonly summary: string;
+  /** Each term that moved the drift number. */
+  readonly factors: readonly string[];
+  readonly rows: readonly CrewRow[];
+  /** The last thing anybody said. */
+  readonly note: string | null;
 }
 
 /** Everything the machine has earned, for the berth. */
@@ -245,6 +287,14 @@ export interface ShatterdomeScreenCallbacks {
   readonly onRemoveModule: (jaegerId: string, moduleId: string) => void;
   /** Resets the machine to level one for a permanent rank. */
   readonly onPrestige: (jaegerId: string) => void;
+  /** Puts this pilot in the Conn-Pod, taking whoever was there out. */
+  readonly onAssignPilot: (pilotId: string) => void;
+  /** A word off duty. Builds the link slowly, and is capped per day. */
+  readonly onTalkToPilot: (pilotId: string) => void;
+  /** Sends somebody to the medical bay for an injury they are carrying. */
+  readonly onTreatPilot: (pilotId: string, injuryId: string) => void;
+  /** Stands somebody down for a few days to clear the stress. */
+  readonly onStandDownPilot: (pilotId: string) => void;
   readonly onClosePanel: () => void;
   readonly onResume: () => void;
   readonly onOpenSaves: () => void;
@@ -445,6 +495,7 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     notes.dataset["field"] = "berth-notes";
     notes.textContent = panel.notes;
     element.appendChild(notes);
+    if (panel.crew) element.appendChild(buildCrew(panel.crew, callbacks));
     if (panel.progression && panel.jaegerId) {
       element.appendChild(buildProgression(panel.jaegerId, panel.progression, callbacks));
     }
@@ -524,6 +575,112 @@ function buildFacilityRow(row: FacilityRow, callbacks: ShatterdomeScreenCallback
 
   item.append(info, action);
   return item;
+}
+
+function buildCrew(state: CrewPanelState, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "sd-progression sd-crew";
+  section.dataset["field"] = "crew";
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Conn-Pod crew";
+  section.appendChild(heading);
+
+  const summary = document.createElement("p");
+  summary.className = "sd-facility-detail";
+  summary.dataset["field"] = "crew-summary";
+  section.appendChild(summary);
+
+  const factors = document.createElement("p");
+  factors.className = "sd-facility-benefit";
+  factors.dataset["field"] = "crew-factors";
+  section.appendChild(factors);
+
+  const list = document.createElement("ul");
+  list.className = "sd-market-list";
+  for (const row of state.rows) {
+    const item = document.createElement("li");
+    item.className = "sd-market-row";
+    item.dataset["pilot"] = row.pilotId;
+    item.dataset["assigned"] = String(row.assigned);
+
+    const head = document.createElement("div");
+    head.className = "sd-market-head";
+    const name = document.createElement("span");
+    name.className = "sd-market-name";
+    name.dataset["field"] = "crew-name";
+    const link = document.createElement("span");
+    link.className = "sd-market-price";
+    link.dataset["field"] = "crew-link";
+    head.append(name, link);
+
+    const condition = document.createElement("span");
+    condition.className = "sd-facility-detail";
+    condition.dataset["field"] = "crew-condition";
+    const perk = document.createElement("span");
+    perk.className = "sd-facility-detail";
+    perk.dataset["field"] = "crew-perk";
+    const drawback = document.createElement("span");
+    drawback.className = "sd-facility-benefit";
+    drawback.dataset["field"] = "crew-drawback";
+
+    const actions = document.createElement("div");
+    actions.className = "sd-passive-row";
+    const assign = button("Assign", "secondary-button", () => callbacks.onAssignPilot(row.pilotId));
+    assign.dataset["action"] = "assign-pilot";
+    const talk = button("Talk", "secondary-button", () => callbacks.onTalkToPilot(row.pilotId));
+    talk.dataset["action"] = "talk-pilot";
+    const rest = button("Stand down", "secondary-button", () => callbacks.onStandDownPilot(row.pilotId));
+    rest.dataset["action"] = "stand-down-pilot";
+    actions.append(assign, talk, rest);
+    for (const injuryId of row.treatable) {
+      const treat = button("Treat", "secondary-button", () => callbacks.onTreatPilot(row.pilotId, injuryId));
+      treat.dataset["action"] = "treat-pilot";
+      treat.dataset["injury"] = injuryId;
+      actions.appendChild(treat);
+    }
+
+    item.append(head, condition, perk, drawback, actions);
+    list.appendChild(item);
+  }
+  section.appendChild(list);
+
+  const note = document.createElement("p");
+  note.className = "sd-panel-notes";
+  note.dataset["field"] = "crew-note";
+  note.setAttribute("aria-live", "polite");
+  section.appendChild(note);
+
+  refreshCrew(section, state);
+  return section;
+}
+
+function refreshCrew(section: HTMLElement, state: CrewPanelState): void {
+  setField(section, "crew-summary", state.summary);
+  setField(section, "crew-factors", state.factors.join(" · "));
+  setField(section, "crew-note", state.note ?? "");
+  for (const row of state.rows) {
+    const item = section.querySelector<HTMLElement>(`[data-pilot="${row.pilotId}"]`);
+    if (!item) continue;
+    item.dataset["assigned"] = String(row.assigned);
+    setField(item, "crew-name", `${row.name} "${row.callsign}"${row.assigned ? " (flying)" : ""}`);
+    setField(
+      item,
+      "crew-link",
+      row.linkLevel > 0 ? `link ${row.linkLevel} · ${row.linkProgress}` : `no link · ${row.linkProgress}`,
+    );
+    setField(item, "crew-condition", row.condition);
+    setField(item, "crew-perk", row.perk);
+    setField(item, "crew-drawback", row.drawback);
+    const drawbackLine = item.querySelector<HTMLElement>('[data-field="crew-drawback"]');
+    if (drawbackLine) drawbackLine.dataset["firing"] = String(row.drawbackFiring);
+    const assign = item.querySelector<HTMLButtonElement>('[data-action="assign-pilot"]');
+    if (assign) {
+      assign.disabled = row.assigned || row.refusal !== null;
+      assign.title = row.refusal ?? `Put ${row.callsign} in the Conn-Pod`;
+      assign.dataset["refusal"] = row.refusal ?? "";
+    }
+  }
 }
 
 function buildProgression(
@@ -860,6 +1017,8 @@ function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState)
     setField(element, "berth-notes", panel.notes);
     const progression = element.querySelector<HTMLElement>('[data-field="progression"]');
     if (progression && panel.progression) refreshProgression(progression, panel.progression);
+    const crewSection = element.querySelector<HTMLElement>('[data-field="crew"]');
+    if (crewSection && panel.crew) refreshCrew(crewSection, panel.crew);
   } else {
     setField(element, "conn-pod-notes", panel.readiness);
   }

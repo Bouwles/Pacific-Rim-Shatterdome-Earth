@@ -182,6 +182,24 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Crew cost (Milestone 20)
+
+The crew costs nothing per frame. It is plain data with no scene objects, no
+listeners and no timers, and the only work it does is arithmetic when a panel
+opens, a sortie is reported, or days pass.
+
+| Thing                     | Budget                 | Why                                                                    |
+| ------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| Drift assessment          | Once per panel refresh | A handful of additions over two records, with no allocation per frame  |
+| Drawback evaluation       | Two per assessment     | One evaluator per pilot, looked up in a table rather than searched     |
+| Crew settlement           | Once per in-game day   | Driven by the same day count the market and the war use                |
+| Settled mission ids       | 500                    | Bounded, oldest dropped first, so a long campaign cannot grow the save |
+| Service history per pilot | 40 lines               | Bounded, oldest trimmed first                                          |
+| Crew section in a save    | Under 4 KB             | Five records, their links, injuries and history                        |
+
+The berth panel grows by one row per pilot and refreshes in place rather than
+rebuilding while it is open, the same as the rest of that panel.
+
 ## Progression cost (Milestone 19)
 
 Progression costs nothing per frame. Growth is a small object computed from a

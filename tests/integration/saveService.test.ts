@@ -154,6 +154,7 @@ describe("round trip through a kernel", () => {
 
     // No camera, no meshes, no materials, no UI state.
     expect(keys).toEqual([
+      "crew",
       "director",
       "market",
       "metadata",

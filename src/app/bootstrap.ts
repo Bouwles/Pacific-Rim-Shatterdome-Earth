@@ -72,12 +72,20 @@ import { CityView } from "../engine/cityView";
 import { RegionDestruction } from "../world/destruction";
 import { AttackDirector, type Resolution } from "../world/director";
 import { Market, ROTATION_DAYS } from "../world/market";
+import { Crew, LINK_EXPERIENCE_PER_LEVEL } from "../pilots/crew";
 import { LEVEL_CAP, levelFromExperience, nextUnlock } from "../jaegers/progression";
 import { createPassiveRegistry } from "../data/passives";
 import { createMasteryRegistry, masteryProgress } from "../data/masteries";
 import { createManufacturerRegistry } from "../data/manufacturers";
 import { createObjectiveRegistry } from "../missions/objectives";
-import { createPilotRegistry } from "../data/pilots";
+import {
+  createPilotRegistry,
+  perkEffects,
+  type PerkEffect,
+  type DriftContext,
+  assessDrift,
+  currentPerkRank,
+} from "../data/pilots";
 import {
   Mission,
   assessPlan,
@@ -129,6 +137,7 @@ import {
   type ShatterdomePanelState,
   type MarketOfferRow,
   type ProgressionPanelState,
+  type CrewPanelState,
   type BerthPanelState,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
@@ -437,6 +446,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               attackDirector.snapshot(),
               mission?.snapshot() ?? null,
               market.snapshot(),
+              crew.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -455,6 +465,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               attackDirector.snapshot(),
               mission?.snapshot() ?? null,
               market.snapshot(),
+              crew.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -479,6 +490,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             attackDirector.restore(result.document.director);
             // Money, standing, orders in transit and the board itself.
             market.restore(result.document.market);
+            // Links, stress, injuries, and which sorties have already paid out.
+            crew.restore(result.document.crew);
             marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
@@ -567,6 +580,87 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // with a mission attached, rather than a second game state.
   const objectiveRegistry = createObjectiveRegistry();
   const pilotRegistry = createPilotRegistry();
+  /**
+   * The people, between sorties.
+   *
+   * Seeded from the world seed like everything else authoritative, so who gets
+   * hurt on a given sortie is the same in every session of the same campaign.
+   */
+  const crew = new Crew({ pilots: pilotRegistry, seed: kernel?.seed ?? 0 });
+  /** The pair currently assigned. Changing it is what makes a machine feel different. */
+  let assignedPilots: readonly string[] = pilotRegistry
+    .all()
+    .slice(0, 2)
+    .map((pilot) => pilot.id);
+  /** The last thing the crew said about a link, an injury or a conversation. */
+  let crewNote: string | null = null;
+
+  /**
+   * Everything outside the two pilots that changes how they drift.
+   *
+   * Read from live state rather than passed around, so a drawback that depends
+   * on the machine or the weather sees the machine and the weather.
+   */
+  const driftContextFor = (
+    jaegerId: string | null,
+    pilotIds: readonly string[],
+    travelSeconds?: number,
+  ): DriftContext => {
+    const [firstId, secondId] = pilotIds;
+    const record = jaegerId ? roster.get(jaegerId) : undefined;
+    const sample = sampleEnvironment();
+    return {
+      machineRole: record ? jaegerRegistry.get(record.chassisId)?.role : undefined,
+      machineIntegrity: record ? structuralIntegrity(record.damage) : undefined,
+      night: sample.dayFraction < 0.25 || sample.dayFraction > 0.78,
+      weatherPenalty: sample.effects.rangedAccuracyPenalty,
+      travelSeconds,
+      linkLevel: firstId && secondId ? crew.linkLevel(firstId, secondId) : 0,
+      firstStress: firstId ? crew.get(firstId)?.stress : undefined,
+      secondStress: secondId ? crew.get(secondId)?.stress : undefined,
+      firstInjuryPenalty: firstId ? crew.injuryPenaltyOf(firstId) : undefined,
+      secondInjuryPenalty: secondId ? crew.injuryPenaltyOf(secondId) : undefined,
+      firstInjured: firstId ? (crew.get(firstId)?.injuries.length ?? 0) > 0 : false,
+      secondInjured: secondId ? (crew.get(secondId)?.injuries.length ?? 0) > 0 : false,
+    };
+  };
+
+  /**
+   * What the assigned pair are worth to the machine they are flying.
+   *
+   * Perk effects arrive as the same multipliers a passive or a module produces,
+   * so the fight reads one growth object and does not know a person was
+   * involved. The three that are not machine axes are handed to the sortie's
+   * ledger instead, where salvage, samples and repair hours already live.
+   */
+  const crewGrowthBonus = (): Partial<Record<PerkEffect, number>> => {
+    const [firstId, secondId] = assignedPilots;
+    if (!firstId || !secondId) return {};
+    return perkEffects(
+      pilotRegistry.get(firstId),
+      pilotRegistry.get(secondId),
+      crew.linkLevel(firstId, secondId),
+    );
+  };
+
+  /** The machine axes of the crew's perks, for the growth object. */
+  const crewMachineBonus = (): {
+    structure?: number;
+    damage?: number;
+    heat?: number;
+    mobility?: number;
+    poise?: number;
+  } => {
+    const effects = crewGrowthBonus();
+    return {
+      structure: effects.structure,
+      damage: effects.damage,
+      heat: effects.heat,
+      mobility: effects.mobility,
+      poise: effects.poise,
+    };
+  };
+
   /** The sortie in progress, or undefined when nobody is out. */
   let mission: Mission | undefined;
   /** Results waiting to be read, cleared when the player closes them. */
@@ -592,11 +686,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (!incident) return null;
     const machine = roster.all().find((record) => roster.canDeploy(record.jaegerId).ok);
     if (!machine) return null;
-    const pair = pilotRegistry.all().slice(0, 2);
-    if (pair.length < 2) return null;
+    // Whoever is assigned, provided they are cleared. A grounded pilot is
+    // replaced by the best available substitute rather than silently flown.
+    const pair = assignedPilots.map((id, index) => {
+      if (crew.canDeploy(id).ok) return id;
+      const partner = assignedPilots[index === 0 ? 1 : 0] ?? "";
+      return crew.substitutesFor(id, partner)[0]?.pilotId ?? id;
+    });
+    if (pair.length < 2 || pair[0] === pair[1]) return null;
     return {
       jaegerId: machine.jaegerId,
-      pilotIds: [pair[0]!.id, pair[1]!.id],
+      pilotIds: [pair[0]!, pair[1]!],
       weaponIds: weaponRegistry.all().map((weapon) => weapon.id),
       consumables: { "consumable.reload": 2 },
       allyIds: [],
@@ -632,6 +732,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       underwater: sample.water.submergedFraction > 0.5,
       forecastComposition: forecast.composition,
       forecastConfidence: forecast.warningConfidence,
+      driftContext: driftContextFor(plan.jaegerId, plan.pilotIds, distance / CARRIER_SPEED_MPS),
     });
   };
 
@@ -762,6 +863,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // The sortie pays into the same treasury the market spends from, once,
     // from the mission's own ledger.
     market.credit(results.funding, results.salvageTons, results.samples);
+
+    // And the people who flew it. Guarded by the mission's own id inside the
+    // crew, so asking twice does nothing the second time.
+    const crewEffect = crew.completeSortie({
+      missionId: active.id,
+      pilotIds: active.plan.pilotIds,
+      score: results.objectiveScore,
+      machineDamage: results.machineDamage,
+      won: results.outcome === "success" || results.outcome === "partial",
+      day: worldState.environment.clock.dayNumber,
+    });
+    for (const line of crewEffect.messages) crewNote = line;
+    for (const line of crewEffect.messages) progressionLog.unshift(line);
 
     // And it pays the machine that flew it. Experience and mastery counters both
     // come off the same ledger, in one place, so nothing is credited twice.
@@ -952,6 +1066,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       roster.all().map((record) => record.chassisId),
       elapsed,
     );
+    // Injuries heal and stress falls on the same clock the yards build on.
+    for (const line of crew.advanceDays(elapsed, day)) crewNote = line;
     for (const arrival of market.advanceDays(elapsed)) {
       const record = roster.acquire({
         chassisId: arrival.chassisId,
@@ -1439,7 +1555,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     // One growth object for the whole fight, read from the roster rather than
     // recomputed per hit.
-    const growth = roster.growthOf(session.jaeger.id);
+    const growth = roster.growthOf(session.jaeger.id, crewMachineBonus());
     combatArena = new CombatArena({
       moves: moveRegistry,
       space: spaceQuery(),
@@ -2094,6 +2210,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       },
     };
     roster.deploy(jaeger.id);
+    crew.deploy(assignedPilots);
     pilotSession = new PilotSession({
       jaeger: damagedJaeger,
       east: local.east,
@@ -2103,7 +2220,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       up: ground ?? worldState.playerPosition.altitudeMeters,
       headingDeg: 0,
       // Mobility growth reaches the controller the same way damage penalties do.
-      growth: roster.growthOf(jaeger.id),
+      growth: roster.growthOf(jaeger.id, crewMachineBonus()),
     });
 
     jaegerView = new JaegerView({
@@ -2547,6 +2664,20 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               predictedThreat: report.predictedThreat,
               refusals: report.refusals,
               warnings: report.warnings,
+              crew: (planFor(incident.id)?.pilotIds ?? []).map((id) => {
+                const pilot = pilotRegistry.get(id);
+                const record = crew.get(id);
+                const carrying = record && record.injuries.length > 0 ? ", hurt" : "";
+                return `${pilot?.callsign ?? id}${carrying}`;
+              }),
+              // Shown whether or not it is biting, because a drawback the player
+              // only learns about from the result is a trap, not a decision.
+              drawbacks: report.drawbacks.map((entry) => ({
+                text: entry.firing
+                  ? `${entry.pilotName}: ${entry.drawback.displayName}. ${entry.drawback.description}`
+                  : `${entry.pilotName}: ${entry.drawback.displayName} does not apply here.`,
+                firing: entry.firing,
+              })),
             };
           })(),
         };
@@ -3161,6 +3292,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       selected: active.state.selectedJaegerId === jaegerId,
       notes: repairNote ?? jaeger?.description ?? "This berth is empty.",
       progression: progressionPanelFor(jaegerId),
+      crew: crewPanelFor(jaegerId),
       ...berthRepairState(jaegerId),
     };
   };
@@ -3299,6 +3431,76 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         : forecast.refusal,
       note: progressionNote,
       log: [...progressionLog],
+    };
+  };
+
+  /**
+   * Who flies this machine, for its berth.
+   *
+   * Everything is read live from the crew and from the drift calculation the
+   * planner uses, so what is shown here and what the sortie gets cannot drift
+   * apart. Returns null for an empty berth.
+   */
+  const crewPanelFor = (jaegerId: string | null): CrewPanelState | null => {
+    if (!jaegerId) return null;
+    const record = roster.get(jaegerId);
+    if (!record) return null;
+
+    const [firstId, secondId] = assignedPilots;
+    const context = driftContextFor(jaegerId, assignedPilots);
+    const assessment = assessDrift(
+      pilotRegistry.get(firstId ?? ""),
+      pilotRegistry.get(secondId ?? ""),
+      context,
+    );
+    const linkLevel = firstId && secondId ? crew.linkLevel(firstId, secondId) : 0;
+
+    return {
+      summary:
+        `${assessment.summary} Effectiveness ${Math.round(assessment.effectiveness * 100)} percent` +
+        ` in a ${jaegerRegistry.get(record.chassisId)?.role ?? "machine"}.`,
+      factors: assessment.factors.map(
+        (factor) => `${factor.label} ${factor.delta >= 0 ? "+" : ""}${Math.round(factor.delta * 100)}`,
+      ),
+      rows: pilotRegistry.all().map((pilot) => {
+        const crewRecord = crew.get(pilot.id);
+        const assigned = assignedPilots.includes(pilot.id);
+        const clearance = crew.canDeploy(pilot.id);
+        const restrictions = crew.restrictionsOf(pilot.id);
+        const rank = currentPerkRank(pilot, assigned ? linkLevel : crew.linkLevel(pilot.id, firstId ?? ""));
+        const report = assessment.drawbacks.find((entry) => entry.pilotId === pilot.id);
+        return {
+          pilotId: pilot.id,
+          name: pilot.name,
+          callsign: pilot.callsign,
+          assigned,
+          linkLevel: assigned ? linkLevel : crew.linkLevel(pilot.id, firstId ?? ""),
+          linkProgress: (() => {
+            const partner = assigned ? (pilot.id === firstId ? secondId : firstId) : firstId;
+            const track = partner ? crew.linkTrack(pilot.id, partner) : undefined;
+            const banked = (track?.experience ?? 0) % LINK_EXPERIENCE_PER_LEVEL;
+            return `${banked} of ${LINK_EXPERIENCE_PER_LEVEL} to the next`;
+          })(),
+          condition:
+            `${crewRecord?.status ?? "ready"} · stress ${Math.round((crewRecord?.stress ?? 0) * 100)}%` +
+            (restrictions.length > 0 ? ` · ${restrictions.join(", ")}` : "") +
+            ` · ${crewRecord?.sorties ?? 0} sorties`,
+          perk: rank
+            ? `${pilot.perk.displayName}: ${rank.note}`
+            : `${pilot.perk.displayName} arrives at link ${pilot.perk.ranks[0]?.linkLevel ?? 1}.`,
+          drawback: report
+            ? report.firing
+              ? `${pilot.drawback.displayName}: applies here. ${pilot.drawback.description}`
+              : `${pilot.drawback.displayName}: does not apply here.`
+            : `${pilot.drawback.displayName}. ${pilot.drawback.description}`,
+          drawbackFiring: report?.firing === true,
+          refusal: assigned ? "Already in the Conn-Pod." : clearance.ok ? null : clearance.message,
+          treatable: (crewRecord?.injuries ?? [])
+            .filter((injury) => !injury.treated && injury.injuryId !== "rest")
+            .map((injury) => injury.injuryId),
+        };
+      }),
+      note: crewNote,
     };
   };
 
@@ -3615,6 +3817,43 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           worldState.environment.clock.dayNumber,
         ).message;
         reopenBerth(jaegerId);
+      },
+      onAssignPilot: (pilotId) => {
+        const clearance = crew.canDeploy(pilotId);
+        if (!clearance.ok) {
+          crewNote = clearance.message;
+        } else if (assignedPilots.includes(pilotId)) {
+          crewNote = "Already in the Conn-Pod.";
+        } else {
+          // The newest assignment takes the first seat and pushes the other
+          // along, so two clicks swap the whole pair rather than fighting over
+          // one seat.
+          const kept = assignedPilots.filter((id) => id !== pilotId)[0];
+          assignedPilots = kept ? [pilotId, kept] : [pilotId];
+          const partner = pilotRegistry.get(kept ?? "");
+          crewNote = `${pilotRegistry.get(pilotId)?.name ?? pilotId} takes the Conn-Pod${partner ? ` with ${partner.name}` : ""}.`;
+        }
+        refreshShatterdome();
+        if (interiorPanel?.kind === "berth" && interiorPanel.jaegerId) reopenBerth(interiorPanel.jaegerId);
+      },
+      onTalkToPilot: (pilotId) => {
+        const partner = assignedPilots.find((id) => id !== pilotId) ?? assignedPilots[0];
+        if (!partner || partner === pilotId) {
+          crewNote = "Nobody to talk to about.";
+        } else {
+          const day = worldState.environment.clock.dayNumber;
+          const result = crew.converse(pilotId, partner, day);
+          crewNote = result.ok ? `"${result.line}" ${result.message}` : `"${result.line}" ${result.message}`;
+        }
+        if (interiorPanel?.kind === "berth" && interiorPanel.jaegerId) reopenBerth(interiorPanel.jaegerId);
+      },
+      onTreatPilot: (pilotId, injuryId) => {
+        crewNote = crew.treat(pilotId, injuryId, worldState.environment.clock.dayNumber).message;
+        if (interiorPanel?.kind === "berth" && interiorPanel.jaegerId) reopenBerth(interiorPanel.jaegerId);
+      },
+      onStandDownPilot: (pilotId) => {
+        crewNote = crew.assignRecovery(pilotId, 3, worldState.environment.clock.dayNumber).message;
+        if (interiorPanel?.kind === "berth" && interiorPanel.jaegerId) reopenBerth(interiorPanel.jaegerId);
       },
       onPrestige: (jaegerId) => {
         progressionNote = roster.prestige(jaegerId, worldState.environment.clock.dayNumber).message;

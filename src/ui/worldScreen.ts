@@ -170,6 +170,15 @@ export interface AlertReadout {
     readonly predictedThreat: string;
     readonly refusals: readonly string[];
     readonly warnings: readonly string[];
+    /** Who is flying, so a pair can be told apart before they go. */
+    readonly crew: readonly string[];
+    /**
+     * Every drawback either pilot carries, whether or not it is biting today.
+     *
+     * Shown before deployment rather than discovered afterwards: a drawback the
+     * player only learns about from the result is a trap, not a decision.
+     */
+    readonly drawbacks: readonly { readonly text: string; readonly firing: boolean }[];
   } | null;
 }
 
@@ -882,6 +891,7 @@ export function renderWorldScreen(
               ? "No machine can be sent."
               : `Readiness ${readiness.percent}% · drift ${readiness.driftPercent}% · machine ${readiness.machinePercent}% · ` +
                 `${readiness.travelHours.toFixed(1)} h flight · carrier ${readiness.loadPercent}% loaded · ${readiness.weather}` +
+                (readiness.crew.length > 0 ? ` · crew ${readiness.crew.join(" and ")}` : "") +
                 (readiness.refusals.length > 0 ? ` · cannot go: ${readiness.refusals.join(" ")}` : "") +
                 (readiness.warnings.length > 0 ? ` · ${readiness.warnings.join(" ")}` : "");
 
@@ -890,6 +900,18 @@ export function renderWorldScreen(
           deploy.className = "secondary-button";
           deploy.dataset.action = "incident-deploy";
           deploy.textContent = "Deploy";
+          // Built here and appended with the rest of the row below: inserting it
+          // next to a node that is not in the document yet does nothing at all.
+          const drawbackList = document.createElement("ul");
+          drawbackList.className = "world-alert-drawbacks";
+          drawbackList.dataset.field = "alert-drawbacks";
+          for (const entry of readiness?.drawbacks ?? []) {
+            const line = document.createElement("li");
+            line.dataset.firing = String(entry.firing);
+            line.textContent = entry.text;
+            drawbackList.appendChild(line);
+          }
+          drawbackList.hidden = (readiness?.drawbacks.length ?? 0) === 0;
           deploy.disabled = readiness === null || readiness.refusals.length > 0;
           deploy.title = readiness?.predictedThreat ?? "";
           deploy.addEventListener("click", () => callbacks.onDeploy(alert.incidentId));
@@ -901,7 +923,7 @@ export function renderWorldScreen(
           ignore.textContent = "Stand down";
           ignore.addEventListener("click", () => callbacks.onResolveIncident(alert.incidentId, "ignored"));
 
-          item.append(headline, detail, forecast, ready, deploy, defend, ignore);
+          item.append(headline, detail, forecast, ready, drawbackList, deploy, defend, ignore);
           alertList.appendChild(item);
         }
 

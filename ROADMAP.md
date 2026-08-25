@@ -483,6 +483,28 @@ attack director, the berth panel and the bootstrap wiring.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1203), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 20 - Copilot roster, link levels, strengths, drawbacks and injury
+
+**Depends on:** Milestone 17 (the pilots and the planner), 19 (the growth object perks ride on).
+**Status:** done.
+**Scope:** pilot identity extended with preferred roles, compatibility tags, a drawback with a
+structured trigger, a signature perk with ranks, injury resistance and a dialogue profile; drift
+stability calculated from the machine, the traits, the link level, recent stress, injuries and
+situational modifiers, reporting every term and every drawback; link experience from deployments,
+compatible results, training and conversations, with the cheap sources capped per day; escalating perk
+ranks that reach the fight through the same growth object levels and modules use; and nonlethal
+injuries with treatment, restrictions, recovery assignments and substitutes. Created
+`src/pilots/crew.ts`, `src/data/injuries.ts`, `src/debug/crewScenario.ts`. Extended
+`src/data/pilots.ts`, `src/missions/mission.ts`, `src/jaegers/progression.ts`, `src/combat/arena.ts`,
+the save schema and migrations to version 11, the berth panel, the alert board and the bootstrap wiring.
+**Acceptance tests:**
+
+- Swapping copilots produces visible handling and tactical differences in the same Jaeger.
+- A drawback triggers only under documented conditions and is displayed before deployment.
+- Link and injury progress survive save and load and cannot advance twice from one mission result.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1273), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

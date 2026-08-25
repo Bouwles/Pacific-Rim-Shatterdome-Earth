@@ -185,7 +185,15 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - voluntary uncapped prestige on an asymptotic curve: about five percent at rank 1, forty at rank 10, and never reaching sixty however far it goes, with a forecast produced by the same function that applies it;
   - a catch-up grant so a machine bought into a veteran fleet arrives usable, which is safe precisely because the curve is asymptotic;
   - difficulty answered through the mutation budget rather than through creature health.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1203 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **Copilots as the character sheet**, managed at the berth in the Jaeger Bay:
+  - five pilots with preferred chassis roles, compatibility tags, a drawback with a structured trigger, a signature perk with ranks, injury resistance and a dialogue profile;
+  - drift stability computed from the machine, the weather, the approach, the link level, recent stress and carried injuries, returning every term that moved it;
+  - both pilots' drawbacks shown before deployment on the alert board, marked by whether they apply to that sortie;
+  - link experience from sorties, clean results, drift training and conversations, with the cheap sources capped per day, written to both sides of a pair at once;
+  - perk ranks reaching the fight through the same growth object levels, passives and modules use, plus a poise axis nothing else can move;
+  - nonlethal injuries with restrictions that let somebody fly badly rather than not at all, treatment that shortens and never removes a recovery, deliberate stand-downs, and substitutes ordered by who knows the remaining pilot best;
+  - one mission result banked exactly once, guarded by mission id, with the guard carried in the save.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1273 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -296,22 +304,25 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
 - A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. The pilot picker, the world panel and the berths still list chassis rows rather than owned machines, so a machine bought during a campaign has levels, a serial and a service record but no berth of its own to be inspected at. Progression reaches it through the roster; the interface does not yet.
 - Prestige has been verified by tests at ranks 0, 1, 10, 100, 1000 and 9007199254740991, and by hand only as far as the forecast, because reaching the cap in a live browser is about forty five sorties. The mechanism that applies it is the same function the forecast calls.
+- Copilot conversations, treatment and stand-downs all happen at the berth panel, because that is where the machine and its crew are already shown together. The Crew Quarters and the medical bay exist as rooms but have no terminals of their own yet.
+- The `marksman` chassis role is in the vocabulary and two pilots prefer it, but no shipped chassis uses it, so that half of their preference cannot apply until one does.
+- Dialogue is off-duty lines only. `onDeploy`, `onDamage` and `onVictory` are authored and validated but nothing plays them yet, because there is no radio system in a fight.
 - Manufacturer standing only moves when you buy. Missions produce a reputation figure that the war reads, but nothing yet connects a good sortie to a better price.
 
 ## Exact next task
 
-Milestone 20 has not been specified yet. The two things this build is most ready
-for, in the order they would unblock the most:
+Milestone 21 (requested): allied squad preparation, tactical orders, skills and
+personalities. AI-controlled Jaeger allies who develop over time and obey simple
+commands without micromanagement.
 
-**Owned machines through the whole interface.** The roster holds instances with
-their own ids, serials, levels and histories, and the berths, the pilot picker
-and the world panel still list chassis rows. Until that is closed, a machine
-bought during a campaign progresses but cannot be walked up to. `roster.all()`
-is the list they should read, and `roster.definition()` already resolves an
-instance id back to its chassis for everything downstream.
+The pieces it builds on exist. `DeploymentPlan.allyIds` is already a field and is
+always empty. The arena already resolves any number of fighters and already gives
+every one of them zones, a profile and a layout, so an ally is a fighter spec
+rather than a new kind of thing. The kaiju behaviour tree in `src/kaiju/` is the
+model for utility-based initiative, and the crew module added by Milestone 20 is
+the model for personalities that persist across deployments and are saved.
 
-**Copilots as people.** Pilots exist as a table with drift affinities and are
-read by the deployment planner, but they do not gain anything, are not assigned
-to a machine, and nothing remembers who flew what. The roster's service history
-is the obvious place for that to land, and `MissionResults.copilotLink` is
-already produced and currently only reported.
+The one real gap to close first: the berths, the pilot picker and the world panel
+still list chassis rows rather than owned machines, so a squad built from owned
+instances has nowhere to be displayed. `roster.all()` is the list they should
+read, and `roster.definition()` already resolves an instance id back to a chassis.

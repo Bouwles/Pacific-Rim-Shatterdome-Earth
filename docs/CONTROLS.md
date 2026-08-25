@@ -199,6 +199,28 @@ Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
 
+## The berth: the Conn-Pod crew (Milestone 20)
+
+The same berth panel. Above the machine's own progression is who flies it.
+
+| Control        | Effect                                                                     |
+| -------------- | -------------------------------------------------------------------------- |
+| **Assign**     | Puts this pilot in the Conn-Pod. The other seat keeps whoever was in it    |
+| **Talk**       | A word off duty. Builds the link slowly, twice a day at most               |
+| **Stand down** | Three days out of the rotation, which clears stress faster than not flying |
+| **Treat**      | Sends an injury to the medical bay, shortening the recovery                |
+
+The panel shows the pair's link as a percentage with every term that produced it,
+and one row per pilot: their status, stress and sorties, what their perk
+currently does or what link level it is waiting for, and their drawback with
+whether it applies to the machine in this berth. A pilot who cannot be assigned
+is greyed with the reason, whether that is an injury that grounds them or a
+stand-down they are part way through.
+
+Assignment carries to the alert board, where the readiness line names the crew
+and lists both pilots' drawbacks before the Deploy button, marked by whether each
+one applies to that sortie.
+
 ## The berth: service and progression (Milestone 19)
 
 Walk up to a berth in the Jaeger Bay and press **E**. Below the machine's damage

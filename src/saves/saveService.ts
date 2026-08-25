@@ -10,6 +10,7 @@ import { emptyRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { emptyDirectorSnapshot, type DirectorSnapshot } from "../world/director";
 import type { MissionSnapshot } from "../missions/mission";
 import { emptyMarketSnapshot, type MarketSnapshot } from "../world/market";
+import { emptyCrewSnapshot, type CrewSnapshot } from "../pilots/crew";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -57,6 +58,8 @@ export interface SaveRequest {
   readonly mission?: MissionSnapshot | null;
   /** Money, standing and the market board. Omitted by callers with no market. */
   readonly market?: MarketSnapshot;
+  /** The crew. Omitted by callers that have not built one. */
+  readonly crew?: CrewSnapshot;
 }
 
 /**
@@ -121,6 +124,8 @@ export class SaveService {
     const mission = request.mission ?? null;
     // A market always exists, even for a save written before anybody opened it.
     const market = request.market ?? emptyMarketSnapshot();
+    // And so does a crew, for the same reason.
+    const crew = request.crew ?? emptyCrewSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -141,6 +146,7 @@ export class SaveService {
       director,
       mission,
       market,
+      crew,
     };
   }
 

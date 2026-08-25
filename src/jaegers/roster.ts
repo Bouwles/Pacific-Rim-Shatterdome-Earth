@@ -308,14 +308,19 @@ export class Roster {
    * One object, produced in one place, handed to the three points where a
    * machine's numbers are already derived. Nothing else computes growth.
    */
-  growthOf(jaegerId: string): MachineGrowth {
+  growthOf(
+    jaegerId: string,
+    crewBonus?: Partial<Omit<MachineGrowth, "moduleSlots" | "label">>,
+  ): MachineGrowth {
     const record = this.records.get(jaegerId);
-    if (!record) return growthFor({ level: 1, prestige: 0 });
+    if (!record) return growthFor({ level: 1, prestige: 0, crewBonus });
     return growthFor({
       level: record.level,
       prestige: record.prestige,
       passiveBonus: passiveBonus(this.passives, record.passives),
       moduleBonus: moduleBonus(this.modules, record.modules),
+      // Who is flying it composes with what it is, through one object.
+      crewBonus,
     });
   }
 

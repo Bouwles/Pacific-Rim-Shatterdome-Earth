@@ -295,6 +295,36 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Pilot traits (Milestone 20)
+
+The five pilots from Milestone 17, now with everything that makes them different
+to fly with. Nobody is at home in every role and everybody has a drawback.
+
+| id            | Callsign   | At home in          | Tags                  | Drawback fires when                   | Perk                      | Tough |
+| ------------- | ---------- | ------------------- | --------------------- | ------------------------------------- | ------------------------- | ----- |
+| pilot.okonkwo | Anvil      | brawler, guardian   | veteran, stoic        | the machine is a marksman or siege    | Set your feet             | 0.72  |
+| pilot.varga   | Ledger     | marksman, siege     | methodical, veteran   | the machine is under 65 percent       | Thermal discipline        | 0.65  |
+| pilot.reyes   | Kingfisher | skirmisher, brawler | reckless, competitive | the partner is methodical or empathic | Answer on the turn        | 0.48  |
+| pilot.sato    | Quartz     | marksman, guardian  | methodical, empathic  | the approach is over 90 minutes       | Know what you are cutting | 0.60  |
+| pilot.ferrant | Tallow     | guardian, siege     | veteran, stoic        | either of them is already hurt        | Nobody else today         | 0.80  |
+
+Tag friction is symmetric and lives in one small table: reckless against
+methodical, competitive against empathic, stoic against empathic.
+
+## Injuries (Milestone 20)
+
+Six in `src/data/injuries.ts`. None of them is fatal, and most leave somebody
+able to fly badly rather than unable to fly, which is what makes one a decision.
+
+| id                        | Severity | Restriction   | Recovery | Treatment saves | Drift drag |
+| ------------------------- | -------- | ------------- | -------- | --------------- | ---------- |
+| injury.neural-strain      | minor    | unstable      | 4 days   | 2 days          | 0.08       |
+| injury.hand-burns         | minor    | no-gunnery    | 6 days   | 3 days          | 0.05       |
+| injury.drift-fatigue      | minor    | short-sorties | 5 days   | 1 day           | 0.06       |
+| injury.concussion         | serious  | grounded      | 9 days   | 3 days          | 0.18       |
+| injury.shoulder-tear      | serious  | no-melee      | 12 days  | 4 days          | 0.10       |
+| injury.spinal-compression | severe   | grounded      | 21 days  | 7 days          | 0.26       |
+
 ## Passives (Milestone 19)
 
 Ten in `src/data/passives.ts`, chosen one per tier at levels 4, 10, 18 and 26.

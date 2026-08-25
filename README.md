@@ -101,6 +101,13 @@ The project is built in numbered milestones. Everything listed here actually run
 - Eight kinds of mission: defend, intercept, pursue, rescue, contain, escort, research and salvage, and crises that come in stages where the next one opens as soon as the last is settled
 - Results that add up: damage, the repair hours the bay now owes, what the district lost, salvage, samples, civilians pulled out, reputation, what it did to your pilots, funding, and a replay of the seed and plan you flew. Every line says what produced it
 - Five ways for a sortie to end, all explained, including an abort that still credits what you had already done
+- Two pilots in every Conn-Pod, and which two is the decision the rest of the game hangs on. You have no statistics of your own. They have all of them
+- Five people who are actually different to fly with. Each is at home in some machines and wrong for others, gets on with some partners and grates on others, and has one thing that makes them difficult
+- A drawback each, and the game tells you exactly when it applies, before you commit. One walks a long range machine into knife fights. One flies the damage report instead of the fight when the machine is hurt. One argues at neural speed with anybody careful
+- A drift number that shows its working: the machine, the weather, the length of the flight, how well the pair know each other, how tired they are, and what they are carrying, each with what it was worth
+- Links that grow from flying together, coming home clean, drift training and talking to somebody off duty. Never from waiting on a menu
+- A signature perk each that grows with the link and changes what that person is. One braces the machine before an exchange. One runs the reactor properly. One steps off the line and answers. One knows where the tissue gives
+- Injuries that ground people without killing them. Nine days for a concussion, or a torn shoulder that lets them fly but not swing. Treat it in the medical bay, stand somebody down, or send the best substitute available
 - Machines that get better by being flown. Thirty levels, earned from sorties and from goals each machine works toward on its own, raising its own numbers rather than a separate score
 - Levels that unlock moves as they come: a cross, a forward smash, a parry, an uppercut, a guard break, and a finisher at the top
 - Four passive choices on the way up, and every one of them costs something. A reinforced frame takes more punishment and walks slower for good. The cost is on the option before you take it

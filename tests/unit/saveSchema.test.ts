@@ -6,6 +6,7 @@ import { emptyShatterdomeSnapshot } from "../../src/shatterdome/facilityState";
 import { emptyRosterSnapshot } from "../../src/jaegers/roster";
 import { emptyDirectorSnapshot } from "../../src/world/director";
 import { emptyMarketSnapshot } from "../../src/world/market";
+import { emptyCrewSnapshot } from "../../src/pilots/crew";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -43,6 +44,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     director: emptyDirectorSnapshot(),
     mission: null,
     market: emptyMarketSnapshot(),
+    crew: emptyCrewSnapshot(),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },

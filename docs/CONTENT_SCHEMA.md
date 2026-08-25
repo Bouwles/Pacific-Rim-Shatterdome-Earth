@@ -565,6 +565,54 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Crew schemas (Milestone 20)
+
+### `PilotDefinition` additions (src/data/pilots.ts)
+
+Added: `{ preferredRoles, tags, drawback, perk, injuryResistance, dialogue }`.
+Tags come from `COMPATIBILITY_TAGS`; `TAG_FRICTION` lists the pairs that grate.
+`injuryResistance` is within (0, 1].
+
+`PilotDrawback` is `{ id, displayName, trigger, stabilityCost, effectivenessCost,
+description }`. The id is prefixed `drawback.`, the costs must sum above zero and
+neither may exceed 0.4, and the description is required because it is shown
+before deployment. `DrawbackTrigger` is a union: `machine-role`,
+`machine-damaged`, `night`, `rough-weather`, `long-travel`, `partner-tag` and
+`carrying-injury`, each with exactly one evaluator in a table.
+
+`PilotPerk` is `{ id, displayName, ranks, description }` with ranks arriving at
+ascending link levels. A `PerkRank` is `{ linkLevel, effects, note }` where every
+effect names one of `PERK_EFFECTS`: poise, heat, damage, structure, mobility,
+salvage, samples, recovery. Ranks replace each other rather than stacking.
+
+`DialogueProfile` is `{ chattiness, onDeploy, onDamage, onVictory, offDuty }`,
+each list non-empty. Presentation reads it; nothing balances on it.
+
+### `InjuryDefinition` (src/data/injuries.ts)
+
+`{ id, displayName, severity, restriction, recoveryDays, treatmentDaysSaved,
+stabilityPenalty, stressFloor, description }`. Severity is minor, serious or
+severe. Restriction is one of `grounded`, `unstable`, `no-melee`, `no-gunnery`
+or `short-sorties`, a fixed vocabulary so a restriction can be checked rather
+than only described. Treatment must save at least a day and never the whole
+recovery.
+
+### `CrewSnapshot` (src/pilots/crew.ts)
+
+`{ schemaVersion, members[], settledMissions[] }`. A member is
+`{ pilotId, status, stress, sorties, injuries[], links, bankedToday, bankedDay,
+history[] }`. A `LinkTrack` is `{ partnerId, experience, level, sorties }`, and
+the level is recomputed from the experience on restore rather than trusted.
+`settledMissions` is the guard against one mission result being banked twice.
+`LINK_EXPERIENCE_PER_LEVEL` is 100 and `MAX_LINK_LEVEL` is 8.
+
+### `DriftContext` and `DriftAssessment`
+
+Context is every optional field outside the two people: machine role and
+integrity, night, weather penalty, travel seconds, link level, per-pilot stress
+and injury penalties. The assessment returns `{ strength, effectiveness, summary,
+refused, drawbacks[], factors[] }`. `DRIFT_REFUSAL_THRESHOLD` is 0.25.
+
 ## Progression schemas (Milestone 19)
 
 ### `PassiveDefinition` (src/data/passives.ts)
