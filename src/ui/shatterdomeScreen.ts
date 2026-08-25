@@ -76,6 +76,8 @@ export interface BerthPanelState {
   /** Systems currently offline because the component carrying them is gone. */
   readonly offline: readonly string[];
   readonly scars: number;
+  /** Levels, rank, passives, modules and goals. Null for an empty berth. */
+  readonly progression: ProgressionPanelState | null;
   /** The work order, or null when the machine needs nothing. */
   readonly workOrder: {
     readonly summary: string;
@@ -83,6 +85,64 @@ export interface BerthPanelState {
     readonly hours: number;
     readonly cost: number;
   } | null;
+}
+
+/** One long running goal, as the berth shows it. */
+export interface MasteryRow {
+  readonly name: string;
+  readonly detail: string;
+  readonly rank: number;
+  readonly maxRank: number;
+  /** 0 to 1 toward the next rank. */
+  readonly progress: number;
+}
+
+export interface PassiveOption {
+  readonly id: string;
+  readonly name: string;
+  readonly effect: string;
+  readonly tradeoff: string;
+}
+
+export interface ModuleRow {
+  readonly id: string;
+  readonly name: string;
+  readonly effect: string;
+  readonly tradeoff: string;
+  readonly fitted: boolean;
+  readonly stored: boolean;
+  /** Null when it can be fitted; otherwise why it cannot. */
+  readonly refusal: string | null;
+}
+
+/** Everything the machine has earned, for the berth. */
+export interface ProgressionPanelState {
+  readonly level: number;
+  readonly levelCap: number;
+  readonly prestige: number;
+  /** Experience into the current level and what the next one wants. */
+  readonly experienceInto: number;
+  readonly experienceNeeded: number;
+  /** What its levels and rank are worth, one line each. */
+  readonly growthLines: readonly string[];
+  /** What the next level opens, or null at the cap. */
+  readonly nextUnlock: string | null;
+  /** Moves this machine has earned the right to throw. */
+  readonly moves: readonly string[];
+  readonly passives: readonly string[];
+  /** A choice waiting to be made, or null. */
+  readonly passiveChoice: { readonly tier: number; readonly options: readonly PassiveOption[] } | null;
+  readonly canRespec: boolean;
+  readonly moduleSummary: string;
+  readonly modules: readonly ModuleRow[];
+  readonly masteries: readonly MasteryRow[];
+  /** Both sides of the prestige trade, always shown before it can be taken. */
+  readonly prestigeSummary: string;
+  readonly prestigeRefusal: string | null;
+  /** The last thing the bay said about any of this. */
+  readonly note: string | null;
+  /** What levelling has said recently, newest first. */
+  readonly log: readonly string[];
 }
 
 export interface ConnPodPanelState {
@@ -177,6 +237,14 @@ export interface ShatterdomeScreenCallbacks {
   readonly onRepair: (jaegerId: string) => void;
   /** Signs for one machine on the contracts board. */
   readonly onPurchase: (offerId: string) => void;
+  /** Takes a passive at the tier the machine has opened. */
+  readonly onChoosePassive: (jaegerId: string, passiveId: string) => void;
+  /** Gives every passive back, to choose again. */
+  readonly onRespec: (jaegerId: string) => void;
+  readonly onFitModule: (jaegerId: string, moduleId: string) => void;
+  readonly onRemoveModule: (jaegerId: string, moduleId: string) => void;
+  /** Resets the machine to level one for a permanent rank. */
+  readonly onPrestige: (jaegerId: string) => void;
   readonly onClosePanel: () => void;
   readonly onResume: () => void;
   readonly onOpenSaves: () => void;
@@ -377,6 +445,9 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     notes.dataset["field"] = "berth-notes";
     notes.textContent = panel.notes;
     element.appendChild(notes);
+    if (panel.progression && panel.jaegerId) {
+      element.appendChild(buildProgression(panel.jaegerId, panel.progression, callbacks));
+    }
     // The work order is the whole repair bay: what is broken, what it costs,
     // and a shift of work you can actually put into it.
     const work = button("Work a shift", "secondary-button", () => {
@@ -453,6 +524,178 @@ function buildFacilityRow(row: FacilityRow, callbacks: ShatterdomeScreenCallback
 
   item.append(info, action);
   return item;
+}
+
+function buildProgression(
+  jaegerId: string,
+  state: ProgressionPanelState,
+  callbacks: ShatterdomeScreenCallbacks,
+): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "sd-progression";
+  section.dataset["field"] = "progression";
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Service and progression";
+  section.appendChild(heading);
+
+  const summary = document.createElement("p");
+  summary.className = "sd-facility-detail";
+  summary.dataset["field"] = "progression-summary";
+  section.appendChild(summary);
+
+  const bar = document.createElement("span");
+  // Its own class rather than the band track: that one takes its width from the
+  // band grid it normally sits in, and on its own it collapses to nothing.
+  bar.className = "sd-experience-track";
+  const fill = document.createElement("span");
+  fill.className = "sd-band-fill";
+  fill.dataset["field"] = "progression-bar";
+  bar.appendChild(fill);
+  section.appendChild(bar);
+
+  const growth = document.createElement("p");
+  growth.className = "sd-facility-benefit";
+  growth.dataset["field"] = "progression-growth";
+  section.appendChild(growth);
+
+  // A choice, when one is waiting. Every option states what it costs.
+  const choice = document.createElement("div");
+  choice.className = "sd-passive-choice";
+  choice.dataset["field"] = "passive-choice";
+  section.appendChild(choice);
+  if (state.passiveChoice) {
+    const label = document.createElement("p");
+    label.className = "sd-facility-detail";
+    label.textContent = `Tier ${state.passiveChoice.tier} is open. One of these, permanently.`;
+    choice.appendChild(label);
+    for (const option of state.passiveChoice.options) {
+      const row = document.createElement("div");
+      row.className = "sd-passive-row";
+      const text = document.createElement("span");
+      text.className = "sd-facility-detail";
+      text.textContent = `${option.name}: ${option.effect} ${option.tradeoff}`;
+      const take = button("Take", "secondary-button", () => callbacks.onChoosePassive(jaegerId, option.id));
+      take.dataset["action"] = "choose-passive";
+      take.dataset["passive"] = option.id;
+      row.append(text, take);
+      choice.appendChild(row);
+    }
+  }
+
+  const passives = document.createElement("p");
+  passives.className = "sd-facility-detail";
+  passives.dataset["field"] = "progression-passives";
+  section.appendChild(passives);
+
+  const respec = button("Strip back and re-choose", "secondary-button", () => callbacks.onRespec(jaegerId));
+  respec.dataset["action"] = "respec";
+  respec.disabled = !state.canRespec;
+  section.appendChild(respec);
+
+  const moduleHeading = document.createElement("p");
+  moduleHeading.className = "sd-facility-detail";
+  moduleHeading.dataset["field"] = "module-summary";
+  section.appendChild(moduleHeading);
+
+  const modules = document.createElement("ul");
+  modules.className = "sd-market-list";
+  for (const row of state.modules) {
+    const item = document.createElement("li");
+    item.className = "sd-market-row";
+    item.dataset["module"] = row.id;
+    const name = document.createElement("span");
+    name.className = "sd-market-name";
+    name.textContent = `${row.name}${row.fitted ? " (fitted)" : row.stored ? " (in stores)" : ""}`;
+    const detail = document.createElement("span");
+    detail.className = "sd-facility-detail";
+    detail.textContent = `${row.effect} ${row.tradeoff}`;
+    const action = row.fitted
+      ? button("Remove", "secondary-button", () => callbacks.onRemoveModule(jaegerId, row.id))
+      : button("Fit", "secondary-button", () => callbacks.onFitModule(jaegerId, row.id));
+    action.dataset["action"] = row.fitted ? "remove-module" : "fit-module";
+    action.disabled = !row.fitted && row.refusal !== null;
+    action.title = row.refusal ?? "";
+    item.append(name, detail, action);
+    modules.appendChild(item);
+  }
+  section.appendChild(modules);
+
+  const masteryList = document.createElement("ul");
+  masteryList.className = "sd-market-terms";
+  for (const goal of state.masteries) {
+    const item = document.createElement("li");
+    item.textContent = `${goal.name}: rank ${goal.rank} of ${goal.maxRank}. ${goal.detail}`;
+    masteryList.appendChild(item);
+  }
+  section.appendChild(masteryList);
+
+  const prestige = document.createElement("p");
+  prestige.className = "sd-facility-benefit";
+  prestige.dataset["field"] = "prestige-summary";
+  section.appendChild(prestige);
+
+  const prestigeButton = button("Prestige", "secondary-button", () => callbacks.onPrestige(jaegerId));
+  prestigeButton.dataset["action"] = "prestige";
+  prestigeButton.disabled = state.prestigeRefusal !== null;
+  prestigeButton.title = state.prestigeRefusal ?? "";
+  section.appendChild(prestigeButton);
+
+  const note = document.createElement("p");
+  note.className = "sd-panel-notes";
+  note.dataset["field"] = "progression-note";
+  note.setAttribute("aria-live", "polite");
+  section.appendChild(note);
+
+  const log = document.createElement("ul");
+  log.className = "sd-market-orders";
+  log.dataset["field"] = "progression-log";
+  section.appendChild(log);
+
+  refreshProgression(section, state);
+  return section;
+}
+
+function refreshProgression(section: HTMLElement, state: ProgressionPanelState): void {
+  setField(
+    section,
+    "progression-summary",
+    `Level ${state.level} of ${state.levelCap}` +
+      (state.prestige > 0 ? ` · prestige ${state.prestige}` : "") +
+      (state.experienceNeeded > 0
+        ? ` · ${Math.round(state.experienceInto)} of ${Math.round(state.experienceNeeded)} to the next`
+        : " · at the cap"),
+  );
+  const bar = section.querySelector<HTMLElement>('[data-field="progression-bar"]');
+  if (bar) {
+    const fraction =
+      state.experienceNeeded > 0 ? Math.min(1, state.experienceInto / state.experienceNeeded) : 1;
+    bar.style.left = "0%";
+    bar.style.width = `${Math.max(2, Math.round(fraction * 100))}%`;
+  }
+  setField(
+    section,
+    "progression-growth",
+    `${state.growthLines.join(" · ")}${state.nextUnlock ? ` · Next: ${state.nextUnlock}` : ""}`,
+  );
+  setField(
+    section,
+    "progression-passives",
+    state.passives.length === 0 ? "No passives chosen." : `Passives: ${state.passives.join(", ")}`,
+  );
+  setField(section, "module-summary", state.moduleSummary);
+  setField(section, "prestige-summary", state.prestigeSummary);
+  setField(section, "progression-note", state.note ?? "");
+  const log = section.querySelector<HTMLElement>('[data-field="progression-log"]');
+  if (log) {
+    log.replaceChildren(
+      ...state.log.map((line) => {
+        const item = document.createElement("li");
+        item.textContent = line;
+        return item;
+      }),
+    );
+  }
 }
 
 function buildOfferRow(row: MarketOfferRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
@@ -613,8 +856,13 @@ function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState)
 
   const fields = panel.kind === "berth" ? berthFields(panel) : connPodFields(panel);
   for (const [key, value] of fields) setField(element, key, value);
-  if (panel.kind === "berth") setField(element, "berth-notes", panel.notes);
-  else setField(element, "conn-pod-notes", panel.readiness);
+  if (panel.kind === "berth") {
+    setField(element, "berth-notes", panel.notes);
+    const progression = element.querySelector<HTMLElement>('[data-field="progression"]');
+    if (progression && panel.progression) refreshProgression(progression, panel.progression);
+  } else {
+    setField(element, "conn-pod-notes", panel.readiness);
+  }
 }
 
 function berthFields(panel: BerthPanelState): Array<[string, string]> {

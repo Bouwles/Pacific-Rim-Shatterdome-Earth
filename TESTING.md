@@ -263,6 +263,35 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
 
+## Milestone 19 acceptance evidence
+
+Measured on WebGPU at seed 20260825 on High, in the browser by hand and in the
+unit and integration suites.
+
+| Acceptance item                                              | Evidence                                                                                                                                                       |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Levels come from playing and raise the machine's own numbers | Live: one aborted sortie took a fresh machine to level 3, two more to level 7, with growth reading 1.21x structure and the log naming each move unlocked       |
+| Levels unlock moves, passives and module slots               | Live: level 2 unlocked melee.light.cross, level 4 opened a tier 1 passive, level 6 opened the first module slot                                                |
+| A passive is a choice with a cost                            | Live: Reinforced frame took structure 1.06x to 1.17x and mobility 1.02x to 0.98x. The registry refuses any passive below tier four that gives nothing up       |
+| A module is bought, fitted and reversible                    | Live: Spine brace took structure 1.21x to 1.30x, filled the only slot, put the machine in the bay for six hours, and disabled every other Fit button           |
+| Prestige is voluntary, uncapped, and diminishing             | The multiplier is asymptotic: rank 1 is worth 4.6 percent, rank 10 forty, rank 1000 and rank a quadrillion within 0.02 of each other, and it never reaches 1.6 |
+| Extreme prestige does not destroy the game                   | A level 30 machine at infinite rank with the best passive and module stays under three times stock, checked at ranks 0, 1, 10, 100, 1000 and 9007199254740991  |
+| Forecasts match what actually happens                        | The forecast and the outcome come from the same function, asserted equal at four ranks, and the panel shows both sides before the button can be pressed        |
+| New acquisitions stay usable                                 | A machine bought into a rank 10 fleet arrives at rank 5, which is worth over ninety percent of rank 10 because the curve is asymptotic                         |
+| Difficulty scales through behaviour, not numbers             | Fleet strength raises the mutation budget only: same seed, same creatures, same health, more mutations                                                         |
+| Progression survives a save                                  | Round trip keeps level, rank, passives, modules and counters, recomputes the level from experience, and drops ids this build no longer ships                   |
+
+Three defects found by hand. The experience bar rendered at zero size, because it
+reused a class that takes its width from the band grid it normally sits in. A
+module refusal on a level 1 machine read "Every slot is full: 0 of 0" instead of
+saying when the first slot opens. And the level curve was calibrated against
+nothing: reaching the cap needed about two thousand sorties. It is now about
+forty five, and a test pins the shape against what a sortie is actually worth.
+
+Two defects the validators found on their own, in content I had just written: a
+tier 2 passive with no mechanical cost, and a module with no downside that did
+not require prestige. Both were data, and both were fixed as data.
+
 ## Milestone 18 acceptance evidence
 
 Measured on WebGPU at seed 20260825 on High, in the browser by hand and in the

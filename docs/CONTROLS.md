@@ -199,6 +199,28 @@ Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
 
+## The berth: service and progression (Milestone 19)
+
+Walk up to a berth in the Jaeger Bay and press **E**. Below the machine's damage
+and work order is everything it has earned.
+
+| Control                      | Effect                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| **Take** on a passive        | Takes that passive, permanently, at the tier the level opened                 |
+| **Strip back and re-choose** | Gives every passive back so they can be chosen again. Costs 12 bay hours each |
+| **Fit** on a module          | Buys and fits it. Costs money and bay hours                                   |
+| **Remove** on a module       | Takes it out to stores. Costs half the fitting time                           |
+| **Prestige**                 | At level 30 only. Resets the level for a permanent rank                       |
+
+The panel shows the level and how far into it the machine is, what its levels and
+rank are actually worth on four axes, what the next level opens, the passives
+taken, the modules fitted against the slots open, the six mastery goals with how
+far along each is, and what prestiging would do before it can be done.
+
+Every control that is refused says why in its tooltip: a module needing a level
+the machine has not reached, a slot that has not opened yet, a prestige below the
+cap, or bay work on a machine that is not in the bay.
+
 ## The contracts terminal (Milestone 18)
 
 The Contracts Office has to be built before it can be walked into: order it from

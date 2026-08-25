@@ -565,6 +565,46 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Progression schemas (Milestone 19)
+
+### `PassiveDefinition` (src/data/passives.ts)
+
+`{ id, displayName, tier, structure?, damage?, heat?, mobility?, tradeoff,
+description }`. Ids are prefixed `passive.`; tier is 1 to 4 and matches the level
+that opens the choice. Every multiplier is positive. A passive below tier four
+must have at least one multiplier under 1, because a passive that costs nothing
+is a reward rather than a decision, and the tradeoff has to be written out.
+
+### `ModuleDefinition` (src/data/modules.ts)
+
+`{ id, displayName, moduleClass, requiresLevel, requiresPrestige, structure?,
+damage?, heat?, mobility?, cost, fittingHours, tradeoff, description }`. Ids are
+prefixed `module.`; class is frame, reactor, cooling, targeting or field. Cost
+and fitting hours are both positive, so fitting one is a decision about money and
+about time in the bay. A module with no multiplier under 1 must require prestige,
+or a fresh machine could buy its way past one that earned its rank.
+
+### `MasteryDefinition` and `MasteryCounters` (src/data/masteries.ts)
+
+`{ id, displayName, counter, thresholds[], experiencePerRank, description }`.
+Thresholds ascend, and the counter names one field of `MasteryCounters`:
+`{ sorties, victories, intact, rescuedThousands, salvageTons, damageTaken }`.
+Counters move once per sortie, and a threshold pays once because the rank already
+paid is remembered per goal.
+
+### `MachineGrowth` and the curve (src/jaegers/progression.ts)
+
+`MachineGrowth` is `{ structure, damage, heat, mobility, moduleSlots, label }`,
+all multipliers except the slot count. `LEVEL_CAP` is 30,
+`BASE_LEVEL_EXPERIENCE` 60 and `LEVEL_CURVE_EXPONENT` 1.15, which puts a full
+climb at about forty thousand experience, or roughly forty five clean sorties.
+`PRESTIGE_ASYMPTOTE` is 0.6 and `PRESTIGE_HALF_RANK` 12.
+
+`PrestigeForecast` is `{ eligible, refusal, fromRank, toRank, before, after,
+netGain, levelsLost, nextLevelExperience, moduleSlotsAfter, summary }`, where
+`before` and `after` are full growth objects produced by the same function that
+applies the change.
+
 ## Economy schemas (Milestone 18)
 
 ### `ManufacturerDefinition` (src/data/manufacturers.ts)

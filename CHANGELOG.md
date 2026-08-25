@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-25, Milestone 19: Levels, passives, modules and prestige
+
+Machines get better by being flown now, and the ones you keep flying become yours.
+
+- Experience from every sortie, and from long running goals each machine works toward on its own: sorties survived, fights won cleanly, components never lost, civilians pulled out, salvage hauled home, and structure lost and rebuilt.
+- Thirty levels, and each one raises the machine's own numbers rather than adding a separate score. A full climb is about forty five sorties.
+- Levels unlock moves. A cross at level 2, a forward smash at 6, a parry at 8, an uppercut at 10, and so on up to a finisher at the cap.
+- Four passive choices on the way up, one at each of levels 4, 10, 18 and 26, from a table of ten. Every one of them costs something, and the cost is written on the option before you take it. A reinforced frame takes more punishment and walks slower for the rest of its life.
+- Changed your mind: strip every passive back and choose again. It is all or nothing and the bay wants twelve hours per choice, because a rebuild is a rebuild.
+- Module slots at levels 6, 14, 22 and 30, plus one for having prestiged at all and one more at rank 10. Nine modules to put in them, bought with real money and fitted with real bay time, and taking one out puts it in stores rather than throwing it away.
+- Prestige at the cap. The level goes back to one and the machine keeps a permanent rank. There is no limit on how many times.
+- Prestige is worth less every single time, on purpose. Rank 1 is about five percent. Rank 10 is forty. Rank 1000 and rank a quadrillion are worth almost exactly the same, and it never quite reaches sixty percent no matter how far it is taken. That is what lets it be uncapped without eventually deleting the game.
+- The panel tells you exactly what prestiging would do before you can press the button, and says plainly when a rank is not worth taking any more.
+- A machine bought late into a fleet of veterans arrives with veteran crew and salvaged parts rather than as a liability.
+- Kaiju answer a strong fleet by carrying more, not by being given bigger health bars. Same creatures, more mutations.
+- Nothing a machine has earned is lost to a prestige except the levels: modules go to stores, scars stay, and the service record keeps every line.
+
+Three problems found by hand. The experience bar drew at zero height because it borrowed a class that only has a size inside a different layout. A module refusal on a new machine read "every slot is full: 0 of 0" instead of saying when the first slot opens. And the level curve was calibrated against nothing at all: reaching the cap would have taken about two thousand sorties. It takes about forty five now, and a test holds it to that.
+
+Two more the game caught on itself: a passive that gave two bonuses and cost nothing, and a module with no downside that anybody could buy. Both were refused at startup by the rules that say a choice has to be a choice.
+
 ## 2026-08-25, Milestone 18: Jaeger roster registry, manufacturers and purchasing
 
 There is money now, and a place to spend it.

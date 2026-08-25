@@ -182,6 +182,25 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Progression cost (Milestone 19)
+
+Progression costs nothing per frame. Growth is a small object computed from a
+machine's level and rank, read once when a fight starts and once when a panel
+opens, never per hit and never per frame.
+
+| Thing                 | Budget                 | Why                                                                    |
+| --------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| Growth computation    | Once per fight         | Handed to the arena and the controller at construction, not recomputed |
+| Locomotion scaling    | Once per session       | A level does not change mid-fight, so the scaled profile is built once |
+| Damage scaling        | One multiply           | Applied where a packet already becomes damage                          |
+| Level from experience | At most 29 steps       | A loop over the level table, run on an award and on a panel open       |
+| Progression in a save | Under 1 KB per machine | Level, experience, rank, two id lists, six counters and paid ranks     |
+| Service history       | 40 lines               | Bounded, oldest trimmed first                                          |
+
+The one thing that does grow is the berth panel, which lists nine modules and six
+goals. It is DOM, it is only built when a berth is opened, and it refreshes in
+place rather than rebuilding while it is on screen.
+
 ## Economy cost (Milestone 18)
 
 The market has no render cost: it is a DOM panel over derived data, and it draws

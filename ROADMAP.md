@@ -463,6 +463,26 @@ and migrations to version 10, the Shatterdome interface and the bootstrap wiring
 - `npm run typecheck`, `lint`, `format:check`, `test` (1115), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 19 - Jaeger levels, moves, passives, modules and prestige
+
+**Depends on:** Milestone 13 (the roster), 17 (the sorties that pay for it), 18 (owned machines).
+**Status:** done.
+**Scope:** experience from sorties and from long running mastery goals; a level curve calibrated against
+what a sortie is worth; automatic stat growth applied at the three points a machine's numbers are already
+derived; move unlocks, passive choices with real costs, and module slots on a published schedule; an all
+or nothing respec; and voluntary uncapped prestige with an asymptotic multiplier, readable before and
+after forecasts, a catch-up grant for newly acquired machines, and difficulty scaled through the mutation
+budget rather than through raw numbers. Created `src/jaegers/progression.ts`, `src/data/passives.ts`,
+`src/data/modules.ts`, `src/data/masteries.ts`. Extended the roster, the arena, the pilot session, the
+attack director, the berth panel and the bootstrap wiring.
+**Acceptance tests:**
+
+- Levels raise stats and unlock moves, passives and module slots, and are earned by playing.
+- Prestige resets the level, has no hard cap, and is worth less every time without ever reaching its ceiling.
+- Extreme prestige neither destroys the challenge nor makes a new acquisition unusable.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1203), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

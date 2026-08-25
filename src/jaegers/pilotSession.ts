@@ -1,4 +1,5 @@
-import type { JaegerDefinition } from "../data/jaegers";
+import type { JaegerDefinition, LocomotionProfile } from "../data/jaegers";
+import { scaleLocomotion, type MachineGrowth } from "./progression";
 import type { EnvironmentEffects } from "../world/environment";
 import { InputBuffer } from "./inputBuffer";
 import {
@@ -48,6 +49,11 @@ export interface PilotSessionOptions {
   readonly comfort?: CameraComfort;
   /** Injected so tests can use a shorter window than the shipped one. */
   readonly buffer?: InputBuffer;
+  /**
+   * What this machine's levels and rank are worth. Omitted by anything that
+   * does not care, in which case the machine moves exactly as its chassis says.
+   */
+  readonly growth?: MachineGrowth;
 }
 
 export interface PilotUpdate {
@@ -73,6 +79,13 @@ export interface PilotFrame {
 }
 
 export class PilotSession {
+  /**
+   * The locomotion profile this machine actually moves on: its chassis numbers
+   * with mobility growth applied. Computed once, because a level does not
+   * change mid-fight and recomputing it per frame would be work for nothing.
+   */
+  private readonly profile: LocomotionProfile;
+
   private poseValue: JaegerPose;
   private cameraValue: CameraState;
   private comfortValue: CameraComfort;
@@ -85,6 +98,7 @@ export class PilotSession {
     this.cameraValue = initialCameraState("third-person", options.headingDeg ?? 0);
     this.comfortValue = options.comfort ?? DEFAULT_COMFORT;
     this.bufferValue = options.buffer ?? new InputBuffer();
+    this.profile = scaleLocomotion(options.jaeger.locomotion, options.growth?.mobility ?? 1);
   }
 
   get jaeger(): JaegerDefinition {
@@ -161,7 +175,7 @@ export class PilotSession {
   update(update: PilotUpdate): PilotFrame {
     this.lastInput = update.input;
     const step = stepJaeger(this.poseValue, update.input, update.deltaSeconds, {
-      profile: this.options.jaeger.locomotion,
+      profile: this.profile,
       ground: update.ground,
       waterHeightMeters: update.waterHeightMeters,
       effects: update.effects,
@@ -172,7 +186,7 @@ export class PilotSession {
 
     const cameraContext = {
       pose: this.poseValue,
-      profile: this.options.jaeger.locomotion,
+      profile: this.profile,
       comfort: this.comfortValue,
       impulse: step.cameraImpulse,
       obstruction: update.obstruction,

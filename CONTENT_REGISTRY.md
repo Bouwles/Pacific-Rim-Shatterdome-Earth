@@ -295,6 +295,54 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Passives (Milestone 19)
+
+Ten in `src/data/passives.ts`, chosen one per tier at levels 4, 10, 18 and 26.
+Every one below tier four costs something, which the registry enforces.
+
+| id                           | Tier | Gives                                  | Costs                              |
+| ---------------------------- | ---- | -------------------------------------- | ---------------------------------- |
+| passive.reinforced-frame     | 1    | structure 1.10                         | mobility 0.96                      |
+| passive.tuned-actuators      | 1    | mobility 1.09                          | structure 0.97                     |
+| passive.overpressure-coolant | 1    | heat 1.12                              | damage 0.97                        |
+| passive.weighted-knuckles    | 2    | damage 1.10                            | heat 0.95                          |
+| passive.ablative-plating     | 2    | structure 1.14                         | mobility 0.94                      |
+| passive.drift-rhythm         | 2    | damage 1.07, heat 1.07                 | mobility 0.95                      |
+| passive.reactor-tap          | 3    | damage 1.15                            | structure 0.95                     |
+| passive.load-bearing-spine   | 3    | structure 1.18                         | damage 0.96                        |
+| passive.veteran-hull         | 4    | structure 1.12, heat 1.08, damage 1.04 | nothing, and it is the last choice |
+| passive.finishing-instinct   | 4    | damage 1.18                            | structure 0.94                     |
+
+## Modules (Milestone 19)
+
+Nine in `src/data/modules.ts`. Slots open at levels 6, 14, 22 and 30, plus one for
+having prestiged at all and one more at rank 10, so six at the very top.
+
+| id                          | Class     | Needs       | Gives                                    | Costs          | Price |
+| --------------------------- | --------- | ----------- | ---------------------------------------- | -------------- | ----- |
+| module.spine-brace          | frame     | level 1     | structure 1.08                           | mobility 0.97  | 240k  |
+| module.impact-drivers       | frame     | level 6     | damage 1.09                              | heat 0.96      | 380k  |
+| module.heat-sink-array      | cooling   | level 6     | heat 1.15                                | mobility 0.98  | 420k  |
+| module.output-governor      | reactor   | level 14    | damage 1.12                              | structure 0.96 | 640k  |
+| module.gyro-stabiliser      | field     | level 14    | mobility 1.12                            | structure 0.97 | 560k  |
+| module.predictive-targeting | targeting | level 22    | damage 1.08, heat 1.05                   | mobility 0.96  | 720k  |
+| module.composite-shell      | frame     | level 22    | structure 1.16                           | mobility 0.94  | 810k  |
+| module.veterans-core        | reactor   | prestige 1  | 1.06 on three axes                       | nothing        | 1.2M  |
+| module.long-service-loom    | field     | prestige 10 | structure 1.10, heat 1.10, mobility 1.04 | nothing        | 2.4M  |
+
+## Mastery goals (Milestone 19)
+
+Six in `src/data/masteries.ts`, four ranks each, counted once per sortie.
+
+| id                 | Counts                            | Thresholds         | Pays per rank |
+| ------------------ | --------------------------------- | ------------------ | ------------- |
+| mastery.service    | sorties flown                     | 5, 20, 60, 150     | 450           |
+| mastery.record     | sorties that ended cleanly        | 3, 12, 40, 100     | 700           |
+| mastery.unbroken   | sorties with no component lost    | 3, 10, 30, 75      | 800           |
+| mastery.evacuation | thousands rescued                 | 40, 200, 800, 2500 | 550           |
+| mastery.salvor     | tons of salvage                   | 1k, 6k, 20k, 60k   | 450           |
+| mastery.punished   | machines' worth of structure lost | 3, 12, 35, 90      | 600           |
+
 ## Manufacturers (Milestone 18)
 
 Four original yards in `src/data/manufacturers.ts`. Adding a fifth is a row here

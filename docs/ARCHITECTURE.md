@@ -967,6 +967,59 @@ rather than from the file, so rebalancing a chassis does not leave old saves
 carrying old numbers, and a component this build has never heard of is dropped
 rather than resurrected.
 
+## Progression: levels, passives, modules and prestige
+
+`src/jaegers/progression.ts` is pure arithmetic over plain numbers. No RNG, no
+clock, no registries, which is what lets a forecast shown to the player and the
+value actually applied come from the same call.
+
+Everything it produces is one `MachineGrowth`: multipliers for structure,
+damage, heat and mobility, plus how many module slots are open. That object is
+applied at the three places a machine's numbers are already derived, so there is
+no second stat system anywhere:
+
+- `combatProfileFor(jaeger, growth)` scales heat dissipation, poise and guard;
+- `jaegerZones(jaeger, damage, components, growth)` scales component health,
+  raising the ceiling rather than healing what is already broken;
+- `scaleLocomotion(profile, growth.mobility)` scales walk, run and turn rates
+  only, never height, stride, step-up reach or slope limit, because a level
+  cannot make a machine taller.
+
+A fighter also carries `damageScale`, applied where a packet becomes damage, so
+a levelled machine hits harder through the same path a stock one does. Every one
+of these defaults to no change, so a caller that knows nothing about levels gets
+exactly the numbers it always got.
+
+**Experience** is one running total per machine, and the level is derived from it
+rather than stored beside it, so the two cannot disagree. It enters through
+`roster.award()` and nowhere else, fed by `MissionResults.experience` and by
+mastery ranks, both from the single mission report path.
+
+**Passives** (`src/data/passives.ts`) are permanent choices, one per tier at
+levels 4, 10, 18 and 26. The validator refuses any passive below tier four that
+does not give something up, so a passive is a decision rather than a reward.
+Respec is all or nothing and costs bay hours.
+
+**Modules** (`src/data/modules.ts`) are physical and reversible. Slots open at
+levels 6, 14, 22 and 30, plus one for having prestiged and one more at rank 10.
+The validator refuses a module with no downside unless it requires prestige, so
+nothing can be bought past a machine that earned its rank. Removing one puts it
+in stores rather than destroying it.
+
+**Prestige** resets the level and gives a permanent rank. The multiplier is
+`1 + A * rank / (rank + H)` with `A = 0.6` and `H = 12`: worth about five percent
+at rank one, forty at rank ten, and never reaching sixty however far it is
+climbed. That asymptote is what makes an uncapped ladder safe, and it is chosen
+by working backwards from the worst case: a level thirty machine at infinite rank
+carrying the best passive and module in the game stays under three times stock.
+
+Two consequences fall out of the same curve. **Catch-up** gives a newly acquired
+machine half the fleet's best rank, which is worth over ninety percent of it
+because the curve is asymptotic. And **difficulty** is fed the fleet's strength
+through `director.setFleetStrength()`, which raises the mutation budget only: a
+veteran fleet meets creatures carrying more, never creatures with quietly larger
+health bars.
+
 ## The economy: yards, contracts and ownership
 
 Three modules, and none of them knows about the others' internals.

@@ -101,6 +101,16 @@ The project is built in numbered milestones. Everything listed here actually run
 - Eight kinds of mission: defend, intercept, pursue, rescue, contain, escort, research and salvage, and crises that come in stages where the next one opens as soon as the last is settled
 - Results that add up: damage, the repair hours the bay now owes, what the district lost, salvage, samples, civilians pulled out, reputation, what it did to your pilots, funding, and a replay of the seed and plan you flew. Every line says what produced it
 - Five ways for a sortie to end, all explained, including an abort that still credits what you had already done
+- Machines that get better by being flown. Thirty levels, earned from sorties and from goals each machine works toward on its own, raising its own numbers rather than a separate score
+- Levels that unlock moves as they come: a cross, a forward smash, a parry, an uppercut, a guard break, and a finisher at the top
+- Four passive choices on the way up, and every one of them costs something. A reinforced frame takes more punishment and walks slower for good. The cost is on the option before you take it
+- A rebuild option if you want those choices back. All of them at once, and the bay wants the hours
+- Module slots that open as it climbs, and nine modules to put in them, bought with money and fitted with time. Take one out and it goes to stores, not the bin
+- Prestige at the cap, as many times as you like. The level resets, the rank is permanent, and there is no limit
+- A prestige ladder that is honest about itself. Rank 1 is worth about five percent, rank 10 about forty, and rank a thousand is worth almost exactly what rank a quadrillion is. The game tells you when a rank has stopped being worth taking
+- Everything shown before you commit: what the machine is worth now, what it would be worth after, what it costs, and what it opens next
+- Buy a machine late in a campaign and it arrives with veteran crew rather than as a liability
+- Kaiju that answer a strong fleet by carrying more, never by being handed bigger health bars
 - Money, and something to spend it on. Build the Contracts Office and its terminal becomes a board of machines for sale from four yards, each with its own home, its own speciality, its own idea of a fair price and its own contract terms
 - A board that rotates every fortnight and cannot be rerolled. It comes from your world seed, so reloading the page, reloading the save or coming back tomorrow shows you the same offers until the calendar turns
 - Previews that tell the truth. Four performance ranges drawn as bands instead of a power score, the tradeoff written out, the upkeep, the wait, and the terms in full. An offer you cannot afford is greyed out and tells you exactly how short you are

@@ -321,7 +321,9 @@ export class Mission {
     const reputation = Math.round((score - cityImpact) * 100) / 100;
     // A drift strengthens by coming home and weakens by being torn apart.
     const copilotLink = Math.round((score * 0.06 - machineDamage * 0.05) * 1000) / 1000;
-    const experience = Math.round(score * 120 + this.progress.kaijuDown * 80);
+    // What the machine learned. Scaled so a clean sortie is a real step up the
+    // level curve rather than a rounding error against it.
+    const experience = Math.round(score * 600 + this.progress.kaijuDown * 400);
     const funding = Math.round(
       score * 2_400_000 + this.progress.salvageTons * 900 + this.progress.samples * 120_000,
     );

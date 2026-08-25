@@ -201,6 +201,24 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Milestone 19 does not move the version
+
+`ROOT_SAVE_VERSION` stays at 10. Progression is carried inside the roster section
+that already exists: every machine gains a level, an experience total, a prestige
+rank, its chosen passives, its fitted and stored modules, its mastery counters
+and the ranks already paid out. Adding fields to a section is not a new shape, so
+a version 10 save written before this milestone still validates and still loads.
+
+What a save written before it gets is the honest reading of a file that never
+recorded any: level one, nothing banked, no rank, no passives, no modules and
+empty counters.
+
+Three rules the restore enforces rather than trusts. The level is recomputed from
+the experience that earned it rather than read from the file, so an edited level
+does not survive. A passive or module id this build no longer ships is dropped
+rather than resurrected. And a mastery rank is only honoured for a goal that
+still exists.
+
 ## Version 9 to 10: the market (Milestone 18)
 
 Version 10 adds a `market` section: funding, salvage and research samples, one

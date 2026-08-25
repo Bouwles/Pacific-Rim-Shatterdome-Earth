@@ -399,6 +399,21 @@ export class Market {
     return charged;
   }
 
+  /**
+   * Pays for something that is not a machine.
+   *
+   * Refuses rather than going negative, and says how short it was, so a caller
+   * never has to undo work it had already done.
+   */
+  spend(amount: number, reason: string): { readonly ok: boolean; readonly message: string } {
+    const cost = Math.max(0, Math.round(amount));
+    if (cost > this.treasury.funding) {
+      return { ok: false, message: `Cannot afford ${reason}: ${cost - this.treasury.funding} short.` };
+    }
+    this.treasury.funding -= cost;
+    return { ok: true, message: `Paid ${cost} for ${reason}.` };
+  }
+
   /** Pays in what a sortie earned. One call, one credit. */
   credit(funding: number, salvageTons = 0, researchSamples = 0): void {
     this.treasury.funding += Math.max(0, Math.round(funding));

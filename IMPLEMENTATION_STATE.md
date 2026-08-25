@@ -175,7 +175,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a roster of owned machines rather than chassis rows: own ids, own yard serials, own names, own service histories, and two of the same chassis are two machines;
   - upkeep charged per day on everything owned, settled from the clock's absolute day number so every time path charges exactly once;
   - an old Mark that stays worth flying: 2.9M against 6.6M, half the upkeep, slower and shorter ranged, and twenty upgrade steps against seven.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1115 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **Machines that get better by being flown**, at the berth in the Jaeger Bay:
+  - thirty levels earned from sortie experience and from six long running mastery goals, with the level derived from one running experience total rather than stored beside it;
+  - a curve calibrated against what a sortie actually pays: about forty five clean sorties to the cap, and a test that pins the shape so it cannot drift;
+  - stat growth applied at the three points a machine's numbers are already derived, so there is no second stat system and nothing downstream knows a machine has a level;
+  - move unlocks on a published schedule, four passive choices from a table of ten where everything below the top tier costs something, and module slots at four levels plus two more for prestige;
+  - nine modules bought with funding and fitted with bay hours, removable to stores rather than destroyed;
+  - an all or nothing respec that costs twelve bay hours per choice given back;
+  - voluntary uncapped prestige on an asymptotic curve: about five percent at rank 1, forty at rank 10, and never reaching sixty however far it goes, with a forecast produced by the same function that applies it;
+  - a catch-up grant so a machine bought into a veteran fleet arrives usable, which is safe precisely because the curve is asymptotic;
+  - difficulty answered through the mutation budget rather than through creature health.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1203 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -284,28 +294,24 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Shadow stability under a moving Jaeger is unverified, because no Jaeger exists in the world view. Only the mechanism that prevents jitter, local coordinates bounded at 2,000 m, is confirmed. Physics behaviour across a rebase is likewise unverified with no physics backend wired.
 - `src/world/**` uses trigonometry, which the kernel is forbidden from doing. Cross-engine bit-identical replay would not survive world movement becoming authoritative; see TECH_DECISIONS.md for the mitigation path.
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
-- A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. Tightening the starting fleet means the pilot picker, the world panel and the berths have to list owned machines instead of chassis rows, which is Milestone 19's problem because that is when instance ids stop being interchangeable with chassis ids.
+- A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. The pilot picker, the world panel and the berths still list chassis rows rather than owned machines, so a machine bought during a campaign has levels, a serial and a service record but no berth of its own to be inspected at. Progression reaches it through the roster; the interface does not yet.
+- Prestige has been verified by tests at ranks 0, 1, 10, 100, 1000 and 9007199254740991, and by hand only as far as the forecast, because reaching the cap in a live browser is about forty five sorties. The mechanism that applies it is the same function the forecast calls.
 - Manufacturer standing only moves when you buy. Missions produce a reputation figure that the war reads, but nothing yet connects a good sortie to a better price.
 
 ## Exact next task
 
-Milestone 19 (ROADMAP.md): per-machine progression. Levels, moves, passives, module
-slots and voluntary prestige, on top of the records the roster now owns.
+Milestone 20 has not been specified yet. The two things this build is most ready
+for, in the order they would unblock the most:
 
-The pieces it builds on all exist. A `MachineRecord` is already an owned instance
-with `level`, `experience` and `prestige` fields carried through the save, so the
-curve has somewhere to live without a parallel store. `data/jaegers.ts` already
-carries upgrade tracks with steps and written effects, which is the shape an
-unlock table wants. Missions already produce an `experience` figure through the
-one `report` path that pays everything else, so there is exactly one place for
-experience to come from. Extend the roster record and the chassis tracks rather
-than adding a progression store beside them, and keep difficulty in behaviour,
-mutations and objectives rather than in raw numbers.
+**Owned machines through the whole interface.** The roster holds instances with
+their own ids, serials, levels and histories, and the berths, the pilot picker
+and the world panel still list chassis rows. Until that is closed, a machine
+bought during a campaign progresses but cannot be walked up to. `roster.all()`
+is the list they should read, and `roster.definition()` already resolves an
+instance id back to its chassis for everything downstream.
 
-One thing to know before starting: instance ids are `chassisId#n` for anything
-bought during a campaign, but the pilot picker, the world panel and the berths
-still list chassis rows from `jaegerRegistry.all()` rather than owned machines.
-That works today because a campaign starts owning one of each. Per-machine
-progression is the point where it stops working, so those three lists want to
-read the roster, and `roster.definition()` already resolves an instance id back
-to its chassis for everything downstream.
+**Copilots as people.** Pilots exist as a table with drift affinities and are
+read by the deployment planner, but they do not gain anything, are not assigned
+to a machine, and nothing remembers who flew what. The roster's service history
+is the obvious place for that to land, and `MissionResults.copilotLink` is
+already produced and currently only reported.

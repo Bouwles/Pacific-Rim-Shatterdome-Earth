@@ -200,6 +200,24 @@ describe("buying", () => {
   });
 });
 
+describe("paying for something that is not a machine", () => {
+  it("takes the money and says what it was for", () => {
+    const instance = market(1, 1_000_000);
+    const result = instance.spend(240_000, "a spine brace");
+    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/spine brace/);
+    expect(instance.treasury.funding).toBe(760_000);
+  });
+
+  it("refuses rather than going negative, and says how short", () => {
+    const instance = market(1, 100);
+    const result = instance.spend(240_000, "a spine brace");
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/239900 short/);
+    expect(instance.treasury.funding).toBe(100);
+  });
+});
+
 describe("acquisition outside the market", () => {
   it("unlocks by milestone, research, rebuild or archive", () => {
     const instance = market();

@@ -49,6 +49,15 @@ export const ROLL_INTERVAL_TICKS = 1_800;
  */
 export const ABANDON_WINDOW_TICKS = 21_600;
 
+/**
+ * The most a strong fleet can add to what a creature carries.
+ *
+ * Deliberately smaller than the strength a fleet can reach, so climbing still
+ * pays: a veteran machine is meant to be ahead, just not so far ahead that the
+ * war stops being one.
+ */
+export const MAX_FLEET_STRENGTH = 1.6;
+
 export const INCIDENT_STATUSES = ["forecast", "inbound", "landed", "resolved", "expired"] as const;
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
 
@@ -201,6 +210,15 @@ export class AttackDirector {
   escalation = 0.1;
   breachPressure = 0.15;
   crisisFrequency: number;
+  /**
+   * How far ahead of a stock machine the fleet has climbed, as a multiplier.
+   *
+   * Set from the roster, and used for one thing only: how much a creature is
+   * allowed to carry. A veteran fleet meets kaiju with more mutations, not kaiju
+   * with secretly larger health bars, which is the difference between a harder
+   * fight and a longer one.
+   */
+  private fleetStrengthValue = 1;
   private nextRollTick = ROLL_INTERVAL_TICKS;
   private quietUntilTick = 0;
   private incidentSeq = 0;
@@ -250,6 +268,22 @@ export class AttackDirector {
 
   get unresolved(): number {
     return this.unresolvedCount;
+  }
+
+  /**
+   * Tells the war how strong the fleet has become.
+   *
+   * Bounded on the way in, so a machine at an absurd prestige rank cannot ask
+   * for an absurd creature. The multiplier itself is asymptotic, so the ceiling
+   * here is reached long before the ladder is.
+   */
+  setFleetStrength(multiplier: number): void {
+    if (!Number.isFinite(multiplier)) return;
+    this.fleetStrengthValue = Math.max(1, Math.min(MAX_FLEET_STRENGTH, multiplier));
+  }
+
+  get fleetStrength(): number {
+    return this.fleetStrengthValue;
   }
 
   /** The player's dial. Lower means fewer crises, never zero difficulty. */
@@ -372,7 +406,15 @@ export class AttackDirector {
 
     // Mutation budget is the difficulty curve, and it is visible: a harder
     // attack is a creature carrying more, not a creature with hidden numbers.
-    const budget = Math.max(0, Math.round(this.escalation * 8 + this.breachPressure * 4));
+    //
+    // A fleet that has levelled and prestiged its way up meets more of that,
+    // and this is the only place fleet strength touches the war. Nothing here
+    // inflates health, armour or damage: what changes is what a creature can
+    // do, which is answerable by playing better rather than only by grinding.
+    const budget = Math.max(
+      0,
+      Math.round((this.escalation * 8 + this.breachPressure * 4) * this.fleetStrengthValue),
+    );
     const count = this.escalation > 0.6 && rng() < 0.3 ? 2 : 1;
     const combatants: IncidentCombatant[] = [];
     let spent = 0;

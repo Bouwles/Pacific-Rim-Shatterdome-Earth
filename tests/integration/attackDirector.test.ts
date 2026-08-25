@@ -4,8 +4,9 @@ import {
   runDirectorScenario,
   DIRECTOR_SCENARIO_SEED,
 } from "../../src/debug/directorScenario";
-import { AttackDirector } from "../../src/world/director";
+import { AttackDirector, MAX_FLEET_STRENGTH } from "../../src/world/director";
 import { createDefaultRegionRegistry } from "../../src/data/regions";
+import { createKaijuRegistry } from "../../src/data/kaiju";
 import { SaveService } from "../../src/saves/saveService";
 import { MemorySaveRepository } from "../../src/saves/repository";
 import { SimulationKernel } from "../../src/simulation/kernel";
@@ -13,6 +14,7 @@ import { migrateSave } from "../../src/saves/migrations";
 import { ROOT_SAVE_VERSION, validateRootSave } from "../../src/saves/schema";
 
 const regions = createDefaultRegionRegistry();
+const kaijuRegistry = createKaijuRegistry();
 
 describe("the same seed and the same decisions", () => {
   it("produce the same alert sequence", () => {
@@ -74,6 +76,56 @@ describe("simultaneous crises", () => {
       // The forecast of doing nothing is a full explanation, not a verdict.
       expect(forecast.ignoredForecast.ledger.length).toBeGreaterThan(3);
     }
+  });
+});
+
+describe("a fleet that has climbed", () => {
+  it("meets creatures carrying more, not creatures with bigger numbers", () => {
+    const run = (strength: number) => {
+      const director = new AttackDirector({ regions, seed: 777 });
+      director.setFleetStrength(strength);
+      let tick = 0;
+      let budget = 0;
+      let health = 0;
+      let count = 0;
+      for (let step = 0; step < 3_000; step += 1) {
+        tick += 1_800;
+        for (const incident of director.advance(tick, 1_800)) {
+          budget += incident.mutationBudget;
+          for (const combatant of incident.combatants) {
+            const kaiju = kaijuRegistry.getOrThrow(combatant.kaijuId);
+            health += kaiju.zones.reduce((total, zone) => total + zone.health, 0);
+            count += 1;
+          }
+        }
+      }
+      return { budget, health: count > 0 ? health / count : 0, count };
+    };
+
+    const stock = run(1);
+    const veteran = run(1.6);
+    expect(stock.count).toBeGreaterThan(0);
+    // More to carry.
+    expect(veteran.budget).toBeGreaterThan(stock.budget);
+    // The creatures themselves are the same creatures. What little the mean
+    // moves is which archetypes came up, not any of them being made tougher.
+    expect(Math.abs(veteran.health / stock.health - 1)).toBeLessThan(0.02);
+    for (const kaiju of kaijuRegistry.all()) {
+      const total = kaiju.zones.reduce((sum, zone) => sum + zone.health, 0);
+      expect(total, kaiju.id).toBe(
+        kaijuRegistry.getOrThrow(kaiju.id).zones.reduce((sum, zone) => sum + zone.health, 0),
+      );
+    }
+  });
+
+  it("refuses to be told the fleet is impossibly strong", () => {
+    const director = new AttackDirector({ regions, seed: 1 });
+    director.setFleetStrength(1_000_000);
+    expect(director.fleetStrength).toBe(MAX_FLEET_STRENGTH);
+    director.setFleetStrength(0.1);
+    expect(director.fleetStrength).toBe(1);
+    director.setFleetStrength(Number.NaN);
+    expect(director.fleetStrength).toBe(1);
   });
 });
 

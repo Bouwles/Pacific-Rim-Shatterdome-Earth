@@ -72,6 +72,9 @@ import { CityView } from "../engine/cityView";
 import { RegionDestruction } from "../world/destruction";
 import { AttackDirector, type Resolution } from "../world/director";
 import { Market, ROTATION_DAYS } from "../world/market";
+import { LEVEL_CAP, levelFromExperience, nextUnlock } from "../jaegers/progression";
+import { createPassiveRegistry } from "../data/passives";
+import { createMasteryRegistry, masteryProgress } from "../data/masteries";
 import { createManufacturerRegistry } from "../data/manufacturers";
 import { createObjectiveRegistry } from "../missions/objectives";
 import { createPilotRegistry } from "../data/pilots";
@@ -125,6 +128,7 @@ import {
   type FacilityRow,
   type ShatterdomePanelState,
   type MarketOfferRow,
+  type ProgressionPanelState,
   type BerthPanelState,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
@@ -758,6 +762,31 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // The sortie pays into the same treasury the market spends from, once,
     // from the mission's own ledger.
     market.credit(results.funding, results.salvageTons, results.samples);
+
+    // And it pays the machine that flew it. Experience and mastery counters both
+    // come off the same ledger, in one place, so nothing is credited twice.
+    const flownBy = active.plan.jaegerId;
+    const day = worldState.environment.clock.dayNumber;
+    const record = roster.get(flownBy);
+    const componentLost = record
+      ? record.damage.components.some((component) => component.health <= 0)
+      : false;
+    const levelled = roster.award(flownBy, results.experience, day);
+    const mastered = roster.completeSortie(
+      flownBy,
+      {
+        won: results.outcome === "success" || results.outcome === "partial",
+        structureLost: results.machineDamage,
+        componentLost,
+        rescuedThousands: results.rescuedThousands,
+        salvageTons: results.salvageTons,
+      },
+      day,
+    );
+    for (const line of [...levelled.messages, ...mastered.messages]) {
+      progressionLog.unshift(`${record?.name ?? flownBy}: ${line}`);
+    }
+    while (progressionLog.length > 6) progressionLog.pop();
     directorNotice = results.summary;
     mission = undefined;
     refreshWorld();
@@ -769,6 +798,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // was elsewhere is still cleared when they arrive.
     worldState.advanceAlerts(ticks);
 
+    updateFleetStrength();
     advanceWar(ticks);
     // Upkeep and deliveries run on the same clock as the war.
     settleMarket();
@@ -870,6 +900,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // seeded from the world seed, so the offers a campaign sees are that
   // campaign's offers and reloading the page does not change them.
   const manufacturerRegistry = createManufacturerRegistry();
+  // Read by the berth so a panel can name a passive or a goal. The roster owns
+  // its own copies for the rules; these are only for words on a screen.
+  const passiveRegistry = createPassiveRegistry();
+  const masteryRegistry = createMasteryRegistry();
   const market = new Market({ seed: kernel?.seed ?? 0, manufacturers: manufacturerRegistry });
   /**
    * The last day the market was settled to.
@@ -881,6 +915,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let marketDay = 0;
   /** The last thing the contracts office said. Shown on its terminal. */
   let contractsNote: string | null = null;
+  /** What levelling has said recently, newest first. Bounded, and shown at the berth. */
+  const progressionLog: string[] = [];
+  /** The last thing the bay said about a passive, a module or a prestige. */
+  let progressionNote: string | null = null;
 
   /** Money as a person would say it. Millions to one decimal, thousands whole. */
   const formatMoney = (amount: number): string => {
@@ -888,6 +926,21 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}k`;
     return String(value);
+  };
+
+  /**
+   * Keeps the war's idea of the fleet up to date.
+   *
+   * Read from the machine that would actually go rather than from an average,
+   * because that is the one the fight is against.
+   */
+  const updateFleetStrength = (): void => {
+    let best = 1;
+    for (const record of roster.all()) {
+      const growth = roster.growthOf(record.jaegerId);
+      best = Math.max(best, (growth.structure + growth.damage) / 2);
+    }
+    attackDirector.setFleetStrength(best);
   };
 
   const settleMarket = (): void => {
@@ -1384,6 +1437,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const east = pose.east + Math.sin(yaw) * 120;
     const north = pose.north + Math.cos(yaw) * 120;
 
+    // One growth object for the whole fight, read from the roster rather than
+    // recomputed per hit.
+    const growth = roster.growthOf(session.jaeger.id);
     combatArena = new CombatArena({
       moves: moveRegistry,
       space: spaceQuery(),
@@ -1398,12 +1454,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           kind: "jaeger",
           displayName: session.jaeger.name,
           heightMeters: session.jaeger.locomotion.heightMeters,
-          profile: combatProfileFor(session.jaeger),
+          profile: combatProfileFor(session.jaeger, growth),
           pose: { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg },
-          // The machine walks into the fight carrying what it walked out with.
-          zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage),
+          // The machine walks into the fight carrying what it walked out with,
+          // and everything its levels and rank are worth.
+          zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage, undefined, growth),
           layout: jaegerLayout(session.jaeger),
           finisherThreshold: 0.2,
+          damageScale: growth.damage,
         },
         {
           id: "kaiju",
@@ -2044,6 +2102,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // it is not, rather than dropping the machine to sea level.
       up: ground ?? worldState.playerPosition.altitudeMeters,
       headingDeg: 0,
+      // Mobility growth reaches the controller the same way damage penalties do.
+      growth: roster.growthOf(jaeger.id),
     });
 
     jaegerView = new JaegerView({
@@ -2848,6 +2908,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           // and time the war spends happening.
           const regionId = worldState.activeRegionId;
           if (regionId) advanceRegionHours(regionId, hours);
+          updateFleetStrength();
           advanceWar(ticks);
           // Skipped time is still time the yards were building and the pad was
           // costing money.
@@ -3099,6 +3160,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       heightMeters: manifest?.nominalHeightMeters ?? 0,
       selected: active.state.selectedJaegerId === jaegerId,
       notes: repairNote ?? jaeger?.description ?? "This berth is empty.",
+      progression: progressionPanelFor(jaegerId),
       ...berthRepairState(jaegerId),
     };
   };
@@ -3155,6 +3217,95 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               cost: order.totalCost,
             },
     };
+  };
+
+  /**
+   * What a machine has earned, for its berth.
+   *
+   * Every figure is read from the roster and the progression maths rather than
+   * cached here, so the panel cannot drift from what the fight will actually
+   * use. Returns null for an empty berth.
+   */
+  const progressionPanelFor = (jaegerId: string | null): ProgressionPanelState | null => {
+    if (!jaegerId) return null;
+    const record = roster.get(jaegerId);
+    if (!record) return null;
+
+    const growth = roster.growthOf(jaegerId);
+    const state = levelFromExperience(record.experience, record.prestige);
+    const forecast = roster.prestigeForecast(jaegerId);
+    const choice = roster.passiveChoices(jaegerId);
+    const upcoming = nextUnlock(record.level);
+    const goals = masteryProgress(masteryRegistry, record.mastery);
+
+    return {
+      level: record.level,
+      levelCap: LEVEL_CAP,
+      prestige: record.prestige,
+      experienceInto: state.into,
+      experienceNeeded: state.needed,
+      growthLines: [
+        `Structure ${growth.structure.toFixed(2)}x`,
+        `Damage ${growth.damage.toFixed(2)}x`,
+        `Heat ${growth.heat.toFixed(2)}x`,
+        `Mobility ${growth.mobility.toFixed(2)}x`,
+      ],
+      nextUnlock: upcoming
+        ? `level ${upcoming.level}` +
+          (upcoming.moves.length > 0 ? `, ${upcoming.moves.join(" and ")}` : "") +
+          (upcoming.opensPassiveChoice ? ", a passive to choose" : "") +
+          (upcoming.opensModuleSlot ? ", a module slot" : "")
+        : null,
+      moves: roster.movesFor(jaegerId),
+      passives: record.passives.map((id) => passiveRegistry.get(id)?.displayName ?? id),
+      passiveChoice:
+        choice.tier === null
+          ? null
+          : {
+              tier: choice.tier,
+              options: choice.options.map((option) => ({
+                id: option.id,
+                name: option.displayName,
+                effect: option.description,
+                tradeoff: option.tradeoff,
+              })),
+            },
+      canRespec: record.passives.length > 0 && record.status === "ready",
+      moduleSummary: `Modules: ${record.modules.length} of ${growth.moduleSlots} slots filled.`,
+      modules: roster.moduleOptions(jaegerId).map((entry) => ({
+        id: entry.module.id,
+        name: entry.module.displayName,
+        effect: entry.module.description,
+        tradeoff: entry.module.tradeoff,
+        fitted: entry.fitted,
+        stored: entry.stored,
+        refusal: entry.refusal,
+      })),
+      masteries: goals.map((goal) => ({
+        name: goal.displayName,
+        detail:
+          goal.nextThreshold === null
+            ? `${goal.value} and finished.`
+            : `${goal.value} of ${goal.nextThreshold}. ${goal.description}`,
+        rank: goal.rank,
+        maxRank: goal.maxRank,
+        progress: goal.progress,
+      })),
+      prestigeSummary: forecast.summary,
+      prestigeRefusal: forecast.eligible
+        ? record.status === "ready"
+          ? null
+          : `It is ${describeStatus(record.status)}, and this is bay work.`
+        : forecast.refusal,
+      note: progressionNote,
+      log: [...progressionLog],
+    };
+  };
+
+  /** Reopens a berth on the machine standing in it, after something changed. */
+  const reopenBerth = (jaegerId: string): void => {
+    if (!session) return;
+    openInteriorPanel(berthPanelFor(session, jaegerId, roster.definition(jaegerId).name));
   };
 
   /**
@@ -3428,6 +3579,47 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
       },
       onPurchase: (offerId) => purchaseOffer(offerId),
+      onChoosePassive: (jaegerId, passiveId) => {
+        progressionNote = roster.choosePassive(
+          jaegerId,
+          passiveId,
+          worldState.environment.clock.dayNumber,
+        ).message;
+        reopenBerth(jaegerId);
+      },
+      onRespec: (jaegerId) => {
+        progressionNote = roster.respecPassives(jaegerId, worldState.environment.clock.dayNumber).message;
+        reopenBerth(jaegerId);
+      },
+      onFitModule: (jaegerId, moduleId) => {
+        const day = worldState.environment.clock.dayNumber;
+        const module = roster.moduleOptions(jaegerId).find((entry) => entry.module.id === moduleId);
+        // Money first, so a machine is never taken apart for something that
+        // then turns out to be unaffordable.
+        const paid = market.spend(module?.module.cost ?? 0, module?.module.displayName ?? moduleId);
+        if (!paid.ok) {
+          progressionNote = paid.message;
+          reopenBerth(jaegerId);
+          return;
+        }
+        const result = roster.fitModule(jaegerId, moduleId, day);
+        // The bay refusing after the money left would be theft, so it goes back.
+        if (!result.ok) market.credit(module?.module.cost ?? 0);
+        progressionNote = result.message;
+        reopenBerth(jaegerId);
+      },
+      onRemoveModule: (jaegerId, moduleId) => {
+        progressionNote = roster.removeModule(
+          jaegerId,
+          moduleId,
+          worldState.environment.clock.dayNumber,
+        ).message;
+        reopenBerth(jaegerId);
+      },
+      onPrestige: (jaegerId) => {
+        progressionNote = roster.prestige(jaegerId, worldState.environment.clock.dayNumber).message;
+        reopenBerth(jaegerId);
+      },
       onRepair: (jaegerId) => {
         // One shift of work. The crew takes the worst component first, which is
         // why a machine gets its legs back before its paint.

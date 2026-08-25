@@ -8,6 +8,7 @@ import {
 } from "../data/moves";
 import type { BodyZone, KaijuDefinition } from "../data/kaiju";
 import type { JaegerDefinition } from "../data/jaegers";
+import type { MachineGrowth } from "../jaegers/progression";
 import {
   componentHealth,
   createComponentRegistry,
@@ -118,16 +119,21 @@ export interface CombatProfile {
  * that decides how long a machine can keep swinging, so it is what heat
  * dissipation is built from.
  */
-export function combatProfileFor(jaeger: JaegerDefinition): CombatProfile {
+export function combatProfileFor(jaeger: JaegerDefinition, growth?: MachineGrowth): CombatProfile {
   const mass = jaeger.massBudget;
+  // Levels and rank arrive as multipliers on the numbers already derived here,
+  // rather than as a second set of numbers layered on top. A machine that has
+  // never been flown passes nothing and gets exactly what it always got.
+  const heat = growth?.heat ?? 1;
+  const structure = growth?.structure ?? 1;
   return {
     staminaMax: 100,
     staminaRegenPerSecond: 11,
     heatMax: 100,
-    heatDissipationPerSecond: 6 + mass.coolingCapacity * 14,
-    poiseCapacity: 90 + mass.massTons / 24,
-    guardMax: 120 + mass.massTons / 30,
-    guardRegenPerSecond: 7,
+    heatDissipationPerSecond: (6 + mass.coolingCapacity * 14) * heat,
+    poiseCapacity: (90 + mass.massTons / 24) * structure,
+    guardMax: (120 + mass.massTons / 30) * structure,
+    guardRegenPerSecond: 7 * heat,
     overheatFraction: 0.92,
   };
 }
@@ -176,6 +182,12 @@ export interface FighterSpec {
   readonly layout?: readonly ZonePlacement[];
   /** Fraction of core health at or below which a finisher becomes legal. */
   readonly finisherThreshold: number;
+  /**
+   * Multiplier on everything this fighter deals, from levels, rank, passives
+   * and modules. Defaults to one, so a fighter with no progression behind it is
+   * unaffected and every existing caller keeps its numbers.
+   */
+  readonly damageScale?: number;
 }
 
 interface ActiveAttack {
@@ -379,9 +391,13 @@ export function jaegerZones(
   jaeger: JaegerDefinition,
   damage?: JaegerDamageState,
   registry: ContentRegistry<ComponentDefinition> = createComponentRegistry(),
+  growth?: MachineGrowth,
 ): ZoneState[] {
   return registry.all().map((component) => {
-    const max = componentHealth(jaeger, component);
+    // Structure growth raises the ceiling rather than healing what is broken:
+    // damage carried in is still carried in, it is just a smaller share of a
+    // bigger component.
+    const max = componentHealth(jaeger, component) * (growth?.structure ?? 1);
     const carried = damage?.components.find((entry) => entry.componentId === component.id);
     return {
       id: component.id,
@@ -1332,7 +1348,13 @@ export class CombatArena {
     const wasIntact = zone ? zone.health > 0 : false;
     if (zone) {
       const throughArmor =
-        packet.amount * (1 - zone.armor) * zone.damageMultiplier * guardFactor * propScale * chargeMultiplier;
+        packet.amount *
+        (1 - zone.armor) *
+        zone.damageMultiplier *
+        guardFactor *
+        propScale *
+        chargeMultiplier *
+        (attacker.damageScale ?? 1);
       dealt = Math.max(0, throughArmor);
       zone.health = Math.max(0, zone.health - dealt);
       zone.shock = Math.min(1, zone.shock + packet.componentShock * guardFactor);
@@ -1866,7 +1888,10 @@ export class CombatArena {
     const scale = underwater ? weapon.underwaterScale : 1;
     let dealt = 0;
     if (zone && zone.health > 0) {
-      dealt = Math.max(0, packet.amount * (1 - zone.armor) * zone.damageMultiplier * scale);
+      dealt = Math.max(
+        0,
+        packet.amount * (1 - zone.armor) * zone.damageMultiplier * scale * (attacker.damageScale ?? 1),
+      );
       zone.health = Math.max(0, zone.health - dealt);
       zone.shock = Math.min(1, zone.shock + packet.componentShock);
     }

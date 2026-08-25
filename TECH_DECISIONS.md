@@ -677,6 +677,50 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-25, Milestone 19
+
+**Growth is multipliers on numbers that already exist.** Everything progression
+produces is one `MachineGrowth`, applied where a machine's combat profile, its
+component health and its locomotion rates are already derived. There is no second
+stat system, nothing downstream has to know a machine has a level, and a caller
+that passes nothing gets exactly the numbers it always got.
+
+**The prestige curve is asymptotic, and the asymptote was chosen by working
+backwards.** `1 + 0.6 * rank / (rank + 12)` never reaches 1.6. The number came
+from the worst case rather than from feel: a level thirty machine at infinite
+rank carrying the best passive and the best module has to stay under three times
+a stock machine, level growth is about 1.46 and the best kit about 1.23, which
+leaves 1.6 for the whole ladder. That is what makes an uncapped ladder safe.
+
+**Mobility is outside the prestige multiplier.** Every other axis scales with
+rank. Speed does not, because a machine that outruns everything stops being a
+heavy machine, and it is the one axis where a large multiplier would break the
+fights rather than tilt them.
+
+**The level is derived from the experience, never stored beside it.** One running
+total per machine, and `levelFromExperience` computes the rest. The two cannot
+disagree, an award cannot leave a machine at a level it has not earned, and an
+edited save does not survive the round trip.
+
+**Catch-up falls out of the same curve.** A new machine gets half the fleet's
+best rank, which is worth over ninety percent of it because the curve is
+asymptotic. No special case, no separate table, and it cannot run away.
+
+**Difficulty scales through the mutation budget alone.** Fleet strength raises
+what a creature carries, never its health, armour or damage. A harder fight
+should be answerable by playing better rather than only by grinding, and a
+creature with hidden numbers is neither readable nor honest.
+
+**The curve was calibrated against what a sortie pays, and a test pins it.** The
+first version needed about two thousand sorties to reach the cap, which looked
+like a curve and meant nothing. The shape is now checked against a clean sortie's
+worth so it cannot silently drift again.
+
+**A passive has to cost something, and the registry enforces it.** Anything below
+the top tier that gives nothing up is refused at registration, as is a module
+with no downside that does not require prestige. Both rules caught content I had
+just written, which is the entire argument for validators over review.
+
 ## 2026-08-25, Milestone 18
 
 **The board is derived, not stored.** Offers come from the rotation number and
