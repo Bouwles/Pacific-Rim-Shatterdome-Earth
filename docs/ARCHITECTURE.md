@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-Describes what actually exists in code as of Milestone 16. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
+Describes what actually exists in code as of Milestone 17. Read alongside [../GAME_SPEC.md](../GAME_SPEC.md) (the binding contract — this file explains _how_ the contract is met, never overrides it) and [../TECH_DECISIONS.md](../TECH_DECISIONS.md) (why each choice was made).
 
 ## Module map (current)
 
@@ -75,6 +75,9 @@ src/
     finisher.ts        beat state machine, hold and skip settings, placement safety query
     projectiles.ts     a fixed pool of rounds, swept movement, ballistic arcs, the combat bubble
     abilities.ts       status effects as a table, and pure weapon scoring for anything choosing
+  missions/            ← a sortie from planning to results; no Babylon, no DOM
+    objectives.ts      eight objective rows with their own completion and failure rules, and stages
+    mission.ts         the lifecycle, the deployment planner, and the results ledger
   kaiju/               ← how a creature senses, decides and gets around; no Babylon, no DOM
     senses.ts          seven sense channels, contacts as beliefs, damage memory
     behavior.ts        eleven goals as registry rows, utility scoring, hysteresis, explanations
@@ -762,6 +765,40 @@ exist.
 **Events are drained rather than collected from steps.** A trigger is pulled
 between two ticks, so anything a step returned would have missed every shot,
 reload and refusal. The arena keeps a drain cursor and the panel reads that.
+
+## Deployment and the mission lifecycle
+
+**One object covers the whole sortie.** `missions/mission.ts` holds planning, the
+carrier run, the active phase and the results. There is no second game state:
+the active phase is the world the player was already standing in, with a mission
+attached to it, reached through the same teleport, ground view and pilot path
+the map has always used.
+
+**The planner reads live state and refuses in sentences.** Readiness is built
+from the machine's real damage, the pair's real drift, the carrier's real lift
+against what is loaded, the region's real weather and the flight time from where
+the player actually is. Refusals stop a launch; warnings do not. Preparedness is
+part of readiness, so going out with nothing aboard scores badly rather than
+well.
+
+**A warning never leaks the truth.** Predicted threat is taken from the
+director's forecast at its own confidence, so a weak signal says it is a weak
+signal instead of naming what is really out there.
+
+**Objectives are rows with their own rules.** Eight of them - defend, intercept,
+pursue, rescue, contain, escort, research, salvage - each scoring one plain
+progress object built from authoritative events. A multi-stage crisis is a list
+with stage numbers, and a stage that settles opens the next in the same
+evaluation.
+
+**Results reconcile by construction.** The only path into a mission is `report`,
+fed from the arena, the roster and the city. Nothing is awarded that the
+simulation did not do, completing twice returns the same object rather than
+paying twice, and every line of the result carries the reason it exists.
+
+**Every ending is a real ending.** Success, partial, failure, abort and lost
+contact all produce the same shape of explained result, and an abort keeps
+whatever the sortie had already achieved.
 
 ## The attack director
 

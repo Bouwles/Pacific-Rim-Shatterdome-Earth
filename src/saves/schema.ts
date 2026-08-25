@@ -4,12 +4,13 @@ import { WORLD_SCHEMA_VERSION, type WorldSnapshot } from "../world/worldState";
 import { SHATTERDOME_SCHEMA_VERSION, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { validateRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { validateDirectorSnapshot, type DirectorSnapshot } from "../world/director";
+import { validateMissionSnapshot, type MissionSnapshot } from "../missions/mission";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 8;
+export const ROOT_SAVE_VERSION = 9;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -43,6 +44,8 @@ export interface RootSave {
   readonly roster: RosterSnapshot;
   /** The war: escalation, pressure, regional threat and every live incident. */
   readonly director: DirectorSnapshot;
+  /** The sortie in progress, or null when nobody is out. */
+  readonly mission: MissionSnapshot | null;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -187,6 +190,10 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateShatterdomeSection(document["shatterdome"]));
   errors.push(...validateRosterSnapshot(document["roster"]));
   errors.push(...validateDirectorSnapshot(document["director"]));
+  // A save with nobody out carries null rather than an empty mission.
+  if (document["mission"] !== null) {
+    errors.push(...validateMissionSnapshot(document["mission"]));
+  }
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

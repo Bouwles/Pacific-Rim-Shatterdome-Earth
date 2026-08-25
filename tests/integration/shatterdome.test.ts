@@ -294,7 +294,7 @@ describe("saves", () => {
     };
 
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["4", "5", "6", "7"]);
+    expect(result.applied).toEqual(["4", "5", "6", "7", "8"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRootSave(result.document)).toEqual([]);
     expect(result.document.shatterdome.location.roomId).toBe("command");

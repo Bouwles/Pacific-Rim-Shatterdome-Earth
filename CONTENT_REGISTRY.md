@@ -295,6 +295,35 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Pilots (Milestone 17)
+
+Five original characters in `src/data/pilots.ts`. Drift compatibility is
+symmetric and must be returned by both sides, checked when the registry is built.
+
+| id            | Callsign   | Specialisms          | Stability | Skill | Sorties | Drifts well with |
+| ------------- | ---------- | -------------------- | --------- | ----- | ------- | ---------------- |
+| pilot.okonkwo | Anvil      | melee, command       | 0.82      | 0.78  | 14      | Varga            |
+| pilot.varga   | Ledger     | gunnery, engineering | 0.79      | 0.81  | 16      | Okonkwo          |
+| pilot.reyes   | Kingfisher | piloting, melee      | 0.74      | 0.86  | 9       | Sato             |
+| pilot.sato    | Quartz     | science, gunnery     | 0.88      | 0.70  | 11      | Reyes            |
+| pilot.ferrant | Tallow     | command, piloting    | 0.85      | 0.66  | 22      | nobody left      |
+
+## Mission objectives (Milestone 17)
+
+Eight rows in `src/missions/objectives.ts`, each with its own completion and
+failure rule over one shared progress object.
+
+| id                  | Weight | Critical | Completes when                                    | Fails when                            |
+| ------------------- | ------ | -------- | ------------------------------------------------- | ------------------------------------- |
+| objective.defend    | 1.0    | yes      | everything down and the district above 35 percent | the district falls below 15 percent   |
+| objective.intercept | 1.0    | yes      | everything stopped and the city above 80 percent  | the city falls below 60 percent       |
+| objective.pursue    | 0.8    | no       | everything down                                   | it reaches open water                 |
+| objective.rescue    | 0.9    | no       | nobody left trapped                               | time runs out with people still under |
+| objective.contain   | 0.8    | no       | contamination under 10 percent and nothing alive  | contamination passes 85 percent       |
+| objective.escort    | 0.9    | no       | the convoy arrives                                | the convoy dies                       |
+| objective.research  | 0.6    | no       | three samples taken                               | it escapes with nothing taken         |
+| objective.salvage   | 0.5    | no       | 400 tons recovered                                | never                                 |
+
 ## Mutations (Milestone 16)
 
 Eight rows in `src/data/mutations.ts`. The director is handed a budget from

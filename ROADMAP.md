@@ -421,6 +421,27 @@ save schema and migrations, the world panel and the world clock wiring.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1032), `smoke` (125), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 17 - Deployment preparation, carrier sequence and mission lifecycle
+
+**Depends on:** Milestone 13 (the roster), 14 (city damage), 16 (the alerts this deploys against).
+**Status:** done.
+**Scope:** a deployment planner covering machine, pilots, weapons, consumables, allies, arrival point
+and priorities; readiness, travel time, logistics load, weather, underwater and predicted threat at the
+warning's own confidence; a skippable carrier run that transitions into the active region without a
+second game state; eight objective kinds with staged multi-part crises; and results carrying damage,
+repairs, city impact, salvage, reputation, drift link, research, experience and replay data, all
+reconciled with authoritative events. Created `src/data/pilots.ts`, `src/missions/objectives.ts`,
+`src/missions/mission.ts`, `src/debug/missionScenario.ts`. Extended the save schema and migrations, the
+world panel and the bootstrap wiring.
+**Acceptance tests:**
+
+- A full loop runs from alert to preparation, deployment, battle, results, repair order and back to
+  free exploration.
+- Aborting, failing or losing contact produces a recoverable and explained outcome.
+- Mission results reconcile exactly with authoritative simulation events.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1071), `smoke` (129), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

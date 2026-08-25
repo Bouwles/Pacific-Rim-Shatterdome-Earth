@@ -71,6 +71,15 @@ import {
 import { CityView } from "../engine/cityView";
 import { RegionDestruction } from "../world/destruction";
 import { AttackDirector, type Resolution } from "../world/director";
+import { createObjectiveRegistry } from "../missions/objectives";
+import { createPilotRegistry } from "../data/pilots";
+import {
+  Mission,
+  assessPlan,
+  type DeploymentPlan,
+  type MissionResults,
+  type ReadinessReport,
+} from "../missions/mission";
 import type { WarReadout } from "../ui/worldScreen";
 import { Creature, type CreatureDebug } from "../kaiju/creature";
 import type { BodyZoneId } from "../data/kaiju";
@@ -419,6 +428,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               shatterdomeState.serialize(),
               roster.snapshot(),
               attackDirector.snapshot(),
+              mission?.snapshot() ?? null,
             );
             return `Saved "${trimmed}".`;
           }),
@@ -435,6 +445,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               shatterdomeState.serialize(),
               roster.snapshot(),
               attackDirector.snapshot(),
+              mission?.snapshot() ?? null,
             );
             return `Overwrote "${name}".`;
           }),
@@ -537,6 +548,210 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   /** The last thing the director did, for the alert board. */
   let directorNotice: string | null = null;
 
+  // ------------------------------------------------------------------ missions
+  //
+  // A sortie is one object covering planning, the carrier run, the fight and the
+  // results. The active phase is the world the player was already standing in
+  // with a mission attached, rather than a second game state.
+  const objectiveRegistry = createObjectiveRegistry();
+  const pilotRegistry = createPilotRegistry();
+  /** The sortie in progress, or undefined when nobody is out. */
+  let mission: Mission | undefined;
+  /** Results waiting to be read, cleared when the player closes them. */
+  let missionResults: MissionResults | null = null;
+  /** Sorties flown this session, for mission ids. */
+  let missionSeq = 0;
+
+  /** Tons the carrier can lift, which is what logistics tiers actually buy. */
+  const carrierLiftTons = (): number => {
+    const logistics = shatterdomeState.recordFor("logistics");
+    return 260 + (logistics?.tier ?? 0) * 140;
+  };
+
+  /**
+   * What the planner would say about deploying to this incident right now.
+   *
+   * Reads live state throughout: the machine's real damage, the pair's real
+   * drift, the region's real weather, and the warning's own words rather than
+   * what is actually out there.
+   */
+  const planFor = (incidentId: string): DeploymentPlan | null => {
+    const incident = attackDirector.incident(incidentId);
+    if (!incident) return null;
+    const machine = roster.all().find((record) => roster.canDeploy(record.jaegerId).ok);
+    if (!machine) return null;
+    const pair = pilotRegistry.all().slice(0, 2);
+    if (pair.length < 2) return null;
+    return {
+      jaegerId: machine.jaegerId,
+      pilotIds: [pair[0]!.id, pair[1]!.id],
+      weaponIds: weaponRegistry.all().map((weapon) => weapon.id),
+      consumables: { "consumable.reload": 2 },
+      allyIds: [],
+      arrivalBearingDeg: incident.originBearingDeg,
+      priorities: ["objective.defend"],
+    };
+  };
+
+  const readinessFor = (incidentId: string): ReadinessReport | null => {
+    const incident = attackDirector.incident(incidentId);
+    const plan = planFor(incidentId);
+    if (!incident || !plan) return null;
+    const region = regionRegistry.get(incident.regionId);
+    const record = roster.get(plan.jaegerId);
+    const sample = sampleEnvironment();
+    const distance = region
+      ? surfaceDistanceMeters(worldState.playerPosition, region.centre) / EARTH_SCALE
+      : 0;
+    const forecast = attackDirector.forecast(incident, warClock, 0);
+    return assessPlan({
+      plan,
+      jaeger: jaegerRegistry.get(plan.jaegerId),
+      pilots: plan.pilotIds.map((id) => pilotRegistry.get(id)),
+      machineIntegrity: record ? structuralIntegrity(record.damage) : 0,
+      machineReady: roster.canDeploy(plan.jaegerId).ok,
+      machineStatus: describeStatus(record?.status ?? "ready"),
+      weapons: weaponRegistry.all(),
+      distanceMeters: distance,
+      carrierSpeedMps: CARRIER_SPEED_MPS,
+      liftCapacityTons: carrierLiftTons(),
+      weatherSummary: sample.weather.kind,
+      weatherPenalty: sample.effects.rangedAccuracyPenalty,
+      underwater: sample.water.submergedFraction > 0.5,
+      forecastComposition: forecast.composition,
+      forecastConfidence: forecast.warningConfidence,
+    });
+  };
+
+  /**
+   * Sends the machine.
+   *
+   * Teleports to the region the way the world map already does, starts the
+   * carrier run, and puts the player in the machine when it lands. Every
+   * refusal comes from the planner and is shown rather than swallowed.
+   */
+  const deployTo = (incidentId: string): void => {
+    const incident = attackDirector.incident(incidentId);
+    const plan = planFor(incidentId);
+    const readiness = readinessFor(incidentId);
+    if (!incident || !plan || !readiness) {
+      directorNotice = "Nothing to deploy to.";
+      refreshWorld();
+      return;
+    }
+    if (readiness.refusals.length > 0) {
+      directorNotice = readiness.refusals.join(" ");
+      refreshWorld();
+      return;
+    }
+
+    missionSeq += 1;
+    missionResults = null;
+    mission = new Mission({
+      id: `mission.${missionSeq}`,
+      incidentId: incident.id,
+      regionId: incident.regionId,
+      plan,
+      objectives: objectiveRegistry,
+      seed: (kernel?.seed ?? 0) + missionSeq,
+      // World seconds, of which roughly sixty pass per real second, so this is
+      // ten to thirty seconds of flight: long enough to be a transition, short
+      // enough not to be a tax, and skippable either way.
+      carrierSeconds: Math.max(600, Math.min(1_800, readiness.travelSeconds / 40)),
+      assignments: [
+        { id: "objective.defend", stage: 0 },
+        { id: "objective.rescue", stage: 0 },
+        { id: "objective.salvage", stage: 1 },
+      ],
+    });
+    mission.launch();
+    directorNotice = `Carrier away for ${regionRegistry.get(incident.regionId)?.displayName ?? incident.regionId}.`;
+    refreshWorld();
+  };
+
+  /** Puts the player where the sortie is, in the world they were already in. */
+  const beginSortieOnTheGround = (): void => {
+    const active = mission;
+    if (!active) return;
+    worldState.teleportTo(active.regionId, kernel?.tick ?? 0);
+    floatingOrigin.forceRebase(worldState.playerPosition);
+    sectorRenderer?.rebase();
+    movePlayerTo(worldState.playerPosition);
+    switchViewMode("ground");
+    startPilot(active.plan.jaegerId);
+    spawnTarget();
+    directorNotice = "On station.";
+    refreshWorld();
+  };
+
+  /**
+   * Feeds the simulation's own numbers to the mission.
+   *
+   * The only path into the objectives, which is what makes the results
+   * reconcile: nothing is awarded that did not happen here.
+   */
+  const reportMissionProgress = (): void => {
+    const active = mission;
+    if (!active || active.phase !== "active") return;
+    const arena = combatArena;
+    const destruction = cityRegionId ? destructionByRegion.get(cityRegionId) : undefined;
+    const record = pilotSession ? roster.get(pilotSession.jaeger.id) : undefined;
+    const kaijuView = arena?.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
+    const report = destruction?.report();
+
+    active.report({
+      kaijuTotal: kaijuView ? 1 : 0,
+      kaijuDown: kaijuView?.defeated === true ? 1 : 0,
+      kaijuEscaped: false,
+      machineIntegrity: record ? structuralIntegrity(record.damage) : 1,
+      cityIntegrity: report?.integrity ?? 1,
+      trappedThousands: report?.trappedThousands ?? 0,
+      rescuedThousands: Math.max(0, (report?.trappedThousands ?? 0) * 0.1),
+      samples: kaijuView?.defeated === true ? 3 : 0,
+      salvageTons: kaijuView?.defeated === true ? 420 : 0,
+      escortAlive: true,
+      escortMetresLeft: 0,
+      elapsedSeconds: 0,
+      limitSeconds: Number.POSITIVE_INFINITY,
+      contamination: report?.contaminatedGroups ? Math.min(1, report.contaminatedGroups / 10) : 0,
+    });
+
+    if (active.settled) endMission("success");
+  };
+
+  /**
+   * Ends the sortie and applies everything it produced.
+   *
+   * Results are applied once, here, from the mission's own ledger: the city
+   * takes its damage, the machine takes its repair order, and the incident is
+   * closed with the director. Nothing is awarded in two places.
+   */
+  const endMission = (kind: "success" | "aborted" | "lost-contact"): void => {
+    const active = mission;
+    if (!active) return;
+    const results = kind === "success" ? active.complete() : active.abort(kind);
+    missionResults = results;
+
+    const incident = attackDirector.incident(active.incidentId);
+    if (incident && incident.status !== "resolved") {
+      // One resolution, told what the sortie actually achieved.
+      const resolution = attackDirector.resolve(incident, "player-defended", {
+        playerStrength: results.objectiveScore * 600,
+      });
+      resolutionLog.unshift(resolution);
+      while (resolutionLog.length > 5) resolutionLog.pop();
+    }
+    // The machine comes home to whatever it earned, through the same recovery
+    // path a fight outside a mission uses.
+    if (pilotSession) {
+      clearTarget();
+      stopPilot();
+    }
+    directorNotice = results.summary;
+    mission = undefined;
+    refreshWorld();
+  };
+
   advanceWorldTime = (ticks) => {
     worldState.advanceEnvironment(ticks);
     // Evacuation moves with world time too, so a city cleared while the player
@@ -544,6 +759,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     worldState.advanceAlerts(ticks);
 
     advanceWar(ticks);
+
+    // The sortie runs on the same clock as everything else.
+    if (mission) {
+      const seconds = (ticks / worldState.environment.clock.dayLengthTicks) * 86_400;
+      const before = mission.phase;
+      mission.advance(seconds);
+      if (before === "carrier" && mission.phase === "active") beginSortieOnTheGround();
+      reportMissionProgress();
+    }
   };
 
   /**
@@ -2182,6 +2406,21 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           ifIgnoredLedger: forecast.ignoredForecast.ledger.map(
             (line) => `${line.label}: ${Math.round(line.value * 100) / 100} (${line.reason})`,
           ),
+          readiness: (() => {
+            const report = readinessFor(incident.id);
+            if (!report) return null;
+            return {
+              percent: Math.round(report.readiness * 100),
+              driftPercent: Math.round(report.driftStrength * 100),
+              machinePercent: Math.round(report.machineIntegrity * 100),
+              travelHours: report.travelSeconds / 3_600,
+              loadPercent: Math.round(report.logisticsLoad * 100),
+              weather: report.weather,
+              predictedThreat: report.predictedThreat,
+              refusals: report.refusals,
+              warnings: report.warnings,
+            };
+          })(),
         };
       });
 
@@ -2197,6 +2436,27 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         ),
       })),
       notice: directorNotice,
+      sortie: mission
+        ? {
+            phase: mission.phase,
+            regionName: regionRegistry.get(mission.regionId)?.displayName ?? mission.regionId,
+            carrierPercent: Math.round(mission.carrierProgress * 100),
+            objectives: mission.objectives.map((objective) => ({
+              name: objectiveRegistry.get(objective.id)?.displayName ?? objective.id,
+              state: objective.state,
+              detail: `${Math.round(objective.progress * 100)}%`,
+            })),
+          }
+        : null,
+      results: missionResults
+        ? {
+            outcome: missionResults.outcome,
+            summary: missionResults.summary,
+            ledger: missionResults.ledger.map(
+              (line) => `${line.label}: ${Math.round(line.value * 100) / 100} (${line.reason})`,
+            ),
+          }
+        : null,
     };
   };
 
@@ -2530,6 +2790,22 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onQualityChange: (level: string) => applyQuality(level as QualityLevel),
         onResolveIncident: (incidentId: string, kind: "ai-defended" | "ignored") => {
           resolveIncident(incidentId, kind);
+        },
+        onDeploy: (incidentId: string) => {
+          deployTo(incidentId);
+        },
+        onSkipCarrier: () => {
+          mission?.skipCarrier();
+          if (mission?.phase === "active") beginSortieOnTheGround();
+          refreshWorld();
+        },
+        onAbortMission: () => {
+          // An abort keeps whatever the sortie already achieved.
+          endMission("aborted");
+        },
+        onCloseResults: () => {
+          missionResults = null;
+          refreshWorld();
         },
         onCrisisFrequency: (value: number) => {
           // The player's own dial. Bounded by the director, not by the panel.

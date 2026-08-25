@@ -565,6 +565,59 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Mission schemas (Milestone 17)
+
+### `PilotDefinition` (src/data/pilots.ts)
+
+`{ id, name, callsign, specialisms[], neuralStability, skill, sorties,
+affinities[], biography }`. Stability and skill are within (0, 1]. An affinity
+must name a registered pilot and must be returned by them, and a pilot cannot be
+their own drift partner. `assessDrift` turns a pair into a strength, an
+effectiveness and a sentence, and refuses a pair below a third of a link.
+
+### `ObjectiveDefinition` (src/missions/objectives.ts)
+
+| Field                              | Meaning                                       | Constraint            |
+| ---------------------------------- | --------------------------------------------- | --------------------- |
+| `briefing`                         | What the sortie is told, in the second person | required              |
+| `weight`                           | Share of the mission's reward it carries      | within (0, 1]         |
+| `critical`                         | Whether failing it fails the mission          | read by the lifecycle |
+| `progress` / `complete` / `failed` | Pure functions of one `MissionProgress`       | must be functions     |
+| `describe`                         | Where it stands, in words                     | must be a function    |
+
+`MissionProgress` is the single object every objective reads: kaiju totals and
+losses, machine and city integrity, trapped and rescued civilians, samples,
+salvage, escort state, elapsed and limit seconds, and contamination.
+
+### `DeploymentPlan`
+
+`{ jaegerId, pilotIds, weaponIds[], consumables, allyIds[], arrivalBearingDeg,
+priorities[] }`.
+
+### `ReadinessReport`
+
+`{ readiness, driftStrength, machineIntegrity, travelSeconds, logisticsLoad,
+overloaded, weather, underwater, predictedThreat, refusals[], warnings[] }`.
+
+### `MissionSnapshot`
+
+`{ schemaVersion, id, incidentId, regionId, phase, plan, objectives[],
+carrierSeconds, carrierTotalSeconds, elapsedSeconds, seed, results }`. Phases are
+`planning`, `carrier`, `active`, `results` and `closed`.
+
+### `MissionResults`
+
+Outcome, objective score, per-objective detail, machine damage, repair hours,
+city impact, salvage, samples, civilians rescued, reputation, drift link change,
+experience, funding, a replay (seed, plan and events), a ledger of labelled
+lines with reasons, and a summary.
+
+### What is saved
+
+`ROOT_SAVE_VERSION` is 9. A new `mission` section carries the sortie in progress
+or `null` when nobody is out. Migration step `"8"` sets it to `null` for a
+version 8 save, which could not have had one.
+
 ## Attack director schemas (Milestone 16)
 
 ### `MutationDefinition` (src/data/mutations.ts)

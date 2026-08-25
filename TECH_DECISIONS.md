@@ -677,6 +677,37 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-25, Milestone 17
+
+**One object for the whole sortie.** Planning, carrier, active and results are
+phases of a single mission rather than four screens with state passed between
+them. The active phase is the world the player was already in, which is what the
+milestone means by not having a second disconnected game state.
+
+**`report` is the only way in.** Everything the results contain arrives from the
+arena, the roster and the city through one call. That is what makes results
+reconcile by construction rather than by discipline, and it is why a mission
+nobody reports to awards nothing at all.
+
+**Results are computed once and cached.** Completing twice returns the same
+object. The failure mode named in the milestone - resources awarded separately
+in the interface and the simulation - is impossible if there is only one place
+they are computed and only one copy of them.
+
+**The planner takes the forecast, not the truth.** Predicted threat comes from
+the director's own warning at its own confidence. Reading the incident directly
+would have been easier and would have leaked exactly what the milestone says to
+keep hidden.
+
+**Preparedness, not emptiness.** An early version of readiness rewarded carrying
+nothing, because an empty loadout used no lift. Being ready means being loaded
+for the job, and the formula now says so.
+
+**A carrier run is a transition with a skip.** Measured in world seconds so it
+scales with the flight, floored so it is a beat rather than a flicker, capped so
+it never becomes a tax, and skippable from the first frame with no effect on the
+outcome.
+
 ## 2026-08-25, Milestone 16
 
 **The director creates records, not scenes.** An incident is strategic state:

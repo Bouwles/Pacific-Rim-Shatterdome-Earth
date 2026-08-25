@@ -182,6 +182,29 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Mission lifecycle cost (Milestone 17)
+
+Measured in the browser on WebGPU at High, seed 20260825, deploying from the
+alert board through to the ground:
+
+| State                            | Draw calls | Frame time    | Frame rate |
+| -------------------------------- | ---------- | ------------- | ---------- |
+| Planning, readiness on the board | 99 to 102  | 0.5 to 0.7 ms | 144        |
+| Carrier run                      | 99 to 102  | 0.5 to 0.7 ms | 144        |
+| Active sortie in the region      | 106 to 112 | 0.6 to 0.9 ms | 144        |
+
+**The carrier run is a phase, not a scene.** It draws nothing of its own: the
+transition is the world panel reporting a mission phase while the same world
+keeps running. Ten to thirty seconds of flight, skippable, and nothing about the
+result changes if it is skipped.
+
+**A mission adds no per-frame cost of its own.** Progress is reported from
+numbers the arena, roster and city already compute; the objectives are eight
+pure functions over one object; results are computed once at the end.
+
+**There is no second game state**, so deploying costs a teleport and a pilot
+session, both of which the world map already paid for.
+
 ## Attack director cost (Milestone 16)
 
 Measured in the browser on WebGPU at High, seed 20260825, with four incidents

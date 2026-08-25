@@ -269,6 +269,23 @@ const addDirectorSection: MigrationStep = {
   }),
 };
 
+/**
+ * Adds the mission slot introduced by Milestone 17.
+ *
+ * A version 8 save cannot have a sortie in progress, because deployment did not
+ * exist as a lifecycle: there was no way to be out. Every such file therefore
+ * comes back with nobody deployed, which is the only honest reading of it.
+ *
+ * Nothing else in the document is touched.
+ */
+const addMissionSlot: MigrationStep = {
+  id: "8",
+  fromVersion: 8,
+  toVersion: 9,
+  description: "Add the mission slot: the sortie in progress, or null when nobody is out.",
+  apply: (document) => ({ ...document, schemaVersion: 9, mission: null }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -291,6 +308,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addRosterSection);
   registry.register(addRegionDamage);
   registry.register(addDirectorSection);
+  registry.register(addMissionSlot);
   return registry;
 }
 

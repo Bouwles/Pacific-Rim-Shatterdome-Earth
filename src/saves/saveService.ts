@@ -8,6 +8,7 @@ import { createFacilityRegistry } from "../data/facilities";
 import { emptyShatterdomeSnapshot, type ShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { emptyRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { emptyDirectorSnapshot, type DirectorSnapshot } from "../world/director";
+import type { MissionSnapshot } from "../missions/mission";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -51,6 +52,8 @@ export interface SaveRequest {
   readonly roster?: RosterSnapshot;
   /** The war. Omitted only by callers with no director running yet. */
   readonly director?: DirectorSnapshot;
+  /** The sortie in progress. Omitted when nobody is out, which is normal. */
+  readonly mission?: MissionSnapshot | null;
 }
 
 /**
@@ -112,6 +115,7 @@ export class SaveService {
     const roster = request.roster ?? emptyRosterSnapshot();
     // A quiet war rather than an absent one: the director always exists.
     const director = request.director ?? emptyDirectorSnapshot();
+    const mission = request.mission ?? null;
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -130,6 +134,7 @@ export class SaveService {
       shatterdome,
       roster,
       director,
+      mission,
     };
   }
 

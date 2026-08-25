@@ -164,7 +164,7 @@ describe("damage that survives leaving and reloading", () => {
       roster: { machines: [] },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["6", "7"]);
+    expect(result.applied).toEqual(["6", "7", "8"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     const world = result.document.world as unknown as Record<string, unknown>;
     expect(world["marker"]).toBe("kept");

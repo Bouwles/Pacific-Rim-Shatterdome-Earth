@@ -5,6 +5,7 @@ import type { WorldSnapshot } from "../world/worldState";
 import type { ShatterdomeSnapshot } from "../shatterdome/facilityState";
 import type { RosterSnapshot } from "../jaegers/roster";
 import type { DirectorSnapshot } from "../world/director";
+import type { MissionSnapshot } from "../missions/mission";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -55,6 +56,7 @@ export class SaveController {
     shatterdome?: ShatterdomeSnapshot,
     roster?: RosterSnapshot,
     director?: DirectorSnapshot,
+    mission?: MissionSnapshot | null,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -64,6 +66,7 @@ export class SaveController {
       shatterdome,
       roster,
       director,
+      mission,
     });
   }
 
@@ -73,6 +76,7 @@ export class SaveController {
     shatterdome?: ShatterdomeSnapshot,
     roster?: RosterSnapshot,
     director?: DirectorSnapshot,
+    mission?: MissionSnapshot | null,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
@@ -81,6 +85,7 @@ export class SaveController {
       shatterdome,
       roster,
       director,
+      mission,
     });
   }
 

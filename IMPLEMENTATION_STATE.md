@@ -156,7 +156,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - anti-repetition, a hard ceiling on simultaneous incidents, and a recovery window after every resolution, so the alerts stop;
   - a crisis frequency dial from rare to relentless, bounded so it cannot be turned off or turned into a firehose;
   - one clock: time from the simulation and time skipped on the panel both advance the war.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1032 unit+integration), `smoke` (125 Playwright), `build` all pass.
+- **A sortie you can actually fly**, from the alert board to the results and back:
+  - a readiness assessment before anything launches: the machine's real damage, the pair's real drift, the carrier's lift against what is loaded, the weather, and the flight time from where you are standing;
+  - refusals that stop a launch and warnings that do not, both in sentences;
+  - a predicted threat taken from the warning rather than from the truth, so a weak signal says so instead of naming what is really out there;
+  - a carrier run that is a phase of the same session rather than a second game state, ten to thirty seconds long and skippable, with nothing about the result depending on whether you watched it;
+  - landing in the world you were already in, in the machine, with the objectives live;
+  - eight objective kinds with their own completion and failure rules, and multi-stage crises where a stage opens the moment the one before it settles;
+  - results carrying damage, repair hours, city impact, salvage, samples, civilians, reputation, drift link, experience, funding and a replay, every line with the reason it exists;
+  - five endings that all explain themselves, including an abort that still credits what was achieved;
+  - results that reconcile: the only path in is the simulation's own numbers, and completing twice pays once.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1071 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

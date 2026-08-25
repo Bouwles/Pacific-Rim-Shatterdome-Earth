@@ -40,6 +40,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     shatterdome: emptyShatterdomeSnapshot(createFacilityRegistry()),
     roster: emptyRosterSnapshot(),
     director: emptyDirectorSnapshot(),
+    mission: null,
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },

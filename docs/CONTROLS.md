@@ -367,6 +367,30 @@ past a weapon's reach the target is, how close is too close for indirect fire,
 that a forward-arc weapon needs you to turn, that a magazine is empty and the
 spares are gone, or that too many rounds are already in the air.
 
+### Deployment and the sortie (Milestone 17)
+
+Every incident on the alert board carries a readiness line and a **Deploy**
+button. The line gives overall readiness, the pair's drift, the machine's
+structure, the flight time from where the player is, how loaded the carrier is
+and what the weather will do. Anything that stops the launch is listed as a
+refusal and greys the button; anything that merely makes it a bad idea is a
+warning that does not. Hovering Deploy shows the predicted threat at the
+warning's own confidence, never what is actually out there.
+
+Launching starts the carrier run, shown as a phase of the sortie block with its
+own progress. **Skip the carrier run** ends it immediately; the sortie lands in
+the same world the player was already in, in the machine, with the objectives
+live. Nothing about the result changes if it is skipped.
+
+The sortie block lists every objective with its state and progress as they
+update. **Abort the sortie** ends it early and keeps whatever was already
+achieved.
+
+When a sortie ends, the results block gives the outcome, a summary and every
+line behind it: objectives, machine damage, city impact, salvage, samples,
+civilians, reputation, drift link, funding and the repair hours the bay now
+owes. **Back to the map** puts it away and returns to free exploration.
+
 ### The alert board (Milestone 16)
 
 The world panel carries the war. **War** gives global escalation and breach

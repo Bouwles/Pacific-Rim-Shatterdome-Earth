@@ -159,6 +159,18 @@ export interface AlertReadout {
   /** What the model expects if nobody goes, and why, line by line. */
   readonly ifIgnored: string;
   readonly ifIgnoredLedger: readonly string[];
+  /** What the planner says about going, or null when nothing can go. */
+  readonly readiness: {
+    readonly percent: number;
+    readonly driftPercent: number;
+    readonly machinePercent: number;
+    readonly travelHours: number;
+    readonly loadPercent: number;
+    readonly weather: string;
+    readonly predictedThreat: string;
+    readonly refusals: readonly string[];
+    readonly warnings: readonly string[];
+  } | null;
 }
 
 /** What the war looks like from the map. */
@@ -170,6 +182,23 @@ export interface WarReadout {
   /** The last few resolutions, each already explained. */
   readonly resolutions: readonly { readonly summary: string; readonly ledger: readonly string[] }[];
   readonly notice: string | null;
+  /** The sortie in progress, or null when nobody is out. */
+  readonly sortie: {
+    readonly phase: string;
+    readonly regionName: string;
+    readonly carrierPercent: number;
+    readonly objectives: readonly {
+      readonly name: string;
+      readonly state: string;
+      readonly detail: string;
+    }[];
+  } | null;
+  /** Results waiting to be read, or null. */
+  readonly results: {
+    readonly outcome: string;
+    readonly summary: string;
+    readonly ledger: readonly string[];
+  } | null;
 }
 
 export interface WorldReadout {
@@ -213,6 +242,14 @@ export interface WorldScreenCallbacks {
   onResolveIncident(incidentId: string, kind: "ai-defended" | "ignored"): void;
   /** The player's own dial on how often crises happen. */
   onCrisisFrequency(value: number): void;
+  /** Sends a machine to this incident. */
+  onDeploy(incidentId: string): void;
+  /** Skips the rest of the carrier run. */
+  onSkipCarrier(): void;
+  /** Ends the sortie early, keeping whatever was achieved. */
+  onAbortMission(): void;
+  /** Closes the results and goes back to what the player was doing. */
+  onCloseResults(): void;
   /** Take the machine out. Ground view only: there is nothing to stand on from orbit. */
   onPilot(jaegerId: string): void;
   onExit(): void;
@@ -515,6 +552,50 @@ export function renderWorldScreen(
   frequencyLabel.appendChild(frequencySelect);
   frequencyRow.appendChild(frequencyLabel);
 
+  // The sortie in progress, and the results of the last one. Both are hidden
+  // rather than shown empty, because an empty results panel implies a mission
+  // that did not happen.
+  const sortieRow = document.createElement("div");
+  sortieRow.className = "world-sortie";
+  sortieRow.dataset.section = "sortie";
+  sortieRow.hidden = true;
+  const sortieState = document.createElement("span");
+  sortieState.className = "world-value";
+  sortieState.dataset.field = "sortie-state";
+  const sortieObjectives = document.createElement("span");
+  sortieObjectives.className = "world-value";
+  sortieObjectives.dataset.field = "sortie-objectives";
+  const skipCarrier = document.createElement("button");
+  skipCarrier.type = "button";
+  skipCarrier.className = "secondary-button";
+  skipCarrier.dataset.action = "skip-carrier";
+  skipCarrier.textContent = "Skip the carrier run";
+  skipCarrier.addEventListener("click", () => callbacks.onSkipCarrier());
+  const abortMission = document.createElement("button");
+  abortMission.type = "button";
+  abortMission.className = "secondary-button";
+  abortMission.dataset.action = "abort-mission";
+  abortMission.textContent = "Abort the sortie";
+  abortMission.addEventListener("click", () => callbacks.onAbortMission());
+  sortieRow.append(sortieState, sortieObjectives, skipCarrier, abortMission);
+
+  const resultsRow = document.createElement("div");
+  resultsRow.className = "world-results";
+  resultsRow.dataset.section = "results";
+  resultsRow.hidden = true;
+  const resultsSummary = document.createElement("span");
+  resultsSummary.className = "world-value";
+  resultsSummary.dataset.field = "results-summary";
+  const resultsLedger = document.createElement("ul");
+  resultsLedger.dataset.field = "results-ledger";
+  const closeResults = document.createElement("button");
+  closeResults.type = "button";
+  closeResults.className = "secondary-button";
+  closeResults.dataset.action = "close-results";
+  closeResults.textContent = "Back to the map";
+  closeResults.addEventListener("click", () => callbacks.onCloseResults());
+  resultsRow.append(resultsSummary, resultsLedger, closeResults);
+
   const alertList = document.createElement("ul");
   alertList.className = "world-alert-list";
   alertList.dataset.field = "alert-list";
@@ -523,7 +604,7 @@ export function renderWorldScreen(
   resolutionList.className = "world-resolution-list";
   resolutionList.dataset.field = "resolution-list";
 
-  warSection.append(warHeader, frequencyRow, alertList, resolutionList);
+  warSection.append(warHeader, frequencyRow, sortieRow, resultsRow, alertList, resolutionList);
 
   const city = document.createElement("div");
   city.className = "world-readout world-city";
@@ -718,6 +799,32 @@ export function renderWorldScreen(
           frequencySelect.value = String(war.crisisFrequency);
         }
 
+        // A sortie in progress, with what it is doing and how to leave it.
+        const sortie = war.sortie;
+        sortieRow.hidden = sortie === null;
+        if (sortie) {
+          sortieState.textContent =
+            `Sortie over ${sortie.regionName}: ${sortie.phase}` +
+            (sortie.phase === "carrier" ? ` (${sortie.carrierPercent}% of the flight)` : "");
+          sortieObjectives.textContent = sortie.objectives
+            .map((objective) => `${objective.name} ${objective.state}: ${objective.detail}`)
+            .join(" · ");
+          skipCarrier.disabled = sortie.phase !== "carrier";
+        }
+
+        const results = war.results;
+        resultsRow.hidden = results === null;
+        if (results) {
+          resultsSummary.textContent = `${results.outcome}: ${results.summary}`;
+          resultsLedger.replaceChildren();
+          for (const line of results.ledger) {
+            const item = document.createElement("li");
+            item.dataset.field = "results-line";
+            item.textContent = line;
+            resultsLedger.appendChild(item);
+          }
+        }
+
         alertList.replaceChildren();
         if (war.alerts.length === 0) {
           const quiet = document.createElement("li");
@@ -762,6 +869,28 @@ export function renderWorldScreen(
             callbacks.onResolveIncident(alert.incidentId, "ai-defended"),
           );
 
+          // What the planner says about going, and the button that goes.
+          const readiness = alert.readiness;
+          const ready = document.createElement("span");
+          ready.className = "world-alert-readiness";
+          ready.dataset.field = "alert-readiness";
+          ready.textContent =
+            readiness === null
+              ? "No machine can be sent."
+              : `Readiness ${readiness.percent}% · drift ${readiness.driftPercent}% · machine ${readiness.machinePercent}% · ` +
+                `${readiness.travelHours.toFixed(1)} h flight · carrier ${readiness.loadPercent}% loaded · ${readiness.weather}` +
+                (readiness.refusals.length > 0 ? ` · cannot go: ${readiness.refusals.join(" ")}` : "") +
+                (readiness.warnings.length > 0 ? ` · ${readiness.warnings.join(" ")}` : "");
+
+          const deploy = document.createElement("button");
+          deploy.type = "button";
+          deploy.className = "secondary-button";
+          deploy.dataset.action = "incident-deploy";
+          deploy.textContent = "Deploy";
+          deploy.disabled = readiness === null || readiness.refusals.length > 0;
+          deploy.title = readiness?.predictedThreat ?? "";
+          deploy.addEventListener("click", () => callbacks.onDeploy(alert.incidentId));
+
           const ignore = document.createElement("button");
           ignore.type = "button";
           ignore.className = "secondary-button";
@@ -769,7 +898,7 @@ export function renderWorldScreen(
           ignore.textContent = "Stand down";
           ignore.addEventListener("click", () => callbacks.onResolveIncident(alert.incidentId, "ignored"));
 
-          item.append(headline, detail, forecast, defend, ignore);
+          item.append(headline, detail, forecast, ready, deploy, defend, ignore);
           alertList.appendChild(item);
         }
 

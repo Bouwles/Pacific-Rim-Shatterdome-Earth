@@ -192,6 +192,21 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Version 8 to 9: the sortie in progress (Milestone 17)
+
+Version 9 adds a `mission` section carrying the sortie in progress, or `null`
+when nobody is out, which is the normal case. A mission snapshot holds its
+phase, the plan it was flown with, its objectives and their states, the carrier
+clock, the mission clock, its seed and its results if it has any.
+
+A version 8 save cannot have had a sortie in progress, because deployment did
+not exist as a lifecycle: there was no way to be out. The migration therefore
+sets the section to `null`. Nothing else in the document is touched.
+
+On restore, an objective naming something this build no longer has is dropped,
+and a phase this build does not recognise falls back to planning rather than
+throwing.
+
 ## Version 7 to 8: the attack director (Milestone 16)
 
 Version 8 adds a `director` section: global escalation, breach pressure, the

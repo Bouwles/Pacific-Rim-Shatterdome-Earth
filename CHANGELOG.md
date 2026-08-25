@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-25, Milestone 17: Deployment preparation, carrier sequence and mission lifecycle
+
+The alert board goes somewhere now. You can answer one.
+
+- Before anything launches, the board tells you what going would mean: how ready you are, how well the pair drifts, what state the machine is in, how long the flight is from where you happen to be standing, how loaded the carrier is, and what the weather is going to do about it.
+- Refusals and warnings are different things. A machine still in the gantries, a pair who cannot drift, a carrier loaded past what it can lift: those stop the launch and say so. A half-repaired machine going out into a storm with nothing mounted is merely a bad idea, and the game lets you do it.
+- The briefing never knows more than the warning did. A strong signal names what is out there. A weak one says it cannot tell you, rather than quietly leaking what is actually coming.
+- A carrier run that is part of the same session rather than a loading screen with a plane on it. Ten to thirty seconds of flight, a Skip button from the first second, and skipping it changes nothing about what the sortie is worth.
+- You land in the world you were already in, in the machine, with the objectives running. There is no second game state to fall out of.
+- Eight kinds of objective: defend, intercept, pursue, rescue, contain, escort, research and salvage, each with its own idea of what finishing looks like and what failing looks like. Multi-stage crises are a list, and the next stage opens the moment the one before it settles.
+- Results that add up. Damage, repair hours the bay actually owes, what the district lost, salvage, samples, civilians pulled out, reputation, what the sortie did to the pair's drift, experience, funding, and a replay recording the seed and the plan you flew. Every line says what produced it.
+- Five ways for it to end, and all of them are explained: cleanly, partially, badly, aborted, or with the machine out of contact. An abort keeps everything you had already earned.
+- Nothing is ever awarded twice. The only way anything reaches a mission is the simulation reporting it, and asking for the results a second time hands back the same results rather than paying again.
+
+One problem found by hand: the carrier run finished before it could be seen, because its length was measured in mission seconds and those pass sixty times faster than real ones. Ten to thirty seconds now, and still skippable.
+
 ## 2026-08-25, Milestone 16: Dynamic attack director and simultaneous world crises
 
 There is a war on now, and it happens whether you are looking at it or not.
