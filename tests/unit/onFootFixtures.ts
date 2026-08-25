@@ -26,6 +26,12 @@ const EMPTY_ROOM: InteriorRoom = {
   staffSlots: 4,
   fixtureCount: 0,
   underConstruction: false,
+  lighting: "full",
+  signage: "lit",
+  cranes: 0,
+  deliveries: 0,
+  stageNote: "A finished room, for a test that does not care what it looks like.",
+  builders: 0,
 };
 
 export function room(overrides: Partial<InteriorRoom> = {}): InteriorRoom {

@@ -677,6 +677,45 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-28, Milestone 22
+
+**Being short of crews queues rather than refuses.** The old system refused an
+order when nobody was free, which made the answer to "what should I build" into
+"whatever finished last". A queue moves that decision to the player: everything
+can be ordered, and priority decides what actually happens. Five tests asserted
+the old contract and were rewritten rather than deleted.
+
+**Crews are handed out fresh every tick.** Nothing holds a crew between ticks, so
+reprioritising takes effect on the next tick instead of after the current job.
+The alternative, letting an active project keep its crew until it finishes, makes
+the priority control a lie for as long as the job lasts.
+
+**Shortfalls degrade, they do not stop.** Power and staffing scale how much a tick
+of work is worth and how much of an upgrade a facility delivers. Only a total
+loss of power stops anything, and it says so. A system that silently does nothing
+when a number is short is indistinguishable from a bug.
+
+**A facility effect is a named multiplier from a fixed vocabulary.** Nine of them,
+enforced at registration, each consumed somewhere. This is the rule that stops a
+facility being a menu unlock: a tier cannot promise something no code reads.
+
+**The queue lives inside the shatterdome save section.** What is being built is a
+fact about the complex, not a separate subject, so this is a field on a section
+rather than a new one and the save version did not move.
+
+**An active project comes back queued.** Restoring a project mid-tick holding
+crews would mean the crew ledger disagreed with the queue for one tick. It is
+given crews again on the first tick after loading instead.
+
+**Prerequisites are proved reachable rather than reviewed.** A test walks the
+graph from an empty complex and asserts every facility reaches every tier. That
+is the only way to be sure no combination of choices strands a room, and it will
+keep being true as branches are added.
+
+**Cancelling refunds the work not yet done at a fixed rate.** The same policy
+every time, never a judgement call, and never a full refund. Nothing in the
+system is timed against a wall clock, so there is no wait to sell.
+
 ## 2026-08-27, Milestone 21
 
 **An ally is a fighter, not a new kind of thing.** It is added to the arena with

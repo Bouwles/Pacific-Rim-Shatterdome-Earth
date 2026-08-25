@@ -182,6 +182,23 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Construction cost (Milestone 22)
+
+The queue is arithmetic over a short list. Nothing here allocates per frame and
+nothing holds a scene object.
+
+| Thing                  | Budget              | Why                                                             |
+| ---------------------- | ------------------- | --------------------------------------------------------------- |
+| Live projects          | One per facility    | A facility may have one order outstanding, so fifteen at most   |
+| Queue tick             | Two passes          | One to hand out crews in priority order, one to apply work      |
+| Effect resolution      | Once per panel open | Fifteen facilities, a handful of multiplies each                |
+| Settled projects       | Pruned every tick   | Done and cancelled projects are dropped rather than accumulated |
+| Construction in a save | Under 2 KB          | Only what is outstanding, never what has finished               |
+
+The construction board is DOM, rebuilt only when the set of projects or their
+statuses changes and refreshed in place otherwise, so watching a build does not
+cost a layout per frame.
+
 ## Squad cost (Milestone 21)
 
 Three ally machines are three more fighters in the arena, and that is the whole

@@ -199,6 +199,27 @@ Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
 
+## The construction board (Milestone 22)
+
+Any facility terminal. Below the list of facilities is everything outstanding.
+
+| Control            | Effect                                                                  |
+| ------------------ | ----------------------------------------------------------------------- |
+| **Order**          | Queues a build or an upgrade. Short of crews queues rather than refuses |
+| **Sooner / Later** | Moves a project up or down. Takes effect on the next tick               |
+| **Pause**          | Stops work without losing it and frees the crews for something else     |
+| **Resume**         | Puts it back in the queue                                               |
+| **Cancel**         | Ends it and refunds the work not yet done                               |
+
+Each project shows how far along it is, its priority, and when it lands counting
+everything ahead of it. A project nobody is working on says why: waiting for a
+crew, paused, or the complex has no power at all.
+
+Above the list, one line says whether the complex is working at full speed and
+what is holding it back, and one says what everything built is currently worth.
+Both move with the shift: a night watch with a third of the posts filled builds
+at sixty percent and every facility is worth a little less until morning.
+
 ## Commanding the squad (Milestone 21)
 
 While piloting, with allies out with you.

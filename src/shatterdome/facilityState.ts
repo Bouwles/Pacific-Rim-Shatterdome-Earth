@@ -1,5 +1,15 @@
 import type { ContentRegistry } from "../data/registry";
 import {
+  ConstructionQueue,
+  DEFAULT_PRIORITY,
+  describeShortfall,
+  emptyConstructionSnapshot,
+  type ConstructionSnapshot,
+  type ProjectForecast,
+  type WorkCapacity,
+} from "./construction";
+import { resolveEffects, type EffectTotals, type FacilityStanding } from "./facilityEffects";
+import {
   BASE_CREW_CAPACITY,
   FACILITY_KINDS,
   type FacilityDefinition,
@@ -46,6 +56,8 @@ export interface ShatterdomeLocation {
 }
 
 export interface ShatterdomeSnapshot {
+  /** Outstanding construction, with its priorities and progress. */
+  readonly construction?: ConstructionSnapshot;
   readonly schemaVersion: number;
   readonly facilities: readonly FacilityRecord[];
   readonly location: ShatterdomeLocation;
@@ -90,12 +102,22 @@ export function defaultLocation(): ShatterdomeLocation {
 }
 
 export class ShatterdomeState {
+  /**
+   * The construction queue.
+   *
+   * Owned here rather than beside this, because a facility record and the work
+   * being done to it are the same subject. Everything that used to be a single
+   * running order goes through the queue now, which is what makes priorities,
+   * pausing and cancelling possible without a second system.
+   */
+  private readonly queue: ConstructionQueue;
   private readonly definitions: ContentRegistry<FacilityDefinition>;
   private readonly records = new Map<FacilityKind, FacilityRecord>();
   private location: ShatterdomeLocation = defaultLocation();
   private selectedJaeger: string | null = null;
 
   constructor(definitions: ContentRegistry<FacilityDefinition>) {
+    this.queue = new ConstructionQueue(definitions);
     this.definitions = definitions;
     for (const definition of definitions.all()) {
       this.records.set(definition.id, initialRecord(definition));
@@ -176,6 +198,81 @@ export class ShatterdomeState {
     return total;
   }
 
+  /**
+   * How much of the power the complex needs that it actually has.
+   *
+   * One at full output and below one when the reactor is behind. Never negative,
+   * and zero only when there is no output at all, which is the one case where
+   * work genuinely stops.
+   */
+  powerFactor(): number {
+    const power = this.power();
+    if (power.outputMw <= 0) return power.drawMw <= 0 ? 1 : 0;
+    if (power.drawMw <= 0) return 1;
+    return Math.max(0, Math.min(1, power.outputMw / power.drawMw));
+  }
+
+  /**
+   * How many of the posts are actually filled.
+   *
+   * Staffing moves with the shift, so a complex works more slowly at four in the
+   * morning than at noon. That is the degradation the player will meet most
+   * often, and it is a reason to plan rather than a failure.
+   */
+  staffFactor(staffOnShift: number): number {
+    const slots = this.staffSlots();
+    if (slots <= 0) return 1;
+    return Math.max(0, Math.min(1, staffOnShift / slots));
+  }
+
+  /** Everything the construction queue needs to know about the complex. */
+  capacity(staffOnShift: number, rateMultiplier = 1): WorkCapacity {
+    return {
+      crewsAvailable: this.crews().free,
+      powerFactor: this.powerFactor(),
+      staffFactor: this.staffFactor(staffOnShift),
+      rateMultiplier,
+    };
+  }
+
+  /** Where every facility stands, for the effect resolver. */
+  standings(): readonly FacilityStanding[] {
+    return this.all().map((record) => ({
+      facilityId: record.facilityId,
+      tier: record.tier,
+      operational: record.status === "operational",
+    }));
+  }
+
+  /**
+   * What the complex is worth right now.
+   *
+   * The one place anything asks what a built facility does. Degraded in
+   * proportion when the complex is short of power or people, so an upgrade is
+   * worth less on a bad night rather than worth nothing.
+   */
+  effects(staffOnShift: number): EffectTotals {
+    return resolveEffects(this.standings(), this.definitions, {
+      powerFactor: this.powerFactor(),
+      staffFactor: this.staffFactor(staffOnShift),
+    });
+  }
+
+  /** Why the complex is not working at full speed, or null when it is. */
+  shortfall(staffOnShift: number): string | null {
+    return describeShortfall(this.capacity(staffOnShift));
+  }
+
+  /** Every project outstanding, with what it is waiting on and when it lands. */
+  projects(staffOnShift: number): readonly ProjectForecast[] {
+    return this.queue.forecast(this.capacity(staffOnShift));
+  }
+
+  /** The queue itself, for the panel that reprioritises and cancels. */
+  construction(): ConstructionQueue {
+    return this.queue;
+  }
+
   /** The tier a facility would move to if an order were placed now, or null at the top. */
   nextTier(facilityId: FacilityKind): FacilityTier | null {
     const record = this.records.get(facilityId);
@@ -207,16 +304,24 @@ export class ShatterdomeState {
         message: `${definition.displayName} is at its highest tier.`,
       };
     }
-    const crews = this.crews();
-    if (crews.free < target.crewRequired) {
+    // Prerequisites first, because a missing room is the one refusal a player
+    // cannot fix by waiting.
+    for (const requirement of target.requires) {
+      const standing = this.records.get(requirement.facilityId)?.tier ?? 0;
+      if (standing >= requirement.tier) continue;
+      const other = this.definitions.get(requirement.facilityId);
       return {
         reason: "no-crews",
         message:
-          `${target.displayName} needs ${target.crewRequired} construction crew` +
-          `${target.crewRequired === 1 ? "" : "s"} and ${crews.free} of ${crews.capacity} are free. ` +
-          "Finish an order, or upgrade Logistics to muster more.",
+          `${target.displayName} needs ${other?.displayName ?? requirement.facilityId} at tier ` +
+          `${requirement.tier} first.`,
       };
     }
+    const crews = this.crews();
+    // Being short of crews is no longer a refusal. An order with nobody free
+    // joins the queue and waits its turn, which is the entire point of having
+    // a queue: the player decides what goes first rather than being told no.
+    void crews;
     const power = this.power();
     const current = this.tierData(facilityId, record.tier);
     // The draw that matters is the one this facility will have when the order
@@ -235,7 +340,7 @@ export class ShatterdomeState {
   }
 
   /** Places a build or upgrade order. Refuses with the reason rather than throwing. */
-  order(facilityId: FacilityKind): OrderResult {
+  order(facilityId: FacilityKind, priority = DEFAULT_PRIORITY): OrderResult {
     const refusal = this.checkOrder(facilityId);
     if (refusal) return { ok: false, ...refusal };
 
@@ -246,49 +351,130 @@ export class ShatterdomeState {
     const target = definition.tiers[record.tier];
     if (!target) throw new Error(`No tier above ${record.tier} for "${facilityId}"`);
 
+    // The order joins the queue. Whether it starts this tick depends on what
+    // else is queued and how many crews are free, which is the player's
+    // decision to make rather than a refusal to hand them.
+    const queued = this.queue.enqueue(facilityId, target, { priority });
+    if (!queued.ok) {
+      return { ok: false, reason: "already-working", message: queued.reason };
+    }
+
     const updated: FacilityRecord = {
       ...record,
       status: record.tier === 0 ? "building" : "upgrading",
       targetTier: target.tier,
       workRemainingTicks: target.constructionTicks,
-      crewsHeld: target.crewRequired,
+      crewsHeld: 0,
     };
     this.records.set(facilityId, updated);
     return { ok: true, record: updated };
   }
 
   /**
+   * Reflects the queue back onto the facility records.
+   *
+   * The queue owns how much work is left and who is doing it; the records own
+   * what is standing. This is the one place the two are reconciled, so a panel
+   * reading either sees the same thing.
+   */
+  private syncFromQueue(): void {
+    for (const [facilityId, record] of this.records) {
+      const project = this.queue.pendingFor(facilityId);
+      if (!project) {
+        if (record.status === "building" || record.status === "upgrading") {
+          // The project went away without finishing, which means it was
+          // cancelled. The room goes back to whatever was already standing.
+          this.records.set(facilityId, {
+            ...record,
+            status: record.tier === 0 ? "absent" : "operational",
+            targetTier: 0,
+            workRemainingTicks: 0,
+            crewsHeld: 0,
+          });
+        }
+        continue;
+      }
+      this.records.set(facilityId, {
+        ...record,
+        status: record.tier === 0 ? "building" : "upgrading",
+        targetTier: project.targetTier,
+        workRemainingTicks: Math.max(0, Math.round(project.workRemainingTicks)),
+        crewsHeld: project.crewsHeld,
+      });
+    }
+  }
+
+  /**
    * Advances every running order. Returns what finished, so the caller can report
    * it rather than discovering the change by comparing snapshots.
    */
-  advance(ticks: number): readonly FacilityCompletion[] {
+  advance(ticks: number, capacity?: WorkCapacity): readonly FacilityCompletion[] {
     if (ticks <= 0) return [];
+    // A caller that says nothing about the complex gets the complex as it is,
+    // fully staffed, which is what every earlier caller meant.
+    const work = capacity ?? this.capacity(this.staffSlots());
+    const done = this.queue.advance(ticks, work);
+
     const completed: FacilityCompletion[] = [];
-    for (const [facilityId, record] of this.records) {
-      if (record.status !== "building" && record.status !== "upgrading") continue;
-      const remaining = record.workRemainingTicks - ticks;
-      if (remaining > 0) {
-        this.records.set(facilityId, { ...record, workRemainingTicks: remaining });
-        continue;
-      }
-      const definition = this.definitions.getOrThrow(facilityId);
-      const tier = definition.tiers[record.targetTier - 1];
-      this.records.set(facilityId, {
-        facilityId,
-        tier: record.targetTier,
+    for (const project of done) {
+      const record = this.records.get(project.facilityId);
+      const firstBuild = (record?.tier ?? 0) === 0;
+      this.records.set(project.facilityId, {
+        facilityId: project.facilityId,
+        tier: project.tier,
         status: "operational",
         targetTier: 0,
         workRemainingTicks: 0,
         crewsHeld: 0,
       });
       completed.push({
-        facilityId,
-        tier: record.targetTier,
-        tierName: tier?.displayName ?? `Tier ${record.targetTier}`,
-        firstBuild: record.status === "building",
+        facilityId: project.facilityId,
+        tier: project.tier,
+        tierName: project.tierName,
+        firstBuild,
       });
     }
+    this.queue.prune();
+    this.syncFromQueue();
     return completed;
+  }
+
+  /** Stops work on a facility without losing it. Crews go back to the pool. */
+  pauseOrder(facilityId: FacilityKind): boolean {
+    const project = this.queue.pendingFor(facilityId);
+    if (!project) return false;
+    const paused = this.queue.pause(project.id);
+    this.syncFromQueue();
+    return paused;
+  }
+
+  resumeOrder(facilityId: FacilityKind): boolean {
+    const project = this.queue.pendingFor(facilityId);
+    if (!project) return false;
+    const resumed = this.queue.resume(project.id);
+    this.syncFromQueue();
+    return resumed;
+  }
+
+  /** Cancels an order and reports what comes back. */
+  cancelOrder(facilityId: FacilityKind): {
+    readonly ok: boolean;
+    readonly refund: number;
+    readonly message: string;
+  } {
+    const project = this.queue.pendingFor(facilityId);
+    if (!project) return { ok: false, refund: 0, message: "Nothing to cancel." };
+    const result = this.queue.cancel(project.id);
+    this.queue.prune();
+    this.syncFromQueue();
+    return result;
+  }
+
+  /** Moves an order up or down the queue. */
+  prioritiseOrder(facilityId: FacilityKind, priority: number): boolean {
+    const project = this.queue.pendingFor(facilityId);
+    if (!project) return false;
+    return this.queue.setPriority(project.id, priority);
   }
 
   /** Progress on a running order, 0 to 1. Zero when nothing is being built. */
@@ -308,6 +494,9 @@ export class ShatterdomeState {
       facilities: this.all(),
       location: this.location,
       selectedJaegerId: this.selectedJaeger,
+      // The queue is part of the complex, not a second save section: what is
+      // being built is a fact about the Shatterdome.
+      construction: this.queue.snapshot(),
     };
   }
 
@@ -326,6 +515,12 @@ export class ShatterdomeState {
     }
     this.location = { ...snapshot.location };
     this.selectedJaeger = snapshot.selectedJaegerId;
+    // A save written before the queue existed has nothing outstanding, which is
+    // the honest reading of a file where every order finished the moment it was
+    // placed or not at all.
+    if (snapshot.construction) this.queue.restore(snapshot.construction);
+    else this.queue.restore(emptyConstructionSnapshot());
+    this.syncFromQueue();
   }
 
   private tierData(facilityId: FacilityKind, tier: number): FacilityTier | undefined {

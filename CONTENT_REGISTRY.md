@@ -295,6 +295,33 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Facilities (Milestone 22)
+
+Fifteen branches in `src/data/facilities.ts`, twenty nine tiers between them.
+Every tier carries a cost, an upkeep, named effects, module slots, prerequisites
+and a stage variant.
+
+| id                | Deck | Tiers | Worth                             | Wants first           |
+| ----------------- | ---- | ----- | --------------------------------- | --------------------- |
+| command           | 2    | 2     | construction, contract funding    | logistics 1           |
+| jaeger-bay        | 0    | 2     | repair                            | reactor 1             |
+| repair            | 0    | 2     | repair 1.35 then 1.90             | manufacture 1         |
+| research          | 2    | 2     | research yield, containment yield | medical 1             |
+| manufacture       | 1    | 2     | repair, delivery speed            | logistics 2           |
+| reactor           | -1   | 3     | construction, repair              | manufacture 2 at t3   |
+| logistics         | 1    | 2     | delivery speed, construction      | nothing               |
+| training          | 3    | 2     | training, recovery                | medical 1             |
+| quarters          | 3    | 2     | recovery, training                | nothing               |
+| defense           | 1    | 2     | coastal defence                   | command 2             |
+| archive           | 3    | 1     | research yield, training          | nothing               |
+| contract          | 2    | 2     | contract funding, delivery speed  | command 2             |
+| launch            | 0    | 2     | delivery speed, contract funding  | jaeger-bay 2          |
+| medical           | 3    | 2     | recovery 1.40 then 1.90           | quarters 2 at t2      |
+| kaiju-containment | -1   | 2     | containment yield, research yield | research 1, reactor 2 |
+
+A test walks the prerequisite graph from an empty complex and asserts every
+facility is reachable at every tier, so no set of choices can strand a room.
+
 ## Squad orders (Milestone 21)
 
 Nine in `src/data/squadOrders.ts`. Each is weights on the ally goal table plus a

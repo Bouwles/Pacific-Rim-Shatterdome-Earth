@@ -41,6 +41,21 @@ export interface FacilityRow {
   readonly refusal: string | null;
 }
 
+/** One outstanding project, as the construction board shows it. */
+export interface QueueRow {
+  readonly facilityId: string;
+  readonly displayName: string;
+  readonly targetTier: number;
+  readonly status: string;
+  readonly priority: number;
+  /** 0 to 100 of the work done. */
+  readonly percent: number;
+  /** What it says about when it lands. */
+  readonly eta: string;
+  /** Why it is not being worked, or null. */
+  readonly stalledBecause: string | null;
+}
+
 export interface FacilityPanelState {
   readonly kind: "facility";
   readonly title: string;
@@ -49,6 +64,14 @@ export interface FacilityPanelState {
   readonly crewsFree: number;
   readonly crewCapacity: number;
   readonly rows: readonly FacilityRow[];
+  /** Everything outstanding, most urgent first. */
+  readonly queue: readonly QueueRow[];
+  /** Why the complex is not working at full speed, or null. */
+  readonly shortfall: string | null;
+  /** What the complex is currently worth, one line per effect that matters. */
+  readonly effects: readonly string[];
+  /** The last thing the construction office said. */
+  readonly note: string | null;
 }
 
 export interface BerthPanelState {
@@ -275,6 +298,13 @@ export interface ShatterdomeScreenState {
 
 export interface ShatterdomeScreenCallbacks {
   readonly onOrder: (facilityId: string) => void;
+  /** Moves a queued project up or down. Takes effect on the next tick. */
+  readonly onPrioritise: (facilityId: string, priority: number) => void;
+  /** Stops work without losing it, and gives the crews back. */
+  readonly onPauseOrder: (facilityId: string) => void;
+  readonly onResumeOrder: (facilityId: string) => void;
+  /** Cancels under the refund policy. */
+  readonly onCancelOrder: (facilityId: string) => void;
   /** Puts one shift of work into the machine in this berth. */
   readonly onRepair: (jaegerId: string) => void;
   /** Signs for one machine on the contracts board. */
@@ -437,7 +467,7 @@ export function renderShatterdomeScreen(
       } else if (state.panel) {
         // Same panel, live numbers: refresh in place rather than rebuilding, or
         // a button would be torn out from under the pointer every frame.
-        refreshPanel(panelHost, state.panel);
+        refreshPanel(panelHost, state.panel, callbacks);
       }
 
       pauseMenu.hidden = !state.paused;
@@ -488,6 +518,35 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
       list.appendChild(buildFacilityRow(row, callbacks));
     }
     element.appendChild(list);
+
+    // The construction board. Only drawn when there is something on it, so a
+    // complex with nothing outstanding does not carry an empty panel.
+    const queueHeading = document.createElement("h4");
+    queueHeading.textContent = "Construction";
+    queueHeading.dataset["field"] = "queue-heading";
+    element.appendChild(queueHeading);
+
+    const shortfall = document.createElement("p");
+    shortfall.className = "sd-facility-benefit";
+    shortfall.dataset["field"] = "queue-shortfall";
+    element.appendChild(shortfall);
+
+    const queue = document.createElement("ul");
+    queue.className = "sd-market-list";
+    queue.dataset["field"] = "queue-list";
+    element.appendChild(queue);
+    for (const row of panel.queue) queue.appendChild(buildQueueRow(row, callbacks));
+
+    const effects = document.createElement("p");
+    effects.className = "sd-facility-detail";
+    effects.dataset["field"] = "queue-effects";
+    element.appendChild(effects);
+
+    const note = document.createElement("p");
+    note.className = "sd-panel-notes";
+    note.dataset["field"] = "queue-note";
+    note.setAttribute("aria-live", "polite");
+    element.appendChild(note);
   } else if (panel.kind === "berth") {
     element.appendChild(definitionList(berthFields(panel)));
     const notes = document.createElement("p");
@@ -548,8 +607,75 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     element.appendChild(notes);
   }
 
-  refreshPanelElement(element, panel);
+  refreshPanelElement(element, panel, callbacks);
   return element;
+}
+
+function buildQueueRow(row: QueueRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "sd-market-row";
+  item.dataset["project"] = row.facilityId;
+
+  const head = document.createElement("div");
+  head.className = "sd-market-head";
+  const name = document.createElement("span");
+  name.className = "sd-market-name";
+  name.dataset["field"] = "queue-name";
+  const eta = document.createElement("span");
+  eta.className = "sd-market-price";
+  eta.dataset["field"] = "queue-eta";
+  head.append(name, eta);
+
+  const bar = document.createElement("span");
+  bar.className = "sd-experience-track";
+  const fill = document.createElement("span");
+  fill.className = "sd-band-fill";
+  fill.dataset["field"] = "queue-bar";
+  bar.appendChild(fill);
+
+  const detail = document.createElement("span");
+  detail.className = "sd-facility-detail";
+  detail.dataset["field"] = "queue-detail";
+
+  const actions = document.createElement("div");
+  actions.className = "sd-passive-row";
+  const sooner = button("Sooner", "secondary-button", () =>
+    callbacks.onPrioritise(row.facilityId, row.priority - 1),
+  );
+  sooner.dataset["action"] = "prioritise-up";
+  const later = button("Later", "secondary-button", () =>
+    callbacks.onPrioritise(row.facilityId, row.priority + 1),
+  );
+  later.dataset["action"] = "prioritise-down";
+  const hold =
+    row.status === "paused"
+      ? button("Resume", "secondary-button", () => callbacks.onResumeOrder(row.facilityId))
+      : button("Pause", "secondary-button", () => callbacks.onPauseOrder(row.facilityId));
+  hold.dataset["action"] = row.status === "paused" ? "resume-order" : "pause-order";
+  const cancel = button("Cancel", "secondary-button", () => callbacks.onCancelOrder(row.facilityId));
+  cancel.dataset["action"] = "cancel-order";
+  actions.append(sooner, later, hold, cancel);
+
+  item.append(head, bar, detail, actions);
+  refreshQueueRow(item, row);
+  return item;
+}
+
+function refreshQueueRow(item: HTMLElement, row: QueueRow): void {
+  item.dataset["status"] = row.status;
+  setField(item, "queue-name", `${row.displayName} to tier ${row.targetTier}`);
+  setField(item, "queue-eta", row.eta);
+  setField(
+    item,
+    "queue-detail",
+    `${row.percent}% done · priority ${row.priority} · ${row.status}` +
+      (row.stalledBecause ? ` · ${row.stalledBecause}` : ""),
+  );
+  const bar = item.querySelector<HTMLElement>('[data-field="queue-bar"]');
+  if (bar) {
+    bar.style.left = "0%";
+    bar.style.width = `${Math.max(2, Math.min(100, row.percent))}%`;
+  }
 }
 
 function buildFacilityRow(row: FacilityRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
@@ -916,12 +1042,20 @@ function buildOfferRow(row: MarketOfferRow, callbacks: ShatterdomeScreenCallback
   return item;
 }
 
-function refreshPanel(host: HTMLElement, panel: ShatterdomePanelState): void {
+function refreshPanel(
+  host: HTMLElement,
+  panel: ShatterdomePanelState,
+  callbacks: ShatterdomeScreenCallbacks,
+): void {
   const element = host.querySelector<HTMLElement>(".sd-panel");
-  if (element) refreshPanelElement(element, panel);
+  if (element) refreshPanelElement(element, panel, callbacks);
 }
 
-function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState): void {
+function refreshPanelElement(
+  element: HTMLElement,
+  panel: ShatterdomePanelState,
+  callbacks: ShatterdomeScreenCallbacks,
+): void {
   if (panel.kind === "facility") {
     const summary = element.querySelector<HTMLElement>('[data-field="panel-summary"]');
     if (summary) {
@@ -959,6 +1093,34 @@ function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState)
         // failed click, so a greyed control always explains itself.
         action.title = row.refusal ?? `Order ${row.nextTierName ?? ""}`.trim();
         action.dataset["refusal"] = row.refusal ?? "";
+      }
+    }
+
+    const heading = element.querySelector<HTMLElement>('[data-field="queue-heading"]');
+    if (heading) heading.hidden = panel.queue.length === 0;
+    setField(element, "queue-shortfall", panel.shortfall ?? "Building at full speed.");
+    setField(
+      element,
+      "queue-effects",
+      panel.effects.length === 0
+        ? "Nothing built is changing any number yet."
+        : `The complex is worth: ${panel.effects.join(" · ")}`,
+    );
+    setField(element, "queue-note", panel.note ?? "");
+    const queue = element.querySelector<HTMLElement>('[data-field="queue-list"]');
+    if (queue) {
+      // Rebuilt only when the set of projects changes, refreshed in place
+      // otherwise, so a button is never torn out from under the pointer.
+      const signature = panel.queue.map((row) => `${row.facilityId}:${row.status}`).join(",");
+      if (queue.dataset["built"] !== signature) {
+        queue.dataset["built"] = signature;
+        queue.replaceChildren();
+        for (const row of panel.queue) queue.appendChild(buildQueueRow(row, callbacks));
+      } else {
+        for (const row of panel.queue) {
+          const item = queue.querySelector<HTMLElement>(`[data-project="${row.facilityId}"]`);
+          if (item) refreshQueueRow(item, row);
+        }
       }
     }
     return;

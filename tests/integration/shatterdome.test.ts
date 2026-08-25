@@ -116,12 +116,61 @@ describe("session behaviour", () => {
 
   it("keeps the player where they are when an order is refused, and says why", () => {
     const session = freshSession();
-    session.orderUpgrade("research");
-    session.orderUpgrade("archive");
-    session.orderUpgrade("contract");
-    const refused = session.orderUpgrade("training");
+    // Being short of crews queues rather than refuses now, so the refusal this
+    // exercises is a prerequisite: containment cannot be dug before there is a
+    // laboratory and a second reactor loop to run it on.
+    const refused = session.orderUpgrade("kaiju-containment");
     expect(refused.ok).toBe(false);
     expect(session.radioLog.at(-1)?.text).toMatch(/refused/);
+  });
+
+  it("costs what the tier says, and gives back only what was not spent", () => {
+    // Ordering takes the money and cancelling returns the part not yet worked,
+    // so the two together can never be a way to make funding appear.
+    const definitions = createFacilityRegistry();
+    const cost = definitions.getOrThrow("medical").tiers[0]!.cost;
+    const session = freshSession();
+    const state = session.state;
+
+    const order = state.order("medical");
+    expect(order.ok).toBe(true);
+    state.advance(2_000);
+    const refund = state.cancelOrder("medical").refund;
+    expect(refund).toBeGreaterThan(0);
+    expect(refund).toBeLessThan(cost);
+  });
+
+  it("changes what the bay looks like and what it is worth when it is upgraded", () => {
+    // The acceptance item in one test: an upgrade has to change both halves.
+    // A facility that only moved a number would be a menu unlock, and one that
+    // only changed the furniture would be scenery.
+    const session = freshSession();
+    const state = session.state;
+
+    const before = state.effects(state.staffSlots()).repairRate;
+    const beforeRoom = session.layout.rooms.find((room) => room.facilityId === "repair");
+    expect(beforeRoom).toBeDefined();
+
+    // The repair bay's second tier wants a fabrication hall first, and the hall
+    // wants a reactor that can carry it. Both are built rather than worked
+    // around, which is what a prerequisite chain is for.
+    for (const facilityId of ["reactor", "manufacture", "repair"] as const) {
+      const order = state.order(facilityId);
+      if (!order.ok) throw new Error(`order refused: ${order.message}`);
+      state.advance(order.record.workRemainingTicks + 1);
+    }
+    session.rebuildLayout();
+
+    const after = state.effects(state.staffSlots()).repairRate;
+    const afterRoom = session.layout.rooms.find((room) => room.facilityId === "repair");
+
+    // Authoritative repair performance moved.
+    expect(after).toBeGreaterThan(before);
+    // And so did what somebody walking into the bay would see.
+    expect(afterRoom!.stageNote).not.toBe(beforeRoom!.stageNote);
+    expect(afterRoom!.cranes).toBeGreaterThan(beforeRoom!.cranes);
+    expect(afterRoom!.lighting).not.toBe(beforeRoom!.lighting);
+    expect(afterRoom!.signage).toBe("lit");
   });
 
   it("changes the room the moment an order lands, scaffolds and all", () => {

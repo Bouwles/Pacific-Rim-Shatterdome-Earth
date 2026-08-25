@@ -74,6 +74,7 @@ import { AttackDirector, type Resolution } from "../world/director";
 import { Market, ROTATION_DAYS } from "../world/market";
 import { Crew, LINK_EXPERIENCE_PER_LEVEL } from "../pilots/crew";
 import { Squad, MAX_SQUAD_SIZE } from "../allies/squad";
+import { effectValue, describeEffects } from "../shatterdome/facilityEffects";
 import { AllyController, resolveSquadIntents, type AllyIntent } from "../allies/allyController";
 import type { SquadOrderId } from "../data/squadOrders";
 import { LEVEL_CAP, levelFromExperience, nextUnlock } from "../jaegers/progression";
@@ -139,6 +140,7 @@ import {
   type FacilityRow,
   type ShatterdomePanelState,
   type MarketOfferRow,
+  type QueueRow,
   type ProgressionPanelState,
   type CrewPanelState,
   type BerthPanelState,
@@ -3668,7 +3670,44 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       crewsFree: crews.free,
       crewCapacity: crews.capacity,
       rows: facilityRows(active),
+      queue: constructionRows(active),
+      shortfall: active.constructionShortfall(),
+      effects: describeEffects(shatterdomeState.effects(active.staffOnShiftTotal())),
+      note: constructionNote,
     };
+  };
+
+  /** The last thing the construction office said. */
+  let constructionNote: string | null = null;
+
+  /**
+   * Everything outstanding, for the construction board.
+   *
+   * Read from the queue's own forecast, so what the board says about when
+   * something lands is the same number the queue is working to.
+   */
+  const constructionRows = (active: ShatterdomeSession): QueueRow[] =>
+    shatterdomeState.projects(active.staffOnShiftTotal()).map((project) => ({
+      facilityId: project.facilityId,
+      displayName: facilityRegistry.get(project.facilityId)?.displayName ?? project.facilityId,
+      targetTier: project.targetTier,
+      status: project.status,
+      priority: project.priority,
+      percent: Math.round(project.progress * 100),
+      eta: Number.isFinite(project.etaMinutes) ? `${project.etaMinutes} min` : "not while it is stalled",
+      stalledBecause: project.stalledBecause,
+    }));
+
+  /**
+   * What the complex multiplies a shift of repair work by.
+   *
+   * Read from the facilities that are actually standing, through the one
+   * resolver that turns tiers into effects, so the bay and the numbers cannot
+   * disagree about what an upgrade bought.
+   */
+  const repairRate = (): number => {
+    const onShift = session ? session.staffOnShiftTotal() : shatterdomeState.staffSlots();
+    return effectValue(shatterdomeState.effects(onShift), "repairRate");
   };
 
   /** The last thing the repair crew reported, shown on the berth panel. */
@@ -4183,8 +4222,56 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     });
 
     shatterdomeScreen = renderShatterdomeScreen(uiRoot, {
+      onPrioritise: (facilityId, priority) => {
+        const moved = shatterdomeState.prioritiseOrder(facilityId as FacilityKind, priority);
+        constructionNote = moved
+          ? `${facilityRegistry.get(facilityId as FacilityKind)?.displayName ?? facilityId} moved to priority ${priority}.`
+          : "Nothing queued for that.";
+        openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
+      onPauseOrder: (facilityId) => {
+        const paused = shatterdomeState.pauseOrder(facilityId as FacilityKind);
+        constructionNote = paused
+          ? "Work stopped. The crews are free for something else."
+          : "Nothing to pause.";
+        openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
+      onResumeOrder: (facilityId) => {
+        const resumed = shatterdomeState.resumeOrder(facilityId as FacilityKind);
+        constructionNote = resumed ? "Back on it." : "Nothing to resume.";
+        openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
+      onCancelOrder: (facilityId) => {
+        const result = shatterdomeState.cancelOrder(facilityId as FacilityKind);
+        if (result.ok && result.refund > 0) market.credit(result.refund);
+        constructionNote = result.message;
+        openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+      },
       onOrder: (facilityId) => {
-        active.orderUpgrade(facilityId as FacilityKind);
+        const kind = facilityId as FacilityKind;
+        const next = shatterdomeState.nextTier(kind);
+        const name = facilityRegistry.get(kind)?.displayName ?? facilityId;
+        // Money first, so a project is never started against funding that is
+        // not there. Cancelling refunds what was not spent, and refunding what
+        // was never taken would make ordering and cancelling a way to print it.
+        if (next) {
+          const paid = market.spend(next.cost, `${name} ${next.displayName.toLowerCase()}`);
+          if (!paid.ok) {
+            constructionNote = paid.message;
+            openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
+            return;
+          }
+          const result = active.orderUpgrade(kind);
+          // The bay refusing after the money left would be theft, so it goes back.
+          if (!result.ok) {
+            market.credit(next.cost);
+            constructionNote = result.message;
+          } else {
+            constructionNote = `${name} ordered. ${formatMoney(next.cost)} committed.`;
+          }
+        } else {
+          active.orderUpgrade(kind);
+        }
         // The order changes the room and the panel in the same breath.
         openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
       },
@@ -4270,7 +4357,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       onRepair: (jaegerId) => {
         // One shift of work. The crew takes the worst component first, which is
         // why a machine gets its legs back before its paint.
-        const outcome = roster.work(jaegerId, REPAIR_SHIFT_HOURS);
+        // What a shift is worth depends on the complex. A repair bay that has
+        // been upgraded genuinely repairs faster, which is the difference
+        // between a facility and a menu unlock, and a complex short of power
+        // or people gets less of that upgrade rather than none of it.
+        const shiftHours = REPAIR_SHIFT_HOURS * repairRate();
+        const outcome = roster.work(jaegerId, shiftHours);
         const record = roster.get(jaegerId);
         repairNote =
           outcome.messages[outcome.messages.length - 1] ??

@@ -526,6 +526,27 @@ input, the pilot screen, the save schema and migrations to version 12, and the b
 - `npm run typecheck`, `lint`, `format:check`, `test` (1341), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 22 - Shatterdome facilities, visible upgrades, staff and construction
+
+**Depends on:** Milestone 08 (the complex), 18 (the money it now costs), 20 (the medical bay it serves).
+**Status:** done.
+**Scope:** facility tiers carrying cost, upkeep, named effects, module slots, prerequisites and visible
+stage variants; the two missing branches, medical and kaiju containment, bringing the complex to fifteen;
+a construction queue with player-adjustable priorities, pause, resume, cancel under a fixed refund policy
+and forecasts that count what is ahead; power and staffing as degradation rather than refusal; facility
+effects reaching authoritative repair performance; and visible construction through lighting, signage,
+cranes, deliveries and crews on site. Created `src/shatterdome/construction.ts`,
+`src/shatterdome/facilityEffects.ts`, `src/debug/constructionScenario.ts`. Extended
+`src/data/facilities.ts`, `src/shatterdome/facilityState.ts`, `src/shatterdome/session.ts`,
+`src/shatterdome/interiorLayout.ts`, the facility panel and the bootstrap wiring.
+**Acceptance tests:**
+
+- Start, pause, reprioritise, cancel under policy, finish and reload construction projects.
+- A completed repair upgrade changes both the bay presentation and authoritative repair performance.
+- Insufficient power or staff produces understandable degraded behaviour rather than silent failure.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1377), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

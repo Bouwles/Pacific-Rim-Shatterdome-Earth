@@ -32,6 +32,8 @@ export const FACILITY_KINDS = [
   "archive",
   "contract",
   "launch",
+  "medical",
+  "kaiju-containment",
 ] as const;
 export type FacilityKind = (typeof FACILITY_KINDS)[number];
 
@@ -75,6 +77,84 @@ export interface FacilityTier {
   readonly fixtures: number;
   /** One honest sentence about what this tier does. Shown at the terminal. */
   readonly benefit: string;
+  /**
+   * Funding this tier costs to build, once.
+   *
+   * Money arrived with the market, so a facility order is now a decision about
+   * what else that money was going to buy rather than only about crews.
+   */
+  readonly cost: number;
+  /** Funding this tier costs every day once it is standing. */
+  readonly upkeepPerDay: number;
+  /**
+   * What this tier is actually worth, as named multipliers.
+   *
+   * A fixed vocabulary, so a tier cannot promise something nothing reads. Every
+   * one of these is consumed somewhere: a facility that only changed a sentence
+   * would be a menu unlock, which is the thing this milestone exists to avoid.
+   */
+  readonly effects: Partial<Record<FacilityEffect, number>>;
+  /**
+   * Module slots this tier opens, for the fittings a facility carries.
+   *
+   * Footprint in the sense that matters: how much can be installed here, rather
+   * than how many square metres the room claims.
+   */
+  readonly moduleSlots: number;
+  /** Facilities that must already be standing at this tier before it can start. */
+  readonly requires: readonly { readonly facilityId: FacilityKind; readonly tier: number }[];
+  /**
+   * What the room looks like at this tier, so an upgrade is visible rather than
+   * a number. Read by the layout, never by the simulation.
+   */
+  readonly stage: StageVariant;
+}
+
+/**
+ * What a facility can be worth.
+ *
+ * Named effects with somewhere in the game that already reads them. Anything
+ * added here has to be consumed by something, which the registry checks.
+ */
+export const FACILITY_EFFECTS = [
+  /** Multiplier on hours of repair work a shift puts into a machine. */
+  "repairRate",
+  /** Multiplier on how fast construction crews work. */
+  "constructionRate",
+  /** Multiplier on experience a sortie pays a machine. */
+  "trainingRate",
+  /** Multiplier on how fast injured pilots recover. */
+  "medicalRate",
+  /** Multiplier on salvage and samples recovered. */
+  "researchYield",
+  /** Multiplier on funding a sortie pays. */
+  "contractYield",
+  /** Multiplier on how quickly a bought machine is delivered. */
+  "deliverySpeed",
+  /** Multiplier on how much a contained specimen is worth in research. */
+  "containmentYield",
+  /** Multiplier on regional defence when the player does not go. */
+  "defenceStrength",
+] as const;
+export type FacilityEffect = (typeof FACILITY_EFFECTS)[number];
+
+/**
+ * How a room reads at a given tier.
+ *
+ * Presentation only. The layout turns these into fixtures, scaffolds, cranes,
+ * crates and light; nothing authoritative reads any of it.
+ */
+export interface StageVariant {
+  /** Working lights, floodlights, or the full rig. Drives room brightness. */
+  readonly lighting: "work" | "flood" | "full";
+  /** Painted number, stencilled name, or a lit sign over the door. */
+  readonly signage: "none" | "stencil" | "lit";
+  /** Gantry cranes standing in the room. */
+  readonly cranes: number;
+  /** Pallets and crates waiting to be unpacked. */
+  readonly deliveries: number;
+  /** One line describing what somebody walking in would notice. */
+  readonly note: string;
 }
 
 export interface FacilityDefinition extends RegistryEntry {
@@ -144,6 +224,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 6,
         fixtures: 4,
         benefit: "Facility orders can be issued and the complex reports its own state.",
+        cost: 900_000,
+        upkeepPerDay: 900,
+        effects: {},
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 1,
+          note: "Folding tables, taped cable runs and one working screen.",
+        },
       },
       {
         tier: 2,
@@ -156,6 +248,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 11,
         fixtures: 8,
         benefit: "A full watch floor: every facility reports through one board instead of by runner.",
+        cost: 2_400_000,
+        upkeepPerDay: 2_100,
+        effects: { constructionRate: 1.1, contractYield: 1.06 },
+        moduleSlots: 2,
+        requires: [{ facilityId: "logistics", tier: 1 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 0,
+          note: "A proper watch floor, lit and quiet, with the board on the wall.",
+        },
       },
     ],
     description: "The room the complex is run from. Everything else reports here.",
@@ -189,6 +293,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 14,
         fixtures: 3,
         benefit: "Two berths with access gantries. Machines can be boarded and inspected.",
+        cost: 1_800_000,
+        upkeepPerDay: 2_400,
+        effects: {},
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 2,
+          note: "One gantry, a hook, and a great deal of empty floor.",
+        },
       },
       {
         tier: 2,
@@ -201,6 +317,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 22,
         fixtures: 5,
         benefit: "Four berths and heavier cranes. More machines can stand ready at once.",
+        cost: 4_800_000,
+        upkeepPerDay: 4_600,
+        effects: { repairRate: 1.12 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "reactor", tier: 1 }],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 3,
+          deliveries: 1,
+          note: "Three gantries over three berths, and the floodlights are on.",
+        },
       },
     ],
     description: "Where the machines stand. The one room built at Jaeger scale.",
@@ -232,6 +360,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 10,
         fixtures: 2,
         benefit: "One gantry: armour panels and actuators can be worked on in place.",
+        cost: 1_400_000,
+        upkeepPerDay: 1_900,
+        effects: { repairRate: 1.35 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 3,
+          note: "Cutting gear on trolleys and a lot of spare plate.",
+        },
       },
       {
         tier: 2,
@@ -244,6 +384,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 17,
         fixtures: 4,
         benefit: "Two gantries and a plate shop, so structural damage no longer waits its turn.",
+        cost: 3_900_000,
+        upkeepPerDay: 3_800,
+        effects: { repairRate: 1.9 },
+        moduleSlots: 4,
+        requires: [{ facilityId: "manufacture", tier: 1 }],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 1,
+          note: "Two overhead cranes and a component line that never stops.",
+        },
       },
     ],
     description: "Where damage is undone. Adjacent to the bay because the machines cannot walk far.",
@@ -275,6 +427,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 5,
         fixtures: 4,
         benefit: "Salvaged tissue can be held and catalogued instead of discarded.",
+        cost: 1_200_000,
+        upkeepPerDay: 1_600,
+        effects: { researchYield: 1.3 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 3,
+          note: "Benches, cold storage, and something in a tank.",
+        },
       },
       {
         tier: 2,
@@ -287,6 +451,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 9,
         fixtures: 7,
         benefit: "Sealed containment, so live samples stop being a reason to evacuate a deck.",
+        cost: 3_400_000,
+        upkeepPerDay: 3_400,
+        effects: { researchYield: 1.75, containmentYield: 1.2 },
+        moduleSlots: 4,
+        requires: [{ facilityId: "medical", tier: 1 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 1,
+          note: "Clean rooms behind glass, and the specimens are labelled.",
+        },
       },
     ],
     description: "Where the biology is worked out. Built cold and vented hard.",
@@ -318,6 +494,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 12,
         fixtures: 4,
         benefit: "Armour plate and structural frame can be made here rather than shipped in.",
+        cost: 2_100_000,
+        upkeepPerDay: 2_800,
+        effects: { repairRate: 1.1, deliverySpeed: 1.1 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 2,
+          deliveries: 4,
+          note: "A press, a lathe, and pallets of stock in the way.",
+        },
       },
       {
         tier: 2,
@@ -330,6 +518,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 20,
         fixtures: 8,
         benefit: "Actuators and weapon components as well as plate, which shortens every repair.",
+        cost: 5_200_000,
+        upkeepPerDay: 5_400,
+        effects: { repairRate: 1.25, deliverySpeed: 1.3 },
+        moduleSlots: 4,
+        requires: [{ facilityId: "logistics", tier: 2 }],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 4,
+          deliveries: 2,
+          note: "A fabrication line under four cranes, running two shifts.",
+        },
       },
     ],
     description: "Where parts come from. Loud, hot, and directly under the bay cranes.",
@@ -361,6 +561,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 6,
         fixtures: 3,
         benefit: "220 MW: enough for the bay, repair, quarters and a command floor.",
+        cost: 2_600_000,
+        upkeepPerDay: 1_200,
+        effects: {},
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 2,
+          note: "One core, a lot of shielding, and a very loud room.",
+        },
       },
       {
         tier: 2,
@@ -373,6 +585,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 10,
         fixtures: 5,
         benefit: "480 MW, which is what a laboratory and a fabrication hall together need.",
+        cost: 5_800_000,
+        upkeepPerDay: 2_400,
+        effects: { constructionRate: 1.08 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 1,
+          note: "Two cores and a control room that can see both.",
+        },
       },
       {
         tier: 3,
@@ -385,6 +609,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 14,
         fixtures: 8,
         benefit: "900 MW and surge capacity: every facility at full tier with headroom to launch.",
+        cost: 11_000_000,
+        upkeepPerDay: 4_200,
+        effects: { constructionRate: 1.15, repairRate: 1.05 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "manufacture", tier: 2 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 0,
+          note: "Three cores, and the complex stops worrying about power.",
+        },
       },
     ],
     description: "The reason anything else runs. Sunk below the waterline and behind blast doors.",
@@ -416,6 +652,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 8,
         fixtures: 4,
         benefit: "One extra construction crew and somewhere to put what arrives.",
+        cost: 1_100_000,
+        upkeepPerDay: 1_400,
+        effects: { deliverySpeed: 1.15 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 4,
+          note: "Racking, a forklift, and more pallets than floor.",
+        },
       },
       {
         tier: 2,
@@ -428,6 +676,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 14,
         fixtures: 8,
         benefit: "Two more crews again, so three orders can run at once instead of one.",
+        cost: 3_100_000,
+        upkeepPerDay: 2_900,
+        effects: { deliverySpeed: 1.35, constructionRate: 1.12 },
+        moduleSlots: 3,
+        requires: [],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 2,
+          note: "A loading floor that can take a whole delivery at once.",
+        },
       },
     ],
     description: "Where everything the complex consumes is kept, and where crews are mustered.",
@@ -459,6 +719,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 6,
         fixtures: 3,
         benefit: "A mat and a simulator rig, so candidates can be assessed before a real Drift.",
+        cost: 1_000_000,
+        upkeepPerDay: 1_300,
+        effects: { trainingRate: 1.25 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 2,
+          note: "Two drift rigs and a mat that has seen better days.",
+        },
       },
       {
         tier: 2,
@@ -471,6 +743,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 11,
         fixtures: 6,
         benefit: "A full neural rig: compatibility is measured rather than guessed at.",
+        cost: 2_900_000,
+        upkeepPerDay: 2_700,
+        effects: { trainingRate: 1.6, medicalRate: 1.1 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "medical", tier: 1 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 1,
+          note: "A simulator floor with instrumented rigs and somebody watching.",
+        },
       },
     ],
     description: "Where pilots are made compatible with each other, then with a machine.",
@@ -502,6 +786,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 9,
         fixtures: 6,
         benefit: "Somewhere for the staff to sleep, which is why any of them are on shift at all.",
+        cost: 800_000,
+        upkeepPerDay: 1_100,
+        effects: { medicalRate: 1.1 },
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 2,
+          note: "Bunks, lockers, and a kettle somebody brought in.",
+        },
       },
       {
         tier: 2,
@@ -514,6 +810,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 16,
         fixtures: 10,
         benefit: "A proper mess and more bunks: the complex can carry a larger standing crew.",
+        cost: 2_200_000,
+        upkeepPerDay: 2_300,
+        effects: { medicalRate: 1.25, trainingRate: 1.1 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 1,
+          note: "Real rooms, a mess that serves properly, and people sleeping.",
+        },
       },
     ],
     description: "Bunks, mess and the only room in the complex that is ever quiet.",
@@ -545,6 +853,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 5,
         fixtures: 4,
         benefit: "The city defence positions report here instead of running independently.",
+        cost: 1_600_000,
+        upkeepPerDay: 2_000,
+        effects: { defenceStrength: 1.2 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 3,
+          note: "Two batteries, a radar mast, and cabling still on the deck.",
+        },
       },
       {
         tier: 2,
@@ -557,6 +877,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 9,
         fixtures: 7,
         benefit: "Batteries, sea wall and checkpoints are directed from one board.",
+        cost: 4_100_000,
+        upkeepPerDay: 4_000,
+        effects: { defenceStrength: 1.5 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "command", tier: 2 }],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 1,
+          note: "A ring of batteries with their own fire control.",
+        },
       },
     ],
     description: "Where the city's own defences are watched, whether or not a Jaeger is out.",
@@ -588,6 +920,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 2,
         fixtures: 5,
         benefit: "Machines and crews that were lost are recorded rather than forgotten.",
+        cost: 700_000,
+        upkeepPerDay: 800,
+        effects: { researchYield: 1.1, trainingRate: 1.05 },
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 2,
+          note: "Shelves, boxes, and the record of everything lost so far.",
+        },
       },
     ],
     description: "The wall of names, and the paperwork behind it.",
@@ -619,6 +963,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 3,
         fixtures: 4,
         benefit: "Somewhere for manufacturers and governments to be dealt with in person.",
+        cost: 900_000,
+        upkeepPerDay: 1_000,
+        effects: { contractYield: 1.15 },
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 2,
+          note: "Desks, a printer, and one very persistent telephone.",
+        },
       },
       {
         tier: 2,
@@ -631,6 +987,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 6,
         fixtures: 7,
         benefit: "Several negotiations at once, which is what a rotating market needs.",
+        cost: 2_600_000,
+        upkeepPerDay: 2_400,
+        effects: { contractYield: 1.4, deliverySpeed: 1.1 },
+        moduleSlots: 2,
+        requires: [{ facilityId: "command", tier: 2 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 1,
+          note: "A procurement floor running several negotiations at once.",
+        },
       },
     ],
     description:
@@ -664,6 +1032,18 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 7,
         fixtures: 3,
         benefit: "A marshalling apron and the deployment corridor out through the waterfront.",
+        cost: 2_300_000,
+        upkeepPerDay: 2_600,
+        effects: { deliverySpeed: 1.05 },
+        moduleSlots: 1,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 3,
+          note: "An apron, a gantry, and wind coming through the doors.",
+        },
       },
       {
         tier: 2,
@@ -676,9 +1056,160 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         staffSlots: 13,
         fixtures: 6,
         benefit: "Hardstand for carrier lift, which is what long-range deployment will need.",
+        cost: 5_600_000,
+        upkeepPerDay: 5_000,
+        effects: { deliverySpeed: 1.2, contractYield: 1.08 },
+        moduleSlots: 2,
+        requires: [{ facilityId: "jaeger-bay", tier: 2 }],
+        stage: {
+          lighting: "flood",
+          signage: "lit",
+          cranes: 3,
+          deliveries: 1,
+          note: "A launch floor that can turn a machine round without waiting.",
+        },
       },
     ],
     description: "The way out. Opens onto the apron the city layout routes deployment along.",
+  },
+  {
+    id: "medical",
+    displayName: "Medical Bay",
+    deck: 3,
+    widthMeters: 24,
+    depthMeters: 18,
+    heightMeters: 6,
+    floorColour: [0.2, 0.22, 0.23],
+    accentColour: [0.75, 0.85, 0.9],
+    ambience: "monitors and a centrifuge nobody turns off",
+    stations: [
+      { kind: "terminal", label: "Medical terminal", count: 1 },
+      { kind: "staff-post", label: "Treatment bay", count: 3 },
+    ],
+    startsBuilt: false,
+    tiers: [
+      {
+        tier: 1,
+        displayName: "Infirmary",
+        constructionTicks: 4_200,
+        crewRequired: 1,
+        powerDrawMw: 7,
+        powerOutputMw: 0,
+        crewProvided: 0,
+        staffSlots: 4,
+        fixtures: 4,
+        benefit: "Somewhere for a hurt pilot to be treated rather than told to rest.",
+        cost: 1_000_000,
+        upkeepPerDay: 1_500,
+        effects: { medicalRate: 1.4 },
+        moduleSlots: 2,
+        requires: [],
+        stage: {
+          lighting: "work",
+          signage: "stencil",
+          cranes: 0,
+          deliveries: 2,
+          note: "Four beds, a drug cabinet, and a machine that beeps.",
+        },
+      },
+      {
+        tier: 2,
+        displayName: "Trauma centre",
+        constructionTicks: 11_800,
+        crewRequired: 1,
+        powerDrawMw: 13,
+        powerOutputMw: 0,
+        crewProvided: 0,
+        staffSlots: 8,
+        fixtures: 7,
+        benefit: "Serious injuries treated here instead of somewhere else, and sooner.",
+        cost: 3_000_000,
+        upkeepPerDay: 3_100,
+        effects: { medicalRate: 1.9, trainingRate: 1.05 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "quarters", tier: 2 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 0,
+          deliveries: 1,
+          note: "Two theatres behind sealed doors and a ward that is never empty.",
+        },
+      },
+    ],
+    description:
+      "Where the crews go when the harness wins. Treatment shortens a recovery and never removes it.",
+  },
+  {
+    id: "kaiju-containment",
+    displayName: "Kaiju Containment",
+    deck: -1,
+    widthMeters: 30,
+    depthMeters: 26,
+    heightMeters: 14,
+    floorColour: [0.13, 0.15, 0.14],
+    accentColour: [0.55, 0.85, 0.5],
+    ambience: "pumps, and something very large breathing",
+    stations: [
+      { kind: "terminal", label: "Containment terminal", count: 1 },
+      { kind: "staff-post", label: "Observation post", count: 2 },
+    ],
+    startsBuilt: false,
+    tiers: [
+      {
+        tier: 1,
+        displayName: "Holding cells",
+        constructionTicks: 9_600,
+        crewRequired: 2,
+        powerDrawMw: 22,
+        powerOutputMw: 0,
+        crewProvided: 0,
+        staffSlots: 4,
+        fixtures: 5,
+        benefit: "Specimens kept alive long enough to be worth studying.",
+        cost: 2_800_000,
+        upkeepPerDay: 3_400,
+        effects: { containmentYield: 1.5, researchYield: 1.15 },
+        moduleSlots: 2,
+        requires: [
+          { facilityId: "research", tier: 1 },
+          { facilityId: "reactor", tier: 2 },
+        ],
+        stage: {
+          lighting: "flood",
+          signage: "stencil",
+          cranes: 1,
+          deliveries: 2,
+          note: "Three cells, a lot of glass, and pumps running day and night.",
+        },
+      },
+      {
+        tier: 2,
+        displayName: "Deep containment",
+        constructionTicks: 21_000,
+        crewRequired: 2,
+        powerDrawMw: 40,
+        powerOutputMw: 0,
+        crewProvided: 0,
+        staffSlots: 7,
+        fixtures: 8,
+        benefit: "A whole creature held below the waterline, and everything that comes of that.",
+        cost: 7_400_000,
+        upkeepPerDay: 7_800,
+        effects: { containmentYield: 2.1, researchYield: 1.35 },
+        moduleSlots: 3,
+        requires: [{ facilityId: "research", tier: 2 }],
+        stage: {
+          lighting: "full",
+          signage: "lit",
+          cranes: 2,
+          deliveries: 1,
+          note: "One tank the size of the room, and nobody stands near the glass.",
+        },
+      },
+    ],
+    description:
+      "Below the waterline, where the things that come through are kept while they are still useful.",
   },
 ];
 
@@ -704,6 +1235,8 @@ export const FACILITY_CONNECTIONS: readonly ConnectionSpec[] = [
   { from: "quarters", to: "training", kind: "door" },
   { from: "quarters", to: "archive", kind: "door" },
   { from: "jaeger-bay", to: "quarters", kind: "tram" },
+  { from: "quarters", to: "medical", kind: "door" },
+  { from: "research", to: "kaiju-containment", kind: "lift" },
 ];
 
 export function validateFacility(entry: FacilityDefinition): string[] {

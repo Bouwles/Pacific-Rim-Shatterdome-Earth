@@ -101,6 +101,13 @@ The project is built in numbered milestones. Everything listed here actually run
 - Eight kinds of mission: defend, intercept, pursue, rescue, contain, escort, research and salvage, and crises that come in stages where the next one opens as soon as the last is settled
 - Results that add up: damage, the repair hours the bay now owes, what the district lost, salvage, samples, civilians pulled out, reputation, what it did to your pilots, funding, and a replay of the seed and plan you flew. Every line says what produced it
 - Five ways for a sortie to end, all explained, including an abort that still credits what you had already done
+- A headquarters you build. Fifteen kinds of facility across four decks, from the reactor below the waterline to the containment tanks, each with tiers that cost money to put up and money to keep
+- Facilities that do something. An upgraded repair bay repairs faster, a bigger reactor builds quicker, a medical bay gets your pilots back sooner. Every tier says which number it moves
+- A construction queue rather than a queue of one. Order what you like, set what matters most, and the crews work down the list
+- Priorities that take effect immediately, pausing that keeps your progress and frees the crew, and cancelling that gives back what has not been spent yet
+- Honest forecasts. Every project says how far along it is and when it lands counting everything ahead of it, and anything stalled says what it is waiting for
+- A complex that works slower when it is short rather than stopping quietly. Half the posts filled at midnight means sixty percent speed, and it says so
+- Upgrades you can walk into. Work lights become floodlights, stencils become lit signs, cranes go up, deliveries stack on the floor while the work is on, and crews are actually on site
 - Up to three other Jaegers out there with you, each flown by a crew with its own idea of how a fight should go. One closes on everything. One will not come within reach of anything. One goes wherever somebody is about to be hit
 - Allies who do sensible things without being told. Nobody needs instructing to attack the thing attacking you
 - Nine orders for when you do want a say: focus target, defend area, protect civilians, hold, regroup, ranged pressure, conserve ammunition, disengage, and a synchronized attack that lands with yours

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-28, Milestone 22: Facilities, construction queues and a complex that grows
+
+The headquarters is somewhere you build now, rather than a set of rooms with tiers.
+
+- Fifteen branches, including two that were missing: a Medical Bay next to the quarters it serves, and Kaiju Containment below the waterline for specimens worth keeping alive.
+- Every tier costs money to build and money to keep, and says what it is worth in numbers something actually reads: repair speed, construction speed, training, recovery, research yield, contract funding, delivery speed, containment yield, coastal defence.
+- A queue instead of a refusal. Order whatever you like; being short of crews means it waits its turn rather than being told no.
+- Priorities you set. Move something to the front and the crews are on it the next tick, not after the current job finishes.
+- Pause without losing anything. The progress stays and the crews go somewhere more useful. Resume when it matters again.
+- Cancel and get back what has not been spent yet, at the same rate every time. Never all of it, never none of it, and never a wait you can pay to skip.
+- Forecasts that count what is ahead. Every project says how far along it is and when it lands given everything queued in front of it, and anything stalled says exactly what it is waiting for.
+- A complex that is short works slower rather than stopping. At midnight with a third of the posts filled it builds at sixty percent and tells you so, and every facility is worth a little less until the day shift arrives.
+- Upgrades you can see. Work lights and stencilled numbers give way to floodlights and lit signs, cranes go up, pallets pile on the floor while work is on and are gone when it is finished, and there are crews on the site while it is being built.
+- Prerequisites that never trap you. A test walks the whole graph from an empty complex and proves every room is still reachable, whatever order you built things in.
+
+An upgraded repair bay now genuinely repairs faster, which it never did before: facility tiers used to change the power draw and the furniture and nothing else.
+
 ## 2026-08-27, Milestone 21: Allied squads, tactical orders and crews who learn
 
 You do not go out alone any more.

@@ -154,15 +154,16 @@ test.describe("Shatterdome interior", () => {
     const panel = page.locator(`${PANEL} [data-panel="facility"]`);
     await expect(panel).toBeVisible();
 
-    // The fabrication hall takes two of the three crews and most of the reactor
-    // headroom, so the launch apron cannot follow it. Which of the two limits
-    // bites first is a matter of tuning; that the button explains itself is not.
-    await expect(panel.locator('[data-facility="manufacture"] [data-action="order"]')).toBeEnabled();
-    await panel.locator('[data-facility="manufacture"] [data-action="order"]').click();
+    // Being short of crews queues rather than refuses now, so the refusals that
+    // remain are the ones a player cannot solve by waiting: a room that is not
+    // built yet, and a reactor that cannot carry the draw. Which of them bites
+    // first is a matter of tuning; that the button explains itself is not.
+    const containment = panel.locator('[data-facility="kaiju-containment"] [data-action="order"]');
+    await expect(containment).toBeDisabled({ timeout: 10_000 });
+    await expect(containment).toHaveAttribute("data-refusal", /at tier|MW against/);
 
-    const launch = panel.locator('[data-facility="launch"] [data-action="order"]');
-    await expect(launch).toBeDisabled({ timeout: 10_000 });
-    await expect(launch).toHaveAttribute("data-refusal", /construction crew|MW against/);
+    // And an order the complex can actually take is offered rather than greyed.
+    await expect(panel.locator('[data-facility="manufacture"] [data-action="order"]')).toBeEnabled();
   });
 
   test("inspects a machine in the bay after walking there", async ({ page }) => {

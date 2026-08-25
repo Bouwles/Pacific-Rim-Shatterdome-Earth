@@ -205,6 +205,23 @@ One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
 
+## Milestone 22 does not move the version
+
+`ROOT_SAVE_VERSION` stays at 12. The construction queue rides inside the
+`shatterdome` section that already exists, because what is being built is a fact
+about the complex rather than a separate subject. Adding a field to a section is
+not a new shape, so a version 12 save written before this milestone still
+validates and still loads.
+
+What such a file gets is an empty queue, which is the honest reading of a save
+from a build where an order either finished the moment it was placed or was never
+placed at all.
+
+Two rules the restore enforces rather than trusts. A project naming a facility
+this build no longer has is dropped. And a project that was active comes back
+queued, holding no crews: it is given crews again on the first tick after
+loading, so nothing is mid-tick across a save.
+
 ## Version 11 to 12: the allied crews (Milestone 21)
 
 Version 12 adds a `squad` section: one record per allied crew carrying the

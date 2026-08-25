@@ -565,6 +565,44 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Facility schemas (Milestone 22)
+
+### `FacilityTier` additions (src/data/facilities.ts)
+
+Added: `{ cost, upkeepPerDay, effects, moduleSlots, requires, stage }`. Cost and
+upkeep are positive; `moduleSlots` is at least one; `requires` is a list of
+`{ facilityId, tier }` that must already be standing. `effects` is a partial map
+over `FACILITY_EFFECTS`: repairRate, constructionRate, trainingRate, medicalRate,
+researchYield, contractYield, deliverySpeed, containmentYield, defenceStrength.
+
+`StageVariant` is `{ lighting, signage, cranes, deliveries, note }`, where
+lighting is work, flood or full and signage is none, stencil or lit. Presentation
+only: the layout reads it, the simulation never does.
+
+Two branches were added to `FACILITY_KINDS`: `medical` and `kaiju-containment`,
+bringing the complex to fifteen.
+
+### `ConstructionProject` and `WorkCapacity` (src/shatterdome/construction.ts)
+
+A project is `{ id, facilityId, targetTier, status, priority, workRemainingTicks,
+workTotalTicks, crewsHeld, crewsRequired, costPaid, sequence }`. Status is queued,
+active, paused, done or cancelled. Priority is 1 to 9, most urgent first, ties
+broken by the order things were queued.
+
+`WorkCapacity` is `{ crewsAvailable, powerFactor, staffFactor, rateMultiplier }`,
+injected rather than read so the queue can be tested against a brownout with no
+reactor in existence. `ProjectForecast` adds `{ progress, etaTicks, etaMinutes,
+stalledBecause }`.
+
+`ConstructionSnapshot` rides inside the existing shatterdome save section:
+`{ schemaVersion, projects[], sequence }`.
+
+### `EffectTotals` (src/shatterdome/facilityEffects.ts)
+
+One number per effect, all one when nothing is built. `resolveEffects` multiplies
+across facilities and scales the part above one by how much power and staffing
+the complex actually has.
+
 ## Squad schemas (Milestone 21)
 
 ### `SquadOrderDefinition` (src/data/squadOrders.ts)

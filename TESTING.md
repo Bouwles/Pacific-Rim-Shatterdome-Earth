@@ -263,6 +263,28 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
 
+## Milestone 22 acceptance evidence
+
+Measured on WebGPU at seed 20260828 on High, in the browser by hand and in the
+unit and integration suites.
+
+| Acceptance item                                         | Evidence                                                                                                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start a construction project                            | Live: three orders placed from the command console, two active and one queued against two crews                                              |
+| Reprioritise                                            | Live: the waiting project moved from priority 5 to 1 with four presses and became active on the next tick, displacing one that was running   |
+| Pause under policy                                      | Live: paused, progress kept, "Work stopped. The crews are free for something else", and the crew went to the next project                    |
+| Cancel under policy                                     | Live: "Cancelled. 789500 comes back from what was not spent yet", refunded to the treasury, project removed                                  |
+| Finish and reload                                       | Tests: a project completes and reports its tier name; a round trip keeps priorities and progress and brings an active project back as queued |
+| A repair upgrade changes the bay and repair performance | Test: building the reactor, hall and bay raises the repair effect and changes the room's lighting, signage, crane count and stage note       |
+| Insufficient power or staff degrades understandably     | Live at midnight: "Building at 60 percent: 34 percent of the posts filled", repair worth 1.35x by day and 1.27x by night, work continuing    |
+| No choice bricks a save                                 | A test walks the prerequisite graph from an empty complex and asserts every facility is reachable at every tier                              |
+| Facilities are not decorative unlocks                   | Every tier declares effects from a fixed vocabulary the registry enforces, and `roster.work` multiplies a repair shift by the resolved rate  |
+| No real-time monetisation pressure                      | Nothing is timed against a wall clock and nothing can be skipped for money. Cancelling refunds by a fixed policy rather than selling an undo |
+
+Five existing tests asserted the behaviour this milestone deliberately replaced:
+being short of crews used to refuse an order and now queues it. Each was rewritten
+to the new contract rather than deleted, keeping what it was actually checking.
+
 ## Milestone 21 acceptance evidence
 
 Measured on WebGPU at seed 20260827 on High, in the browser by hand and in the

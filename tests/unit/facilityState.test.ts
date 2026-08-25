@@ -48,6 +48,9 @@ describe("Shatterdome state", () => {
     const before = state.crews();
     const result = state.order("research");
     expect(result.ok).toBe(true);
+    // Crews are handed out by the queue on the tick work actually starts, not
+    // at the moment an order is placed: a queued project is not using anybody.
+    state.advance(1);
     expect(state.crews().free).toBe(before.free - 1);
     state.advance(999_999);
     expect(state.crews().free).toBe(before.free);
@@ -62,19 +65,22 @@ describe("Shatterdome state", () => {
     if (!second.ok) expect(second.reason).toBe("already-working");
   });
 
-  it("refuses an order with no crews free, and says how to get more", () => {
+  it("queues an order with no crews free rather than refusing it", () => {
     const state = freshState();
     // Three at the start: two base, plus one mustered by the working stores.
     expect(state.crews().capacity).toBe(3);
     state.order("research");
     state.order("archive");
     state.order("contract");
+    // A fourth order with nobody free is accepted and waits its turn. Being
+    // short of crews is a scheduling problem the player solves by choosing what
+    // matters, which is the whole point of having a queue.
     const fourth = state.order("training");
-    expect(fourth.ok).toBe(false);
-    if (!fourth.ok) {
-      expect(fourth.reason).toBe("no-crews");
-      expect(fourth.message).toMatch(/Logistics/);
-    }
+    expect(fourth.ok).toBe(true);
+    state.advance(1);
+    const waiting = state.projects(state.staffSlots()).find((entry) => entry.facilityId === "training");
+    expect(waiting).toBeDefined();
+    expect(waiting!.stalledBecause).toMatch(/Waiting for/);
   });
 
   it("refuses an order the reactor cannot carry, naming both numbers", () => {
@@ -128,13 +134,24 @@ describe("Shatterdome state", () => {
 
   it("distinguishes a first build from an upgrade in what it reports", () => {
     const state = freshState();
-    // The reactor is the one facility with a third tier to climb to.
-    finish(state, "reactor");
-    const result = state.order("reactor");
-    if (!result.ok) throw new Error(`order refused: ${result.message}`);
-    const completions = state.advance(result.record.workRemainingTicks);
-    expect(completions[0]?.firstBuild).toBe(false);
-    expect(completions[0]?.tier).toBe(3);
+    // Research is not built at the start, so its first tier is a build and its
+    // second is an upgrade. The reactor would do as well but its third tier now
+    // waits on a fabrication hall, which is a different thing to test.
+    const first = state.order("research");
+    if (!first.ok) throw new Error(`order refused: ${first.message}`);
+    const built = state.advance(first.record.workRemainingTicks);
+    expect(built[0]?.firstBuild).toBe(true);
+    expect(built[0]?.tier).toBe(1);
+
+    // The laboratory's second tier wants an infirmary next door first, which is
+    // exactly the kind of prerequisite this milestone added, so it is satisfied
+    // rather than worked around.
+    finish(state, "medical");
+    const second = state.order("research");
+    if (!second.ok) throw new Error(`order refused: ${second.message}`);
+    const upgraded = state.advance(second.record.workRemainingTicks);
+    expect(upgraded[0]?.firstBuild).toBe(false);
+    expect(upgraded[0]?.tier).toBe(2);
   });
 
   it("advances nothing on a zero or negative tick count", () => {
@@ -156,7 +173,14 @@ describe("Shatterdome state", () => {
 
     const restored = freshState();
     restored.restore(snapshot, ROOMS);
-    expect(restored.serialize()).toEqual(snapshot);
+    // Everything about the complex comes back, including what is outstanding
+    // and how far along it is. What does not come back is a project holding
+    // crews mid-tick: it is queued again and given crews on the next tick.
+    expect(restored.recordFor("research")?.workRemainingTicks).toBe(
+      state.recordFor("research")?.workRemainingTicks,
+    );
+    expect(restored.playerLocation).toEqual(snapshot.location);
+    expect(restored.construction().live()).toHaveLength(1);
     expect(restored.recordFor("research")?.status).toBe("building");
     expect(restored.playerLocation.roomId).toBe("jaeger-bay");
     expect(restored.selectedJaegerId).toBe("placeholder-mk0");

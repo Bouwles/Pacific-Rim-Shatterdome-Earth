@@ -967,6 +967,48 @@ rather than from the file, so rebalancing a chassis does not leave old saves
 carrying old numbers, and a component this build has never heard of is dropped
 rather than resurrected.
 
+## The complex: construction, capacity and what a facility is worth
+
+Three modules, and the split is the point.
+
+`src/data/facilities.ts` is the grammar: fifteen branches, and every tier now
+carries what it costs to build, what it costs to keep, what it is worth as named
+effects, how many module slots it opens, what must already be standing before it
+can start, and what the room looks like when it is done.
+
+`src/shatterdome/construction.ts` is the queue. Projects are queued with a
+priority, worked in that order by whatever crews are free, and every one can be
+paused, reprioritised or cancelled. Crews are handed out fresh every tick against
+the current priorities, which is what makes reprioritising take effect on the
+next tick rather than after the current job finishes. Cancelling refunds the work
+not yet done at a fixed rate, so it is a real cost rather than a free undo, and
+nothing anywhere creates pressure to spend money to skip a wait.
+
+`src/shatterdome/facilityEffects.ts` is the one place a tier turns into a number
+anything else reads. Repair speed, construction speed, training, recovery,
+research yield, contract funding, delivery speed, containment yield and coastal
+defence: a fixed vocabulary, and the registry refuses a tier that promises
+anything outside it. `roster.work` is multiplied by the repair effect at the
+call site, which is what makes an upgraded bay genuinely repair faster rather
+than merely say so.
+
+**Shortfalls degrade rather than stop.** Power and staffing produce two factors
+between zero and one. Construction multiplies its tick by them, and a facility's
+effect keeps its base and loses part of the upgrade in proportion. A complex at
+half power and a third staffed builds at sixty percent and says so in a sentence;
+only a complete loss of power stops work, and that also says so. There is no path
+where being short does nothing visible.
+
+**Prerequisites cannot brick a save.** A test walks the whole graph from an empty
+complex and asserts every facility is reachable at every tier, so no combination
+of choices can strand a room behind a requirement that can never be met.
+
+**Visible stages** are carried on the room the layout produces: lighting, signage,
+cranes, deliveries and the number of builders on site. A room being worked on
+shows work lights, a stencil, an extra crane, pallets on the floor and crews; a
+finished tier shows what its stage variant says. Nothing authoritative reads any
+of it.
+
 ## Allies: squads, orders and utility behaviour
 
 An ally is an ordinary arena fighter with its own zones, its own combat profile

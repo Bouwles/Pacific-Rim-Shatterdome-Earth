@@ -201,7 +201,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - friendly-fire avoidance, spacing, path recovery, self-preservation and one signature per target, resolved for the whole squad in one pass;
   - a quick command on Q and the number row that never pauses the fight, with a spoken acknowledgement per ally;
   - formation with refusals, warnings, role coverage and a mission ceiling, and everything a crew becomes carried in the save.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1341 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **A complex that grows**, ordered from any facility terminal:
+  - fifteen branches over twenty nine tiers, each with a cost, an upkeep, named effects, module slots, prerequisites and a stage variant;
+  - a construction queue with player-set priorities, pause and resume, and cancellation that refunds the work not yet done at a fixed rate;
+  - crews handed out fresh each tick against current priorities, so reprioritising takes effect on the next tick;
+  - forecasts that count what is ahead, and a sentence for anything stalled;
+  - power and staffing as degradation rather than refusal, with one line saying how fast the complex is working and why;
+  - facility effects reaching authoritative behaviour, so an upgraded repair bay actually repairs faster;
+  - visible construction: lighting, signage, cranes, deliveries and crews on site while work is running;
+  - a proof that no prerequisite chain can strand a room, walked from an empty complex.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1377 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -312,6 +321,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
 - A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. The pilot picker, the world panel and the berths still list chassis rows rather than owned machines, so a machine bought during a campaign has levels, a serial and a service record but no berth of its own to be inspected at. Progression reaches it through the roster; the interface does not yet.
 - Prestige has been verified by tests at ranks 0, 1, 10, 100, 1000 and 9007199254740991, and by hand only as far as the forecast, because reaching the cap in a live browser is about forty five sorties. The mechanism that applies it is the same function the forecast calls.
+- Module slots are declared per tier and counted, but nothing can be fitted into a facility yet: there is no facility module table, only the space for one.
 - Squad formation is assessed and enforced in code, but the player does not yet choose the squad: allied crews are given spare owned machines automatically and everybody who can come, comes. `Squad.assess` and `Squad.candidates` are what a formation screen would read.
 - Allies fight and take damage but have no view of their own: there is no mesh for an ally machine, so they are readouts and arena fighters rather than something visible beside you.
 - Civilian positions are not fed to ally scoring yet, so protect civilians and escort behave as though the evacuation is always far away. The situation field exists and is wired to Infinity.
@@ -322,17 +332,11 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## Exact next task
 
-Not specified yet. The two things this build is most ready for:
+Not specified yet. In order of what would unblock the most:
 
-**Owned machines through the whole interface.** Still the oldest gap: the berths,
-the pilot picker and the world panel list chassis rows rather than owned
-instances. It now also blocks a real squad formation screen, since a squad is
-built out of owned machines and their crews. `roster.all()` is the list they
-should read, and `roster.definition()` already resolves an instance id back to a
-chassis.
+**Owned machines through the whole interface.** Still the oldest gap: berths, the
+pilot picker and the world panel list chassis rows rather than owned instances.
+`roster.all()` is the list they should read.
 
-**A view for an ally machine.** Allies are arena fighters with zones, damage and
-decisions, and nothing on screen except a readout. The Jaeger view already draws
-one machine from a chassis; drawing three more is the same code with its own
-instances, and it is what would make the squad readable at a glance instead of
-in a list.
+**Facility modules.** Every tier declares module slots and nothing fills them.
+The passive and module tables from Milestone 19 are the shape to copy.

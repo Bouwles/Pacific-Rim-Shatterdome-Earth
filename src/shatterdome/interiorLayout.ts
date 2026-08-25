@@ -102,6 +102,21 @@ export interface InteriorRoom {
   readonly fixtureCount: number;
   /** True while scaffolds are up, whether the room is new or growing. */
   readonly underConstruction: boolean;
+  /**
+   * What the room looks like at the tier it is standing at.
+   *
+   * Presentation only: lighting, signage, how many cranes are up and how many
+   * deliveries are still on the floor. An upgrade is meant to be something you
+   * walk into and notice, not a number on a panel.
+   */
+  readonly lighting: "work" | "flood" | "full";
+  readonly signage: "none" | "stencil" | "lit";
+  readonly cranes: number;
+  readonly deliveries: number;
+  /** One line about what somebody walking in would see. */
+  readonly stageNote: string;
+  /** Workers on the site while something is being built here. */
+  readonly builders: number;
 }
 
 export interface InteriorLayout {
@@ -176,6 +191,12 @@ function buildRoom(
 ): InteriorRoom {
   const tier = definition.tiers[record.tier - 1];
   const fixtureCount = tier?.fixtures ?? 0;
+  // What the room reads as. A room mid-build shows the stage it is working
+  // toward with the lights still on the temporary rig, which is what makes a
+  // half-finished room look half-finished rather than simply smaller.
+  const targetTier = record.targetTier > 0 ? definition.tiers[record.targetTier - 1] : undefined;
+  const stage = (targetTier ?? tier)?.stage;
+  const building = record.status === "building" || record.status === "upgrading";
   const staffSlots = tier?.staffSlots ?? 0;
   const underConstruction = record.status === "building" || record.status === "upgrading";
   const rng = createSeededRng(
@@ -340,6 +361,15 @@ function buildRoom(
     staffSlots,
     fixtureCount,
     underConstruction,
+    lighting: building ? "work" : (stage?.lighting ?? "work"),
+    signage: building ? "stencil" : (stage?.signage ?? "none"),
+    // Cranes come out for the build and stay if the finished room has them.
+    cranes: (stage?.cranes ?? 0) + (building ? 1 : 0),
+    // Deliveries pile up while work is on and are unpacked once it is done.
+    deliveries: (stage?.deliveries ?? 0) + (building ? 2 : 0),
+    stageNote: stage?.note ?? "",
+    // Crews on the site. Nobody is standing about in a finished room.
+    builders: building ? Math.max(1, record.crewsHeld * 2) : 0,
   };
 }
 
@@ -424,6 +454,14 @@ function buildConnPod(params: InteriorLayoutParams): InteriorRoom {
     staffSlots: 0,
     fixtureCount: 2,
     underConstruction: false,
+    // The Conn-Pod is a fitted space rather than a room that grows: it is lit,
+    // signed and finished the day the machine is.
+    lighting: "full",
+    signage: "lit",
+    cranes: 0,
+    deliveries: 0,
+    stageNote: "Two harnesses, a wall of instruments, and no room to spare.",
+    builders: 0,
   };
 }
 

@@ -9,6 +9,7 @@ import {
 } from "../data/facilities";
 import type { CrewMember } from "../data/personnel";
 import { shiftAt } from "../data/personnel";
+import type { WorkCapacity } from "./construction";
 import type { EnvironmentEffects } from "../world/environment";
 import {
   ShatterdomeState,
@@ -193,6 +194,39 @@ export class ShatterdomeSession {
     return shiftLoadFor(room.facilityId, room.staffSlots, this.dayFraction);
   }
 
+  /**
+   * What the complex can bring to bear right now.
+   *
+   * Staffing follows the shift, so this is a different number at four in the
+   * morning than at noon, and construction notices.
+   */
+  workCapacity(): WorkCapacity {
+    let onShift = 0;
+    for (const room of this.layoutValue.rooms) {
+      onShift += shiftLoadFor(room.facilityId, room.staffSlots, this.dayFraction).onShift;
+    }
+    const rate = this.state.effects(onShift).constructionRate;
+    return this.state.capacity(onShift, Number.isFinite(rate) && rate > 0 ? rate : 1);
+  }
+
+  /** How many people are on shift across the whole complex right now. */
+  staffOnShiftTotal(): number {
+    let onShift = 0;
+    for (const room of this.layoutValue.rooms) {
+      onShift += shiftLoadFor(room.facilityId, room.staffSlots, this.dayFraction).onShift;
+    }
+    return onShift;
+  }
+
+  /** Why the complex is not building at full speed, or null when it is. */
+  constructionShortfall(): string | null {
+    let onShift = 0;
+    for (const room of this.layoutValue.rooms) {
+      onShift += shiftLoadFor(room.facilityId, room.staffSlots, this.dayFraction).onShift;
+    }
+    return this.state.shortfall(onShift);
+  }
+
   update(update: SessionUpdate): void {
     this.tickValue = update.tick;
     this.dayFraction = update.dayFraction;
@@ -200,8 +234,12 @@ export class ShatterdomeSession {
 
     // Construction runs on simulation ticks whether or not the player is in the
     // room, so a build finishes while they are elsewhere and is finished when
-    // they arrive.
-    for (const completion of this.state.advance(update.ticks)) this.reportCompletion(completion);
+    // they arrive. How fast it runs depends on the complex: a night shift with
+    // half the posts filled builds more slowly than a full day, and a reactor
+    // that cannot carry the draw slows everything rather than stopping it.
+    for (const completion of this.state.advance(update.ticks, this.workCapacity())) {
+      this.reportCompletion(completion);
+    }
 
     if (this.transitionValue) {
       this.advanceTransition(update.deltaSeconds);
