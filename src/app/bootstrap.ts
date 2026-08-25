@@ -73,6 +73,9 @@ import { RegionDestruction } from "../world/destruction";
 import { AttackDirector, type Resolution } from "../world/director";
 import { Market, ROTATION_DAYS } from "../world/market";
 import { Crew, LINK_EXPERIENCE_PER_LEVEL } from "../pilots/crew";
+import { Squad, MAX_SQUAD_SIZE } from "../allies/squad";
+import { AllyController, resolveSquadIntents, type AllyIntent } from "../allies/allyController";
+import type { SquadOrderId } from "../data/squadOrders";
 import { LEVEL_CAP, levelFromExperience, nextUnlock } from "../jaegers/progression";
 import { createPassiveRegistry } from "../data/passives";
 import { createMasteryRegistry, masteryProgress } from "../data/masteries";
@@ -103,7 +106,7 @@ import { EARTH_SCALE, geoToLocal, localToGeo, surfaceDistanceMeters } from "../w
 import { PilotSession } from "../jaegers/pilotSession";
 import { JaegerView } from "../engine/jaegerView";
 import { PilotInputSource } from "../engine/pilotInput";
-import { renderPilotScreen, type PilotScreenHandle } from "../ui/pilotScreen";
+import { renderPilotScreen, type PilotScreenHandle, type SquadPanelState } from "../ui/pilotScreen";
 import type { CameraMode } from "../jaegers/camera";
 import { COMBAT_TICK_SECONDS, createMoveRegistry } from "../data/moves";
 import { createKaijuRegistry } from "../data/kaiju";
@@ -447,6 +450,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               mission?.snapshot() ?? null,
               market.snapshot(),
               crew.snapshot(),
+              squad.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -466,6 +470,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               mission?.snapshot() ?? null,
               market.snapshot(),
               crew.snapshot(),
+              squad.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -492,6 +497,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             market.restore(result.document.market);
             // Links, stress, injuries, and which sorties have already paid out.
             crew.restore(result.document.crew);
+            // What the allied crews became, and what they fly.
+            squad.restore(result.document.squad);
             marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
@@ -594,6 +601,61 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     .map((pilot) => pilot.id);
   /** The last thing the crew said about a link, an injury or a conversation. */
   let crewNote: string | null = null;
+
+  // ------------------------------------------------------------------- allies
+  //
+  // The other machines that go out with you. An ally is an arena fighter driven
+  // by its own utility scoring, exactly as a creature is: nothing here scripts a
+  // position or an animation, and an order changes what they want rather than
+  // what they do.
+  const squad = new Squad();
+  /** Crews taken on the current sortie, in the order they were listed. */
+  let deployedAllies: readonly string[] = [];
+  /** One controller per ally that is actually in the fight. */
+  const allyControllers = new Map<string, AllyController>();
+  /** Fighter id in the arena for each crew that is out. */
+  const allyFighters = new Map<string, string>();
+  /** What each ally last decided, for the squad readout. */
+  let allyIntents: readonly AllyIntent[] = [];
+  /** Radio traffic from the squad, newest first. Bounded. */
+  const squadLog: string[] = [];
+  /** True while the quick command dial is open. The fight does not pause for it. */
+  let orderDialOpen = false;
+
+  /**
+   * Gives every allied crew something to fly.
+   *
+   * The Shatterdome does not keep machines in storage while crews stand around:
+   * anything owned that the player is not taking out themselves is assigned to
+   * a crew, in roster order. Called at startup and whenever the roster changes,
+   * so a machine bought on Tuesday has somebody in it on Wednesday.
+   */
+  const syncSquadMachines = (): void => {
+    const taken = new Set<string>();
+    for (const record of squad.all()) {
+      // A crew keeps the machine they already have, if it is still owned.
+      if (record.machineId && roster.get(record.machineId)) taken.add(record.machineId);
+      else if (record.machineId) squad.assignMachine(record.crewId, null);
+    }
+    const spare = roster
+      .all()
+      .map((record) => record.jaegerId)
+      .filter((id) => !taken.has(id) && id !== playerMachineId());
+    for (const record of squad.all()) {
+      if (record.machineId) continue;
+      const next = spare.shift();
+      if (!next) break;
+      squad.assignMachine(record.crewId, next);
+    }
+  };
+
+  /** The machine the player flies themselves, which no ally may be given. */
+  const playerMachineId = (): string => roster.all()[0]?.jaegerId ?? "";
+
+  const sayFromSquad = (line: string): void => {
+    squadLog.unshift(line);
+    while (squadLog.length > 5) squadLog.pop();
+  };
 
   /**
    * Everything outside the two pilots that changes how they drift.
@@ -699,10 +761,34 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       pilotIds: [pair[0]!, pair[1]!],
       weaponIds: weaponRegistry.all().map((weapon) => weapon.id),
       consumables: { "consumable.reload": 2 },
-      allyIds: [],
+      allyIds: availableAllies(),
       arrivalBearingDeg: incident.originBearingDeg,
       priorities: ["objective.defend"],
     };
+  };
+
+  /**
+   * The crews who can actually come, up to the ceiling.
+   *
+   * Assessed through the squad rather than guessed: a crew with no machine, or
+   * one whose machine is in pieces, is not offered.
+   */
+  const availableAllies = (): readonly string[] => {
+    syncSquadMachines();
+    const machines: Record<string, { integrity: number; ammunition: number; role: string }> = {};
+    for (const record of roster.all()) {
+      const chassis = jaegerRegistry.get(record.chassisId);
+      machines[record.jaegerId] = {
+        integrity: structuralIntegrity(record.damage),
+        ammunition: 1,
+        role: chassis?.role ?? "unknown",
+      };
+    }
+    return squad
+      .candidates({ crewIds: [], playerRole: "brawler", machines })
+      .filter((candidate) => candidate.refusal === null)
+      .slice(0, MAX_SQUAD_SIZE)
+      .map((candidate) => candidate.crewId);
   };
 
   const readinessFor = (incidentId: string): ReadinessReport | null => {
@@ -863,6 +949,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // The sortie pays into the same treasury the market spends from, once,
     // from the mission's own ledger.
     market.credit(results.funding, results.salvageTons, results.samples);
+
+    // And the allied crews, guarded by the same mission id everything else uses.
+    for (const line of squad.completeSortie({
+      missionId: active.id,
+      crewIds: deployedAllies,
+      won: results.outcome === "success" || results.outcome === "partial",
+      score: results.objectiveScore,
+      day: worldState.environment.clock.dayNumber,
+    }).messages) {
+      sayFromSquad(line);
+    }
+    deployedAllies = [];
 
     // And the people who flew it. Guarded by the mission's own id inside the
     // crew, so asking twice does nothing the second time.
@@ -1077,6 +1175,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       });
       if (!record) continue;
       roster.record(record.jaegerId, day, "Delivered to the complex.");
+      // A new machine is a machine somebody can be put in.
+      syncSquadMachines();
       contractsNote =
         `${record.name} (${record.serial}) has arrived` +
         `${arrival.wear > 0 ? ` and needs work before it can go out` : ""}.`;
@@ -1593,6 +1693,46 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       ],
     });
 
+    // The allies. Each is an ordinary fighter with its own zones, its own
+    // profile and its own damage: nothing here is invulnerable, and nothing
+    // here is a turret. They stand off to the side of the player rather than
+    // on top of them.
+    allyControllers.clear();
+    allyFighters.clear();
+    allyIntents = [];
+    deployedAllies.forEach((crewId, index) => {
+      const record = squad.get(crewId);
+      const chassisId = record?.machineId ? roster.get(record.machineId)?.chassisId : undefined;
+      const chassis = chassisId ? jaegerRegistry.get(chassisId) : undefined;
+      if (!record || !chassis) return;
+      const scales = squad.machineScalesOf(crewId);
+      const allyGrowth = { ...growth, structure: scales.structure, damage: scales.damage };
+      const offset = (index + 1) * 120;
+      const fighterId = `ally.${index}`;
+      combatArena?.add({
+        id: fighterId,
+        kind: "jaeger",
+        displayName: squad.definition(crewId)?.callsign ?? crewId,
+        heightMeters: chassis.locomotion.heightMeters,
+        profile: combatProfileFor(chassis, allyGrowth),
+        pose: {
+          east: pose.east - offset,
+          north: pose.north + offset * 0.4,
+          up: pose.up,
+          yawDeg: pose.yawDeg,
+        },
+        zones: jaegerZones(chassis, roster.get(record.machineId ?? "")?.damage, undefined, allyGrowth),
+        layout: jaegerLayout(chassis),
+        finisherThreshold: 0.2,
+        damageScale: scales.damage,
+      });
+      allyFighters.set(crewId, fighterId);
+      allyControllers.set(crewId, new AllyController({ crewId, profile: squad.profileOf(crewId) }));
+      // They carry what the machine carries. A squad with nothing mounted is a
+      // squad that can only punch.
+      for (const weapon of weaponRegistry.all()) combatArena?.equipWeapon(fighterId, weapon);
+    });
+
     combatView = new CombatView({
       scene: bootScene.scene,
       quality,
@@ -1732,6 +1872,244 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     side: "melee.heavy.spin.side",
   };
 
+  /**
+   * One tick of the squad.
+   *
+   * Every ally is resolved in the same pass so that spacing and body zones are
+   * decided against what the others are doing now. What comes out is an intent
+   * per ally, and an intent is applied with the same arena calls the player's
+   * own input makes: there is no ally-only combat path anywhere.
+   */
+  const advanceSquad = (
+    deltaSeconds: number,
+    arena: CombatArena,
+    jaegerView: { east: number; north: number },
+    kaijuView: { east: number; north: number },
+  ): void => {
+    if (allyControllers.size === 0) return;
+    const snapshot = arena.snapshot();
+    const kaijuFighter = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    const playerFighter = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    if (!kaijuFighter) return;
+
+    const zoneIds = kaijuFighter.zones.map((zone) => zone.id);
+    const positions = new Map(
+      snapshot.fighters.map((fighter) => [fighter.id, { east: fighter.east, north: fighter.north }]),
+    );
+    const playerHealth = fractionOf(playerFighter?.zones ?? []);
+    // Only the player is allowed to say what "committed" means: it is their
+    // wind-up that opens the window an ally joins.
+    const playerCommitted = arena.chargeProgress("jaeger") > 0.35;
+
+    const members: {
+      controller: AllyController;
+      inputs: Parameters<AllyController["advance"]>[1];
+      order: ReturnType<typeof squad.orderOf>;
+    }[] = [];
+
+    for (const [crewId, fighterId] of allyFighters) {
+      const controller = allyControllers.get(crewId);
+      const fighter = snapshot.fighters.find((entry) => entry.id === fighterId);
+      if (!controller || !fighter || fighter.defeated) continue;
+      const here = { east: fighter.east, north: fighter.north };
+      const target = positions.get("kaiju") ?? here;
+      const record = squad.get(crewId);
+      const anchor = record?.anchor ?? null;
+
+      // Nearest other ally, for spacing.
+      let nearestAlly = Number.POSITIVE_INFINITY;
+      for (const [otherCrew, otherId] of allyFighters) {
+        if (otherCrew === crewId) continue;
+        const other = positions.get(otherId);
+        if (!other) continue;
+        nearestAlly = Math.min(nearestAlly, Math.hypot(other.east - here.east, other.north - here.north));
+      }
+
+      // A friendly in the line of fire is a geometry question, answered here
+      // rather than guessed: anybody within a narrow corridor between this ally
+      // and what it is shooting at counts.
+      const friendlyInLine = [...positions.entries()].some(([id, point]) => {
+        if (id === fighterId || id === "kaiju") return false;
+        return isBetween(here, target, point, 45);
+      });
+
+      members.push({
+        controller,
+        order: squad.orderOf(crewId),
+        inputs: {
+          situation: {
+            targetDistanceMeters: Math.hypot(target.east - here.east, target.north - here.north),
+            markedDistanceMeters: Math.hypot(target.east - here.east, target.north - here.north),
+            onMarkedTarget: record?.markedTargetId === null || record?.markedTargetId === "kaiju",
+            healthFraction: fractionOf(fighter.zones),
+            playerHealthFraction: playerHealth,
+            playerDistanceMeters: Math.hypot(jaegerView.east - here.east, jaegerView.north - here.north),
+            anchorDistanceMeters: anchor
+              ? Math.hypot(anchor.east - here.east, anchor.north - here.north)
+              : Number.POSITIVE_INFINITY,
+            civilianDistanceMeters: Number.POSITIVE_INFINITY,
+            ammunitionFraction: ammunitionOf(arena, fighterId),
+            friendlyInLine,
+            nearestAllyMeters: nearestAlly,
+            zoneContested: false,
+            routeBlocked: false,
+            frustration: 0,
+            playerCommitted,
+          },
+          position: here,
+          playerPosition: { east: jaegerView.east, north: jaegerView.north },
+          targetPosition: { east: kaijuView.east, north: kaijuView.north },
+          markedPosition: { east: kaijuView.east, north: kaijuView.north },
+          anchor,
+          civilianPosition: null,
+          targetZoneIds: zoneIds,
+          claimedZones: [],
+          signatureWindow: playerCommitted,
+        },
+      });
+    }
+
+    allyIntents = resolveSquadIntents(members, deltaSeconds);
+    for (const intent of allyIntents) {
+      const fighterId = allyFighters.get(intent.crewId);
+      if (!fighterId) continue;
+      if (intent.movePoint) {
+        arena.moveTo(fighterId, {
+          east: intent.movePoint.east,
+          north: intent.movePoint.north,
+          up: localGroundHeight(intent.movePoint.east, intent.movePoint.north) ?? 0,
+          yawDeg: bearingDeg(intent.movePoint, { east: kaijuView.east, north: kaijuView.north }),
+        });
+      }
+      arena.setGuard(fighterId, intent.guard);
+      if (intent.targetZoneId) arena.setAim(fighterId, intent.targetZoneId);
+      if (intent.fire) {
+        const weapon = weaponRegistry.all()[0];
+        if (weapon) arena.fireWeapon(fighterId, weapon.id);
+      }
+      // Which move is a question for the arena, exactly as it is for the
+      // player: an order chose the goal, the goal chose the intent, and the
+      // move is whatever that intent can actually throw from here.
+      const reach = Math.hypot(
+        kaijuView.east - (positions.get(fighterId)?.east ?? 0),
+        kaijuView.north - (positions.get(fighterId)?.north ?? 0),
+      );
+      if (reach < 90 && (intent.goal === "engage" || intent.goal === "focus" || intent.goal === "assist")) {
+        const move = intent.useSignature ? "melee.heavy.overhead" : "melee.light.jab";
+        arena.request(fighterId, move);
+      }
+    }
+  };
+
+  /**
+   * The squad, for the heads-up layer.
+   *
+   * Read live from what each ally last decided and from the arena, so the
+   * readout cannot claim an ally is doing something it is not. Null when nobody
+   * came out with you, which is what hides the panel entirely.
+   */
+  const squadPanelState = (): SquadPanelState | null => {
+    if (deployedAllies.length === 0) return null;
+    const snapshot = combatArena?.snapshot();
+    return {
+      members: deployedAllies.map((crewId) => {
+        const fighterId = allyFighters.get(crewId);
+        const fighter = snapshot?.fighters.find((entry) => entry.id === fighterId);
+        const intent = allyIntents.find((entry) => entry.crewId === crewId);
+        const order = squad.orderOf(crewId);
+        const zones = fighter?.zones ?? [];
+        return {
+          crewId,
+          callsign: squad.definition(crewId)?.callsign ?? crewId,
+          doing: intent ? `${intent.goal}, ${intent.reason}` : "standing by",
+          order: order?.displayName ?? "none",
+          integrityPercent: Math.round(fractionOf(zones) * 100),
+          down: fighter?.defeated === true,
+        };
+      }),
+      orders: squad
+        .orderRegistry()
+        .all()
+        .map((entry) => ({ id: entry.id, label: entry.displayName, hotkey: entry.hotkey })),
+      dialOpen: orderDialOpen,
+      log: [...squadLog],
+    };
+  };
+
+  /** 0 to 1 of a fighter's structure left, across every zone it has. */
+  const fractionOf = (zones: readonly { health: number; maxHealth: number }[]): number => {
+    if (zones.length === 0) return 1;
+    let health = 0;
+    let max = 0;
+    for (const zone of zones) {
+      health += zone.health;
+      max += zone.maxHealth;
+    }
+    return max > 0 ? health / max : 1;
+  };
+
+  /** 0 to 1 of the rounds a fighter is carrying, across everything mounted. */
+  const ammunitionOf = (arena: CombatArena, fighterId: string): number => {
+    let loaded = 0;
+    let capacity = 0;
+    for (const weapon of weaponRegistry.all()) {
+      const state = arena.weaponState(fighterId, weapon.id);
+      if (!state) continue;
+      loaded += state.magazine + state.reserve;
+      capacity += weapon.magazine + weapon.reserve;
+    }
+    return capacity > 0 ? Math.max(0, Math.min(1, loaded / capacity)) : 0;
+  };
+
+  /** Whether a point sits inside a corridor between two others. */
+  const isBetween = (
+    from: { east: number; north: number },
+    to: { east: number; north: number },
+    point: { east: number; north: number },
+    corridorMeters: number,
+  ): boolean => {
+    const dx = to.east - from.east;
+    const dy = to.north - from.north;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) return false;
+    const t = ((point.east - from.east) * dx + (point.north - from.north) * dy) / (length * length);
+    if (t <= 0 || t >= 1) return false;
+    const closestEast = from.east + dx * t;
+    const closestNorth = from.north + dy * t;
+    return Math.hypot(point.east - closestEast, point.north - closestNorth) < corridorMeters;
+  };
+
+  const bearingDeg = (from: { east: number; north: number }, to: { east: number; north: number }): number => {
+    const degrees = (Math.atan2(to.east - from.east, to.north - from.north) * 180) / Math.PI;
+    return (degrees + 360) % 360;
+  };
+
+  /**
+   * Gives the whole squad an order, from the quick command.
+   *
+   * Nothing pauses. The order is banked, every ally answers, and the next tick
+   * is scored against the new weights.
+   */
+  const issueSquadOrder = (orderId: SquadOrderId): void => {
+    if (deployedAllies.length === 0) {
+      sayFromSquad("Nobody is out there with you.");
+      return;
+    }
+    const here = pilotSession
+      ? { east: pilotSession.pose.east, north: pilotSession.pose.north }
+      : { east: 0, north: 0 };
+    for (const line of squad.issueAll(orderId, {
+      crewIds: deployedAllies,
+      targetId: "kaiju",
+      anchor: here,
+    })) {
+      sayFromSquad(line);
+    }
+    // A new order means the moment for a signature has passed with the old one.
+    for (const controller of allyControllers.values()) controller.clearSignature();
+    refreshPilot();
+  };
+
   /** The creature currently in the fight, if there is one. */
   let creature: Creature | undefined;
   /** The last thing it decided, for the panel. */
@@ -1806,6 +2184,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       climbableNearby: world.climbableHeight(kaijuView.east + 120, kaijuView.north) > 0,
       hideSpot: null,
     });
+
+    advanceSquad(deltaSeconds, arena, jaegerView, kaijuView);
 
     // Where the body wants to be is where the arena is told to put it.
     arena.moveTo("kaiju", {
@@ -2211,6 +2591,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
     roster.deploy(jaeger.id);
     crew.deploy(assignedPilots);
+    deployedAllies = mission?.plan.allyIds ?? availableAllies();
     pilotSession = new PilotSession({
       jaeger: damagedJaeger,
       east: local.east,
@@ -2255,6 +2636,26 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       onAttack: pressAttack,
       onMelee: pressMelee,
       onWeapon: pressWeapon,
+      onOrderDial: () => {
+        orderDialOpen = !orderDialOpen;
+        refreshPilot();
+      },
+      // A digit is an order while the dial is open and a weapon otherwise, so
+      // the number row keeps doing what it always did when nobody is commanding.
+      onNumberKey: (code: string) => {
+        if (orderDialOpen) {
+          const hotkey = code.slice(5);
+          const order = squad
+            .orderRegistry()
+            .all()
+            .find((entry) => entry.hotkey === hotkey);
+          if (order) {
+            issueSquadOrder(order.id);
+            return;
+          }
+        }
+        pressWeapon(code);
+      },
       onWeaponRelease: (code: string) => {
         // Sustained weapons stop when the key comes up; everything else ignores it.
         if (WEAPON_KEYS[code] === "weapon.chain-sword") combatArena?.releaseWeapon("jaeger");
@@ -2307,6 +2708,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshPilot();
         },
         onSwitchJaeger: (id: string) => startPilot(id),
+        onSquadOrder: (orderId: string) => issueSquadOrder(orderId as SquadOrderId),
+        onToggleOrderDial: () => {
+          orderDialOpen = !orderDialOpen;
+          refreshPilot();
+        },
         onSpawnTarget: spawnTarget,
         onClearTarget: clearTarget,
         onMoveList: (open: boolean) => {
@@ -2452,6 +2858,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       headingErrorDeg: lastPilotHeadingError,
       blocked: lastPilotBlocked,
       combat: combatState(),
+      squad: squadPanelState(),
     });
   };
 

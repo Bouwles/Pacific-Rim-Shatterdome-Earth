@@ -565,6 +565,44 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Squad schemas (Milestone 21)
+
+### `SquadOrderDefinition` (src/data/squadOrders.ts)
+
+`{ id, displayName, hotkey, weights, constraints, needsTarget, needsPoint,
+acknowledgements, description }`. The id is one of the nine `SQUAD_ORDERS`; the
+hotkey is one character and unique across the table. `weights` are per-goal
+multipliers over `ALLY_GOALS`; `constraints` may carry `ammunitionFloor` in
+(0, 1), `leashMeters`, `minimumRangeMeters` and `holdSignature`. An order with no
+weights, no acknowledgement or too short a description is refused.
+
+### `AllyCrewDefinition` and `AllyPerk` (src/data/allyCrews.ts)
+
+`{ id, displayName, callsign, baseConfidence, preferredRangeMeters, aggression,
+supportTendency, rivals, bias, perkTrack, description }`. Ids are prefixed
+`ally.`; rivalries must be symmetric and are checked when the registry is built.
+An `AllyPerk` is `{ id, displayName, sortiesRequired, bias, damageScale?,
+structureScale?, note }`, learned in ascending order of sorties. No perk may
+scale a number by more than fifteen percent, so an ally is help rather than the
+answer.
+
+### `AllySituation`, `AllyProfile` and `AllyIntent` (src/allies/)
+
+`AllySituation` is everything a decision may look at: distances to the target,
+the mark, the player, the anchor and the civilians; its own and the player's
+structure; ammunition; whether a friendly is in the line of fire; spacing;
+whether the route is blocked; and whether the player has committed.
+`AllyProfile` is confidence, preferred range, aggression, support tendency and
+the combined bias. `AllyIntent` is `{ crewId, goal, movePoint, targetId,
+targetZoneId, fire, guard, useSignature, say, reason }`.
+
+### `SquadSnapshot` (src/allies/squad.ts)
+
+`{ schemaVersion, members[], settledMissions[] }`, where a member is
+`{ crewId, machineId, sorties, confidence, order, learned[], history[] }`. Perks
+are recomputed from the sorties that earned them on restore rather than trusted.
+`MAX_SQUAD_SIZE` is 3.
+
 ## Crew schemas (Milestone 20)
 
 ### `PilotDefinition` additions (src/data/pilots.ts)

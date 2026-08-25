@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-27, Milestone 21: Allied squads, tactical orders and crews who learn
+
+You do not go out alone any more.
+
+- Up to three other machines come with you, each flown by its own crew with its own opinions about how a fight should go.
+- Four crews. Hammerfall closes on everything and always has. Longshot would rather never be within reach of anything. Bulwark goes wherever somebody is about to be hit. Sidestep is nervous, fast, and alive because of both. Hammerfall and Longshot do not get on and will not take the same target.
+- They do sensible things with no instruction at all. Nobody has to be told to attack the thing that is attacking you.
+- Nine orders when you do want to say something: focus target, defend area, protect civilians, hold, regroup, ranged pressure, conserve ammunition, disengage, and synchronized attack.
+- Q opens the quick command and the number row gives the order. Nothing pauses. The fight carries on while you are deciding, and the number row goes back to being the weapon row the moment you close it.
+- Every order gets answered out loud, in that crew's own words. Breaking off. Falling back. Getting clear. That is how you know it landed.
+- An order changes what they want rather than what they do. Tell them to defend a block and they work out what that means from where they are standing, what is coming, and what they are carrying.
+- Some things are not up for discussion. They will not shoot through you. They will not spend their heaviest attack twice. They will not keep firing under an ammunition order.
+- They do not stand in each other, they do not both grind the same leg while the head goes unanswered, and they do not all burn their signature on the same swing.
+- They get hurt. An ally is another machine with real plating and real components, not a turret that cannot be killed.
+- They learn. Fly with somebody long enough and they stop needing to be told to close, or start putting the machine in the way on purpose. Nothing they learn moves a number by more than fifteen percent, because an ally is help and not the answer.
+- Confidence moves with how the sorties went, and all of it is saved.
+
+Four problems found by hand. Nobody ever deployed, because no crew had a machine and nothing assigned one. The quick command key did nothing, because the pilot input dispatches from a table that had no entry for it. Disengage did not actually break contact, because a healthy crew scored zero for leaving and the order had nothing to multiply. And ranged pressure let a close-range crew walk straight in anyway, because the minimum range stopped them engaging but not where they repositioned to.
+
 ## 2026-08-26, Milestone 20: Copilots, drift links, drawbacks and injury
 
 The two people in the Conn-Pod are the character sheet now. You still have none.

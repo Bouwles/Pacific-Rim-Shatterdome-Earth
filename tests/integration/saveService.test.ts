@@ -164,6 +164,7 @@ describe("round trip through a kernel", () => {
       "schemaVersion",
       "shatterdome",
       "sim",
+      "squad",
       "world",
     ]);
     expect(Object.keys(stored?.document.sim ?? {}).sort()).toEqual([

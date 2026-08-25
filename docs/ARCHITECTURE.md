@@ -967,6 +967,47 @@ rather than from the file, so rebalancing a chassis does not leave old saves
 carrying old numbers, and a component this build has never heard of is dropped
 rather than resurrected.
 
+## Allies: squads, orders and utility behaviour
+
+An ally is an ordinary arena fighter with its own zones, its own combat profile
+and its own damage. There is no ally-only combat path: what makes one an ally is
+that a controller presses the same arena calls the player's input does.
+
+`src/data/allyCrews.ts` is who the other crews are: confidence, preferred range,
+aggression, support tendency, rivalries, a standing lean on the goal table, and a
+perk track they learn by flying. `src/data/squadOrders.ts` is what they can be
+told, as weights on that same goal table plus a few hard constraints.
+
+`src/allies/allyBehavior.ts` is the decision, and it is the creature behaviour
+tree's shape applied to a machine: every goal scores itself from the situation
+and the crew, the highest wins with hysteresis so nothing dithers, and adding a
+goal is a row. Three multipliers and nothing else touch the number: the goal's
+own desire, the crew's lean, and the standing order. A surprising decision is
+always explained by reading three values.
+
+**An order is not a script.** It multiplies goal scores; it never sets the
+answer. What "defend this area" means is worked out by the ally from where it is
+standing and what is trying to kill it. The few things an order does impose are
+constraints rather than weights, because an order that scoring can argue its way
+around is not an order: a minimum range, an ammunition floor, a leash, and
+whether the signature is held.
+
+`src/allies/allyController.ts` turns a decision into an intent: somewhere to be,
+something to hit, whether to fire, whether to guard. Intents are pure, which is
+what makes "two allies do not both burn a signature on the same swing" a test
+rather than an observation. `resolveSquadIntents` resolves the whole squad in one
+pass so zone claims and spacing are decided against what the others are doing
+this tick rather than last tick.
+
+Three rules are hard rather than scored, because getting them wrong is worse than
+any amount of tactical stupidity: never fire through a friendly, never spend a
+signature twice, and never fire below an ordered ammunition floor.
+
+`src/allies/squad.ts` is the state between and during deployments: who flies
+what, formation assessment with refusals and warnings, standing orders, and what
+each crew has learned. It mirrors the roster and the crew, including the guard
+against one mission result being applied twice.
+
 ## The crew: drift, links, perks and injury
 
 The player's avatar has no statistics and never will. Everything that makes one

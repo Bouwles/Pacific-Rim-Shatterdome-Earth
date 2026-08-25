@@ -505,6 +505,27 @@ the save schema and migrations to version 11, the berth panel, the alert board a
 - `npm run typecheck`, `lint`, `format:check`, `test` (1273), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 21 - Allied squad preparation, tactical orders, skills and personalities
+
+**Depends on:** Milestone 15 (the behaviour tree this mirrors), 18 (owned machines), 20 (the crew module this
+follows the shape of).
+**Status:** done.
+**Scope:** pre-deployment squad formation with readiness, machine assignment, role coverage, rivalry warnings
+and a mission ceiling; nine tactical orders as weights on a goal table plus hard constraints; utility-based
+ally initiative with self-preservation, friendly-fire avoidance, spacing, path recovery and spoken
+acknowledgement; per-crew confidence, preferred range, aggression, support tendency, rivalry and learned
+perks that persist; and a quick command that works during combat without pausing. Created
+`src/data/squadOrders.ts`, `src/data/allyCrews.ts`, `src/allies/allyBehavior.ts`,
+`src/allies/allyController.ts`, `src/allies/squad.ts`, `src/debug/squadScenario.ts`. Extended the pilot
+input, the pilot screen, the save schema and migrations to version 12, and the bootstrap wiring.
+**Acceptance tests:**
+
+- An ally completes useful actions with no orders and changes behaviour promptly after one.
+- Two allies do not collide, take the same body zone, or waste signature attacks simultaneously.
+- Squad personality and skill changes persist across deployments.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1341), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

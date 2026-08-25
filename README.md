@@ -101,6 +101,14 @@ The project is built in numbered milestones. Everything listed here actually run
 - Eight kinds of mission: defend, intercept, pursue, rescue, contain, escort, research and salvage, and crises that come in stages where the next one opens as soon as the last is settled
 - Results that add up: damage, the repair hours the bay now owes, what the district lost, salvage, samples, civilians pulled out, reputation, what it did to your pilots, funding, and a replay of the seed and plan you flew. Every line says what produced it
 - Five ways for a sortie to end, all explained, including an abort that still credits what you had already done
+- Up to three other Jaegers out there with you, each flown by a crew with its own idea of how a fight should go. One closes on everything. One will not come within reach of anything. One goes wherever somebody is about to be hit
+- Allies who do sensible things without being told. Nobody needs instructing to attack the thing attacking you
+- Nine orders for when you do want a say: focus target, defend area, protect civilians, hold, regroup, ranged pressure, conserve ammunition, disengage, and a synchronized attack that lands with yours
+- A quick command on Q and the number row that works mid fight without pausing anything, and hands the number row back to your weapons when you close it
+- Orders that get answered out loud, in that crew's own words, so you know they heard
+- Orders that change what they want rather than what they do. Tell them to hold a block and they work out what that means from where they are standing
+- A few things they will never do whatever you say: shoot through you, spend their heaviest attack twice, or keep firing when you told them to save rounds
+- Allies who get hurt like anything else out there, and crews who learn from flying beside you without ever outclassing the machine you are in
 - Two pilots in every Conn-Pod, and which two is the decision the rest of the game hangs on. You have no statistics of your own. They have all of them
 - Five people who are actually different to fly with. Each is at home in some machines and wrong for others, gets on with some partners and grates on others, and has one thing that makes them difficult
 - A drawback each, and the game tells you exactly when it applies, before you commit. One walks a long range machine into knife fights. One flies the damage report instead of the fight when the machine is hurt. One argues at neural speed with anybody careful

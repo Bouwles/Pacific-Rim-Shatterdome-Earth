@@ -494,6 +494,62 @@
         margin: 0 0 6px;
         font-size: 13px;
       }
+      #uiRoot .pilot-squad {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.18);
+      }
+      #uiRoot .pilot-squad-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      #uiRoot .pilot-squad-list {
+        list-style: none;
+        margin: 4px 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      #uiRoot .pilot-squad-list li {
+        display: flex;
+        flex-direction: column;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-squad-list li[data-down="true"] {
+        opacity: 0.5;
+      }
+      #uiRoot .pilot-squad-name {
+        color: #cfe6f5;
+      }
+      #uiRoot .pilot-squad-doing {
+        color: #7f9fb4;
+      }
+      #uiRoot .pilot-order-dial {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+        margin: 6px 0;
+      }
+      #uiRoot .pilot-order-dial button {
+        font-size: 11px;
+        padding: 4px 6px;
+        text-align: left;
+      }
+      #uiRoot .pilot-squad-log {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
       #uiRoot .sd-crew [data-field="crew-drawback"][data-firing="true"] {
         color: #f0b070;
       }

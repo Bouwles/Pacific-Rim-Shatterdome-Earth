@@ -36,6 +36,16 @@ export interface PilotInputCallbacks {
   readonly onWeapon?: (code: string) => void;
   /** Sustained weapons stop when the key comes up. */
   readonly onWeaponRelease?: (code: string) => void;
+  /** Opens or closes the quick command dial. Never pauses anything. */
+  readonly onOrderDial?: () => void;
+  /**
+   * A number-row key while piloting.
+   *
+   * Routed here rather than straight to the weapon row because the same digits
+   * mean an order while the dial is open. The caller decides which, and forwards
+   * to the weapon path when it is not an order.
+   */
+  readonly onNumberKey?: (code: string) => void;
 }
 
 /** Keys the ranged row answers to. */
@@ -52,8 +62,24 @@ export const WEAPON_KEY_CODES = [
 
 /** Keys the melee row answers to. */
 export const MELEE_KEY_CODES = ["KeyG", "KeyV", "KeyB", "KeyN", "KeyP"] as const;
+/** The number row, which gives a squad order while the quick command is open. */
+export const SQUAD_ORDER_KEY_CODES = [
+  "Digit1",
+  "Digit2",
+  "Digit3",
+  "Digit4",
+  "Digit5",
+  "Digit6",
+  "Digit7",
+  "Digit8",
+  "Digit9",
+] as const;
+
+/** Opens the quick command. */
+export const ORDER_DIAL_KEY_CODE = "KeyQ";
+
 /** Held to wind up a charge, released to throw it. */
-export const CHARGE_KEY_CODE = "KeyH";
+const CHARGE_KEY_CODE = "KeyH";
 
 /** Attack slots, in the order they sit on the number row. */
 export const ATTACK_SLOT_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"] as const;
@@ -209,6 +235,13 @@ export class PilotInputSource {
     for (const code of WEAPON_KEY_CODES) {
       actions[code] = () => this.callbacks.onWeapon?.(code);
     }
+    // The number row and the dial key. Assigned after the weapon row on purpose:
+    // the digits the two share belong to whichever the caller decides, which is
+    // the only place that knows whether the dial is open.
+    for (const code of SQUAD_ORDER_KEY_CODES) {
+      actions[code] = () => this.callbacks.onNumberKey?.(code);
+    }
+    actions[ORDER_DIAL_KEY_CODE] = () => this.callbacks.onOrderDial?.();
     actions[CHARGE_KEY_CODE] = () => {
       this.chargingValue = true;
       this.callbacks.onChargeStart?.();

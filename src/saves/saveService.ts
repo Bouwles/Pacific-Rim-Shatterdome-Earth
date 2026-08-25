@@ -11,6 +11,7 @@ import { emptyDirectorSnapshot, type DirectorSnapshot } from "../world/director"
 import type { MissionSnapshot } from "../missions/mission";
 import { emptyMarketSnapshot, type MarketSnapshot } from "../world/market";
 import { emptyCrewSnapshot, type CrewSnapshot } from "../pilots/crew";
+import { emptySquadSnapshot, type SquadSnapshot } from "../allies/squad";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -60,6 +61,8 @@ export interface SaveRequest {
   readonly market?: MarketSnapshot;
   /** The crew. Omitted by callers that have not built one. */
   readonly crew?: CrewSnapshot;
+  /** The allied crews. Omitted by callers with no squad. */
+  readonly squad?: SquadSnapshot;
 }
 
 /**
@@ -126,6 +129,7 @@ export class SaveService {
     const market = request.market ?? emptyMarketSnapshot();
     // And so does a crew, for the same reason.
     const crew = request.crew ?? emptyCrewSnapshot();
+    const squad = request.squad ?? emptySquadSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -147,6 +151,7 @@ export class SaveService {
       mission,
       market,
       crew,
+      squad,
     };
   }
 

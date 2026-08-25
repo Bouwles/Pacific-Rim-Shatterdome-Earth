@@ -295,6 +295,37 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Squad orders (Milestone 21)
+
+Nine in `src/data/squadOrders.ts`. Each is weights on the ally goal table plus a
+few hard constraints, never a script.
+
+| id                  | Key | Leans toward            | Imposes                               |
+| ------------------- | --- | ----------------------- | ------------------------------------- |
+| focus-target        | 1   | focus, engage, suppress | nothing                               |
+| defend-area         | 2   | screen, hold position   | 260 m leash                           |
+| protect-civilians   | 3   | escort, screen          | 340 m leash, signature held           |
+| hold                | 4   | hold position           | 90 m leash                            |
+| regroup             | 5   | regroup, assist         | 140 m leash                           |
+| ranged-pressure     | 6   | suppress, reposition    | minimum 120 m                         |
+| conserve-ammunition | 7   | engage, focus           | ammunition floor 0.35, signature held |
+| disengage           | 8   | withdraw, reposition    | minimum 200 m, signature held         |
+| synchronized-attack | 9   | assist, focus           | nothing                               |
+
+## Allied crews (Milestone 21)
+
+Four in `src/data/allyCrews.ts`, each learning two perks by flying beside you.
+
+| id           | Callsign   | Likes | Aggression | Support | Leans toward           | Rival      |
+| ------------ | ---------- | ----- | ---------- | ------- | ---------------------- | ---------- |
+| ally.karsten | Hammerfall | 45 m  | 0.85       | 0.25    | engage, focus          | Longshot   |
+| ally.oduya   | Longshot   | 240 m | 0.45       | 0.50    | suppress, reposition   | Hammerfall |
+| ally.penrose | Bulwark    | 70 m  | 0.40       | 0.90    | screen, escort, assist | none       |
+| ally.abara   | Sidestep   | 110 m | 0.62       | 0.55    | reposition, assist     | none       |
+
+No ally perk may scale a number by more than fifteen percent, which the registry
+enforces: an ally is help, never the answer.
+
 ## Pilot traits (Milestone 20)
 
 The five pilots from Milestone 17, now with everything that makes them different

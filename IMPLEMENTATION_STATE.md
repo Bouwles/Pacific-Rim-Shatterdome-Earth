@@ -193,7 +193,15 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - perk ranks reaching the fight through the same growth object levels, passives and modules use, plus a poise axis nothing else can move;
   - nonlethal injuries with restrictions that let somebody fly badly rather than not at all, treatment that shortens and never removes a recovery, deliberate stand-downs, and substitutes ordered by who knows the remaining pilot best;
   - one mission result banked exactly once, guarded by mission id, with the guard carried in the save.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1273 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **A squad that comes with you**, commanded from the Conn-Pod:
+  - four allied crews with confidence, preferred range, aggression, support tendency, rivalries and a perk track they learn by flying;
+  - nine orders as weights on the same goal table the crews lean on, plus four hard constraints that refuse rather than direct;
+  - utility-based initiative in the creature behaviour tree's shape: goals scoring themselves, highest wins, hysteresis so nothing dithers;
+  - allies as ordinary arena fighters with their own zones, profiles and damage, driven by the same calls the player's input makes;
+  - friendly-fire avoidance, spacing, path recovery, self-preservation and one signature per target, resolved for the whole squad in one pass;
+  - a quick command on Q and the number row that never pauses the fight, with a spoken acknowledgement per ally;
+  - formation with refusals, warnings, role coverage and a mission ceiling, and everything a crew becomes carried in the save.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1341 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -304,6 +312,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
 - A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. The pilot picker, the world panel and the berths still list chassis rows rather than owned machines, so a machine bought during a campaign has levels, a serial and a service record but no berth of its own to be inspected at. Progression reaches it through the roster; the interface does not yet.
 - Prestige has been verified by tests at ranks 0, 1, 10, 100, 1000 and 9007199254740991, and by hand only as far as the forecast, because reaching the cap in a live browser is about forty five sorties. The mechanism that applies it is the same function the forecast calls.
+- Squad formation is assessed and enforced in code, but the player does not yet choose the squad: allied crews are given spare owned machines automatically and everybody who can come, comes. `Squad.assess` and `Squad.candidates` are what a formation screen would read.
+- Allies fight and take damage but have no view of their own: there is no mesh for an ally machine, so they are readouts and arena fighters rather than something visible beside you.
+- Civilian positions are not fed to ally scoring yet, so protect civilians and escort behave as though the evacuation is always far away. The situation field exists and is wired to Infinity.
 - Copilot conversations, treatment and stand-downs all happen at the berth panel, because that is where the machine and its crew are already shown together. The Crew Quarters and the medical bay exist as rooms but have no terminals of their own yet.
 - The `marksman` chassis role is in the vocabulary and two pilots prefer it, but no shipped chassis uses it, so that half of their preference cannot apply until one does.
 - Dialogue is off-duty lines only. `onDeploy`, `onDamage` and `onVictory` are authored and validated but nothing plays them yet, because there is no radio system in a fight.
@@ -311,18 +322,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## Exact next task
 
-Milestone 21 (requested): allied squad preparation, tactical orders, skills and
-personalities. AI-controlled Jaeger allies who develop over time and obey simple
-commands without micromanagement.
+Not specified yet. The two things this build is most ready for:
 
-The pieces it builds on exist. `DeploymentPlan.allyIds` is already a field and is
-always empty. The arena already resolves any number of fighters and already gives
-every one of them zones, a profile and a layout, so an ally is a fighter spec
-rather than a new kind of thing. The kaiju behaviour tree in `src/kaiju/` is the
-model for utility-based initiative, and the crew module added by Milestone 20 is
-the model for personalities that persist across deployments and are saved.
+**Owned machines through the whole interface.** Still the oldest gap: the berths,
+the pilot picker and the world panel list chassis rows rather than owned
+instances. It now also blocks a real squad formation screen, since a squad is
+built out of owned machines and their crews. `roster.all()` is the list they
+should read, and `roster.definition()` already resolves an instance id back to a
+chassis.
 
-The one real gap to close first: the berths, the pilot picker and the world panel
-still list chassis rows rather than owned machines, so a squad built from owned
-instances has nowhere to be displayed. `roster.all()` is the list they should
-read, and `roster.definition()` already resolves an instance id back to a chassis.
+**A view for an ally machine.** Allies are arena fighters with zones, damage and
+decisions, and nothing on screen except a readout. The Jaeger view already draws
+one machine from a chassis; drawing three more is the same code with its own
+instances, and it is what would make the squad readable at a glance instead of
+in a list.

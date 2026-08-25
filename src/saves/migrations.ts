@@ -13,6 +13,7 @@ import { emptyDamageSnapshot } from "../world/destruction";
 import { emptyDirectorSnapshot } from "../world/director";
 import { emptyMarketSnapshot } from "../world/market";
 import { emptyCrewSnapshot } from "../pilots/crew";
+import { emptySquadSnapshot } from "../allies/squad";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -330,6 +331,28 @@ const addCrewSection: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 11, crew: emptyCrewSnapshot() }),
 };
 
+/**
+ * Version 11 to 12: the allied crews.
+ *
+ * Adds a `squad` section: one record per allied crew carrying the machine they
+ * fly, how many sorties they have flown beside the player, the confidence that
+ * has moved with those results, their standing order, what they have learned,
+ * and the ids of sorties already settled.
+ *
+ * A version 11 save has none of that, because allies were a field on a plan that
+ * was always empty. Every such file comes back with crews who are unassigned, at
+ * their authored confidence, on the default order, and who have learned nothing.
+ *
+ * Nothing else in the document is touched.
+ */
+const addSquadSection: MigrationStep = {
+  id: "11",
+  fromVersion: 11,
+  toVersion: 12,
+  description: "Add the squad: allied crews, what they fly, what they have learned and their orders.",
+  apply: (document) => ({ ...document, schemaVersion: 12, squad: emptySquadSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -355,6 +378,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addMissionSlot);
   registry.register(addMarketSection);
   registry.register(addCrewSection);
+  registry.register(addSquadSection);
   return registry;
 }
 

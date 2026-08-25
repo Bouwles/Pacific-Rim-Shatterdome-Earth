@@ -182,6 +182,26 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Squad cost (Milestone 21)
+
+Three ally machines are three more fighters in the arena, and that is the whole
+cost. The decision layer is arithmetic over plain numbers with no allocation per
+frame beyond the intent objects themselves.
+
+| Thing                   | Budget                | Why                                                                |
+| ----------------------- | --------------------- | ------------------------------------------------------------------ |
+| Allies in one fight     | 3                     | `MAX_SQUAD_SIZE`. Three more fighters, zones and profiles, no more |
+| Decisions per tick      | One per living ally   | Ten goals scored, each a handful of multiplies                     |
+| Squad resolution        | One pass per tick     | Resolved together so zone claims cost nothing extra                |
+| Friendly-fire check     | One per ally per tick | A point-to-segment distance against everything else in the arena   |
+| Settled mission ids     | 500                   | Bounded, oldest dropped first                                      |
+| History per crew        | 40 lines              | Bounded, oldest trimmed first                                      |
+| Squad section in a save | Under 3 KB            | Four records, what they fly, what they learned and their orders    |
+
+The quick command is DOM that is rebuilt only when the squad or the dial state
+changes, and refreshed in place otherwise, so opening it mid-fight costs one
+layout rather than one per frame.
+
 ## Crew cost (Milestone 20)
 
 The crew costs nothing per frame. It is plain data with no scene objects, no

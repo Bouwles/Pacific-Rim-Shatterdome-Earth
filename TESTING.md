@@ -263,6 +263,32 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
 
+## Milestone 21 acceptance evidence
+
+Measured on WebGPU at seed 20260827 on High, in the browser by hand and in the
+unit and integration suites.
+
+| Acceptance item                                          | Evidence                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An ally does something useful with no orders given       | Live: three allies deployed and were all on "focus, already on the mark" without a single command being issued                                     |
+| Behaviour changes promptly after an order                | Live: one press of 8 took all three from "focus" to "reposition" under Disengage, within a tick                                                    |
+| Orders work during combat without pausing                | Live: the simulation tick advanced across issuing the order, from 2358 to 2449                                                                     |
+| Every order is acknowledged                              | Live: "Bulwark: Breaking off." "Longshot: Falling back." "Hammerfall: Getting clear.", one line each, in their own words                           |
+| Two allies do not target the same body slot              | Resolved in one pass with zone claims: the squad tests assert every ally takes a different zone, and falls back rather than refusing to attack     |
+| Two allies do not waste signature attacks simultaneously | Each spends its own at most once per target and only inside a window the player opened; a second resolution offers none                            |
+| Allies do not collide                                    | Spacing steps sideways from the direct line when another machine is inside 85 m                                                                    |
+| Allies are not invulnerable turrets                      | Live: Longshot came out of the fight at 95 percent. Allies carry real zones, real profiles and real damage                                         |
+| Commands are not animation scripts                       | An order multiplies goal weights; what it means is worked out by the ally. The only hard parts are constraints, and they refuse rather than direct |
+| Personality and skill changes persist across deployments | Confidence moves with results and is saved; perks are recomputed from the sorties that earned them on restore                                      |
+
+Four defects found by hand. Every ally crew started with no machine and nothing
+ever assigned one, so allies never deployed at all. The quick command key never
+reached anything, because the pilot input dispatches from a table that had no
+entry for it. Disengage did not break contact, because withdrawing scored zero
+above a third structure and so had nothing for the order to multiply. And ranged
+pressure let a brawler crew close anyway, because the minimum range constrained
+engaging but not where the crew repositioned to.
+
 ## Milestone 20 acceptance evidence
 
 Measured on WebGPU at seed 20260826 on High, in the browser by hand and in the

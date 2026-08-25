@@ -677,6 +677,52 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-27, Milestone 21
+
+**An ally is a fighter, not a new kind of thing.** It is added to the arena with
+its own zones, profile, layout and damage, and driven by pressing the same calls
+the player's input presses. There is no ally-only combat path to keep in step
+with the real one, and no way for an ally to be accidentally invulnerable.
+
+**An order changes what an ally wants, never what it does.** Orders are weights
+on the goal table. What "defend this area" means is worked out by the ally from
+where it is standing. The alternative, an order that names a position and an
+animation, is a puppet rather than a squad, and it stops working the moment the
+situation is not the one the order imagined.
+
+**Constraints exist because weights can always be argued with.** A stubborn
+profile can out-score any nudge, so the few things that must be obeyed are
+separate: a minimum range, an ammunition floor, a leash, and holding the
+signature. Four of them, all explicit, all refusing rather than directing.
+
+**The decision layer is the creature behaviour tree's shape.** Goals scoring
+themselves in a registry, highest wins, hysteresis so nothing dithers. Two
+utility systems in one codebase should not be two designs, and reusing the shape
+meant the ally goals were readable by anybody who had read the kaiju ones.
+
+**Intents are pure, which is what makes the squad testable.** The controller
+produces a description of what it wants rather than reaching into the arena, so
+"two allies do not both burn a signature" is an assertion over plain objects with
+nothing loaded.
+
+**The squad is resolved in one pass per tick.** Zone claims and spacing are
+decided against what the others are doing this tick rather than last tick, which
+is the difference between two machines dividing a creature between them and two
+machines grinding the same leg.
+
+**Three rules are hard rather than scored.** Never fire through a friendly, never
+spend a signature twice, never fire below an ordered floor. Getting any of these
+wrong is worse than any amount of tactical stupidity, and a weight cannot promise
+never.
+
+**No ally perk may move a number by more than fifteen percent, enforced at
+registration.** An ally is help. The moment one is better than the machine the
+player is flying, the fight belongs to somebody else.
+
+**The number row is the weapon row until the quick command is open.** Nine orders
+needed nine keys and the weapon row already had four of them. Routing the digits
+through one callback that decides by dial state took no key away from the fight.
+
 ## 2026-08-26, Milestone 20
 
 **The player has no statistics, and the crew is the character sheet.** Nothing

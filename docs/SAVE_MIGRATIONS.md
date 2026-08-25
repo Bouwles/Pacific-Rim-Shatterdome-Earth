@@ -16,11 +16,12 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 11`
+- `ROOT_SAVE_VERSION = 12`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
 - `CREW_SCHEMA_VERSION = 1`
+- `SQUAD_SCHEMA_VERSION = 1`
 
 ## Version history
 
@@ -38,6 +39,7 @@ migration, or the reverse.
 | 9       | Adds the `mission` section                                      | The sortie in progress, or null when nobody is out.                                                                                                                                                                                                      |
 | 10      | Adds the `market` section                                       | Money, salvage, research samples, standing with each yard, which offers have been signed, what is on order, and where the rotation is.                                                                                                                   |
 | 11      | Adds the `crew` section                                         | Per pilot: status, stress, injuries carried, the link tracks built with everybody they have flown with, and the ids of sorties already paid out.                                                                                                         |
+| 12      | Adds the `squad` section                                        | Per allied crew: the machine they fly, sorties flown beside the player, confidence, standing order, perks learned, and the sorties already settled.                                                                                                      |
 
 ## Detection
 
@@ -202,6 +204,24 @@ facility grammar.
 One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
+
+## Version 11 to 12: the allied crews (Milestone 21)
+
+Version 12 adds a `squad` section: one record per allied crew carrying the
+machine they fly, how many sorties they have flown beside the player, the
+confidence that has moved with those results, their standing order, the perks
+they have learned, and the ids of sorties already settled.
+
+A version 11 save has none of that, because allies were a field on a deployment
+plan that was always empty. Every such file comes back with crews who are
+unassigned, at their authored confidence, on the default order, and who have
+learned nothing.
+
+Three rules the restore enforces rather than trusts. Perks are recomputed from
+the sorties that earned them, so an edited list does not survive. An order this
+build no longer ships falls back to the default. And neither the target nor the
+place a standing order pointed at is saved at all, because both belong to a
+fight, and a fight is not saved.
 
 ## Version 10 to 11: the people (Milestone 20)
 

@@ -199,6 +199,28 @@ Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
 
+## Commanding the squad (Milestone 21)
+
+While piloting, with allies out with you.
+
+| Control        | Effect                                                            |
+| -------------- | ----------------------------------------------------------------- |
+| **Q**          | Opens and closes the quick command. Nothing pauses                |
+| **1** to **9** | Gives an order while the quick command is open                    |
+| Order buttons  | The same nine orders, clickable, for anybody who would rather not |
+
+The number row is the weapon row when the quick command is closed and the order
+row when it is open, so no key was taken away from the fight.
+
+The nine orders: focus target, defend area, protect civilians, hold, regroup,
+ranged pressure, conserve ammunition, disengage, and synchronized attack. Every
+one of them is answered out loud by each ally in their own words, which is how
+you know it landed.
+
+The squad readout sits under the combat panel: each ally's callsign, how much
+machine they have left, what they are doing right now and why, and the order
+standing over them. An ally that goes down is greyed rather than removed.
+
 ## The berth: the Conn-Pod crew (Milestone 20)
 
 The same berth panel. Above the machine's own progression is who flies it.

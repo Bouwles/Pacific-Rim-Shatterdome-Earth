@@ -131,6 +131,32 @@ export interface PilotScreenState {
   readonly headingErrorDeg: number;
   readonly blocked: boolean;
   readonly combat: PilotCombatState | null;
+  /** The squad and the quick command, or null when nobody came with you. */
+  readonly squad: SquadPanelState | null;
+}
+
+/** One ally, as the squad readout shows them. */
+export interface SquadMemberRow {
+  readonly crewId: string;
+  readonly callsign: string;
+  /** What they are doing right now, in their own words. */
+  readonly doing: string;
+  /** The order standing over them. */
+  readonly order: string;
+  /** 0 to 100 of their machine's structure. */
+  readonly integrityPercent: number;
+  readonly down: boolean;
+}
+
+/** The squad, and the dial for telling it what to do. */
+export interface SquadPanelState {
+  readonly members: readonly SquadMemberRow[];
+  /** Every order that can be given, with the key that gives it. */
+  readonly orders: readonly { readonly id: string; readonly label: string; readonly hotkey: string }[];
+  /** True while the dial is open. The fight keeps running either way. */
+  readonly dialOpen: boolean;
+  /** Radio traffic, newest first. */
+  readonly log: readonly string[];
 }
 
 export interface PilotScreenCallbacks {
@@ -140,6 +166,10 @@ export interface PilotScreenCallbacks {
   readonly onInvertPitch: (value: boolean) => void;
   readonly onLockToggle: () => void;
   readonly onSwitchJaeger: (jaegerId: string) => void;
+  /** Gives the whole squad an order. Never pauses the fight. */
+  readonly onSquadOrder: (orderId: string) => void;
+  /** Opens or closes the quick command dial. */
+  readonly onToggleOrderDial: () => void;
   readonly onSpawnTarget: () => void;
   readonly onClearTarget: () => void;
   readonly onDebugVolumes: (enabled: boolean) => void;
@@ -165,6 +195,108 @@ const CAMERA_LABELS: Readonly<Record<CameraMode, string>> = {
   cockpit: "Conn-Pod",
 };
 
+/**
+ * Draws the squad readout and the quick command dial.
+ *
+ * Rebuilt only when the squad itself changes and refreshed in place otherwise,
+ * so a button is never torn out from under a pointer mid-fight. Nothing here
+ * pauses anything: the dial shows keys that are live whether it is open or not.
+ */
+function refreshSquad(
+  host: HTMLElement,
+  state: SquadPanelState | null,
+  callbacks: PilotScreenCallbacks,
+): void {
+  if (!state || state.members.length === 0) {
+    host.hidden = true;
+    host.replaceChildren();
+    host.dataset["built"] = "";
+    return;
+  }
+  host.hidden = false;
+
+  const signature = `${state.members.map((member) => member.crewId).join(",")}|${state.dialOpen}`;
+  if (host.dataset["built"] !== signature) {
+    host.dataset["built"] = signature;
+    host.replaceChildren();
+
+    const heading = document.createElement("div");
+    heading.className = "pilot-squad-head";
+    const title = document.createElement("span");
+    title.textContent = "Squad";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "secondary-button";
+    toggle.dataset["action"] = "toggle-orders";
+    toggle.textContent = state.dialOpen ? "Close orders (Q)" : "Orders (Q)";
+    toggle.addEventListener("click", () => callbacks.onToggleOrderDial());
+    heading.append(title, toggle);
+    host.appendChild(heading);
+
+    const list = document.createElement("ul");
+    list.className = "pilot-squad-list";
+    for (const member of state.members) {
+      const item = document.createElement("li");
+      item.dataset["crew"] = member.crewId;
+      const name = document.createElement("span");
+      name.className = "pilot-squad-name";
+      name.dataset["field"] = "squad-name";
+      const doing = document.createElement("span");
+      doing.className = "pilot-squad-doing";
+      doing.dataset["field"] = "squad-doing";
+      item.append(name, doing);
+      list.appendChild(item);
+    }
+    host.appendChild(list);
+
+    if (state.dialOpen) {
+      const dial = document.createElement("div");
+      dial.className = "pilot-order-dial";
+      dial.dataset["field"] = "order-dial";
+      for (const order of state.orders) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary-button";
+        button.dataset["action"] = "squad-order";
+        button.dataset["order"] = order.id;
+        button.textContent = `${order.hotkey}  ${order.label}`;
+        button.addEventListener("click", () => callbacks.onSquadOrder(order.id));
+        dial.appendChild(button);
+      }
+      host.appendChild(dial);
+    }
+
+    const log = document.createElement("ul");
+    log.className = "pilot-squad-log";
+    log.dataset["field"] = "squad-log";
+    log.setAttribute("aria-live", "polite");
+    host.appendChild(log);
+  }
+
+  for (const member of state.members) {
+    const item = host.querySelector<HTMLElement>(`[data-crew="${member.crewId}"]`);
+    if (!item) continue;
+    item.dataset["down"] = String(member.down);
+    const name = item.querySelector<HTMLElement>('[data-field="squad-name"]');
+    if (name) name.textContent = `${member.callsign} · ${member.integrityPercent}%`;
+    const doing = item.querySelector<HTMLElement>('[data-field="squad-doing"]');
+    if (doing) {
+      doing.textContent = member.down ? "down" : `${member.doing} · order: ${member.order}`;
+    }
+  }
+
+  const log = host.querySelector<HTMLElement>('[data-field="squad-log"]');
+  if (log) {
+    log.replaceChildren(
+      ...state.log.map((line) => {
+        const item = document.createElement("li");
+        item.textContent = line;
+        return item;
+      }),
+    );
+  }
+}
+
 export function renderPilotScreen(
   container: HTMLElement,
   roster: readonly PilotRosterEntry[],
@@ -176,6 +308,14 @@ export function renderPilotScreen(
   const panel = document.createElement("div");
   panel.className = "screen screen-pilot";
   panel.id = "pilotScreen";
+
+  // The squad readout and the quick command dial. Both live in the heads-up
+  // layer and neither of them stops the fight: the dial is a list of keys that
+  // are already live, shown so a player does not have to remember them.
+  const squadPanel = document.createElement("div");
+  squadPanel.className = "pilot-squad";
+  squadPanel.dataset["field"] = "squad";
+  squadPanel.hidden = true;
 
   const header = document.createElement("div");
   header.className = "pilot-header";
@@ -428,13 +568,14 @@ export function renderPilotScreen(
     "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode. " +
     "Ranged: 7 plasma · 8 missiles · 9 mortar · 0 cannon · J whip · K sword · O booster strike · L reload";
 
-  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, moves, hint);
+  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, squadPanel, moves, hint);
   container.appendChild(panel);
 
   let lastMode: CameraMode | null = null;
 
   return {
     update(state: PilotScreenState): void {
+      refreshSquad(squadPanel, state.squad, callbacks);
       const readoutValues = state.readout;
       title.textContent = `${readoutValues.jaegerName} · ${readoutValues.markDesignation}`;
 
