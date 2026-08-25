@@ -45,7 +45,7 @@ export interface PilotInputCallbacks {
    * mean an order while the dial is open. The caller decides which, and forwards
    * to the weapon path when it is not an order.
    */
-  readonly onNumberKey?: (code: string) => void;
+  readonly onNumberKey?: (code: string) => boolean;
 }
 
 /** Keys the ranged row answers to. */
@@ -235,11 +235,16 @@ export class PilotInputSource {
     for (const code of WEAPON_KEY_CODES) {
       actions[code] = () => this.callbacks.onWeapon?.(code);
     }
-    // The number row and the dial key. Assigned after the weapon row on purpose:
-    // the digits the two share belong to whichever the caller decides, which is
-    // the only place that knows whether the dial is open.
+    // The number row is offered to the quick command first and falls through to
+    // whatever it already did. The digits are attack slots and weapons, and a
+    // squad order must not quietly take any of them away: the caller answers
+    // whether it consumed the key, and if it did not, the original action runs.
     for (const code of SQUAD_ORDER_KEY_CODES) {
-      actions[code] = () => this.callbacks.onNumberKey?.(code);
+      const fallback = actions[code];
+      actions[code] = () => {
+        if (this.callbacks.onNumberKey?.(code) === true) return;
+        fallback?.();
+      };
     }
     actions[ORDER_DIAL_KEY_CODE] = () => this.callbacks.onOrderDial?.();
     actions[CHARGE_KEY_CODE] = () => {

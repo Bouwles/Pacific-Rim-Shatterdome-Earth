@@ -2591,7 +2591,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
     roster.deploy(jaeger.id);
     crew.deploy(assignedPilots);
-    deployedAllies = mission?.plan.allyIds ?? availableAllies();
+    // Allies come on a sortie, and only on a sortie. Taking a machine out to
+    // walk around, or spawning a target to try something against, is not an
+    // operation and does not summon three more Jaegers to join in.
+    deployedAllies = mission?.plan.allyIds ?? [];
     pilotSession = new PilotSession({
       jaeger: damagedJaeger,
       east: local.east,
@@ -2640,21 +2643,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         orderDialOpen = !orderDialOpen;
         refreshPilot();
       },
-      // A digit is an order while the dial is open and a weapon otherwise, so
-      // the number row keeps doing what it always did when nobody is commanding.
+      // A digit is an order only while the dial is open. Answering false hands
+      // the key back to the attack slot or the weapon it has always been, so
+      // the quick command borrows the number row rather than taking it.
       onNumberKey: (code: string) => {
-        if (orderDialOpen) {
-          const hotkey = code.slice(5);
-          const order = squad
-            .orderRegistry()
-            .all()
-            .find((entry) => entry.hotkey === hotkey);
-          if (order) {
-            issueSquadOrder(order.id);
-            return;
-          }
-        }
-        pressWeapon(code);
+        if (!orderDialOpen) return false;
+        const hotkey = code.slice(5);
+        const order = squad
+          .orderRegistry()
+          .all()
+          .find((entry) => entry.hotkey === hotkey);
+        if (!order) return false;
+        issueSquadOrder(order.id);
+        return true;
       },
       onWeaponRelease: (code: string) => {
         // Sustained weapons stop when the key comes up; everything else ignores it.
