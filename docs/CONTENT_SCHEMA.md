@@ -1134,3 +1134,46 @@ state, and the accessibility settings are session settings on the arena.
 
 Kaiju, copilot, weapon, facility, research-node, region, and reward-table schemas don't exist yet — they
 arrive with the milestone that first needs them (see [../ROADMAP.md](../ROADMAP.md)).
+
+## Research nodes (Milestone 24)
+
+`src/data/research.ts`. Registered through `ContentRegistry` with
+`validateResearchNode`, and prerequisites are checked after every node is in, so
+a node may be authored before the one it depends on.
+
+| Field              | Type                         | Notes                                            |
+| ------------------ | ---------------------------- | ------------------------------------------------ |
+| `id`               | string                       | Must start with `research.`                      |
+| `branch`           | ResearchBranch               | One of nine                                      |
+| `requires`         | string[]                     | Node ids. No self-reference, no duplicates       |
+| `samples`          | { sampleId, count }[]        | Count above 4 is refused as a grind              |
+| `dataCost`         | number                       | Research data spent on starting                  |
+| `fundingCost`      | number                       | Credits spent on starting                        |
+| `requiresFacility` | { facilityId, tier } or null | Checked against what is standing and operational |
+| `staffRequired`    | number                       | Researchers occupied while it runs               |
+| `researchTicks`    | number                       | Work at full effectiveness                       |
+| `benefits`         | ResearchBenefit[]            | At least one. Capability kinds only              |
+| `experiment`       | string                       | Shown while it runs                              |
+| `description`      | string                       | What it is for                                   |
+
+## Samples (Milestone 24)
+
+`src/data/samples.ts`. Registered with `validateSample`.
+
+| Field          | Type                   | Notes                                                     |
+| -------------- | ---------------------- | --------------------------------------------------------- |
+| `id`           | string                 | Must start with `sample.`                                 |
+| `sampleClass`  | common / rare / exotic | The same scale the economy grades tissue by               |
+| `trigger`      | SampleTrigger          | One of eight conditions                                   |
+| `zoneId`       | BodyZoneId             | Required for `zone-destroyed`                             |
+| `mutationKind` | MutationKind           | Required for `mutation`                                   |
+| `qualifier`    | string                 | Required for `damage-kind`, `environment` and `objective` |
+| `yieldCount`   | number                 | 1 to 4. Above four is refused as a grind                  |
+| `description`  | string                 | What it is                                                |
+
+## Manufacture recipes (Milestone 24)
+
+`src/research/manufacture.ts`. Registered with a validator that also checks the
+chassis exists and is marked `research-manufacture`, so a recipe cannot exist for
+something that can simply be bought. A recipe with no researched component is
+refused for the same reason.

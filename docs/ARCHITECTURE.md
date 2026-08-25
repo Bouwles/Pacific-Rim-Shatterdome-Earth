@@ -1191,6 +1191,51 @@ The board is reached at the Contracts Office terminal, which means the office ha
 to be built first. There is no menu entry for it, the same way there is no menu
 entry for repairing a machine.
 
+## Research: samples, programmes and countermeasures
+
+Four modules, none of which Babylon or the DOM can see.
+
+`src/data/research.ts` is the tree: twenty three nodes across nine branches, each
+with prerequisites, named sample requirements, a facility and tier, researchers,
+ticks, a visible experiment, and benefits. A benefit is a **capability**, never a
+scalar: `telegraph`, `status-resist`, `tracking`, `weak-point`, `equipment`,
+`chassis`, `facility`. There is deliberately no benefit kind that scales damage,
+and the validator refuses a node that hands nothing over or asks for more than
+four of any sample.
+
+`src/data/samples.ts` is what comes off a creature, and the condition that yields
+it. Because each sample declares its own trigger, the award rules are derived
+from the data rather than written twice, and a test can prove that nothing the
+tree calls for is impossible to obtain.
+
+`src/research/sampleAwards.ts` turns a `FightRecord` into awards through an
+ordered table of conditions, one per trigger. The **familiarity curve** lives
+here: a kaiju category yields a given sample in full the first time and a
+fraction of it the tenth, decaying towards a floor rather than to zero. That is
+the whole anti-grind mechanism, and it is one pure function.
+
+`src/research/program.ts` is the authoritative state. It is deliberately shaped
+like `ConstructionQueue`: the same problem of limited people and several wanted
+things at once, so the same answers. Researchers are handed out fresh every tick
+against current priorities, a short-handed experiment runs slower rather than
+stopping, and samples and money are taken when an experiment starts rather than
+when it finishes, which makes cancelling a decision with a cost.
+
+`src/research/countermeasures.ts` composes everything finished into one
+`CountermeasureProfile`. This is the same pattern as `MachineGrowth` and the
+facility effects object: a benefit reaches the simulation through a value the
+simulation already reads. `CombatArena` takes the profile as an injected option
+with a neutral default, applies `resistedDuration` where it already places a
+status, and exposes `telegraphs()` built on the startup window moves have always
+had. Nothing in combat knows that research exists. Benefits are never stored in a
+save; they are recomputed from the completed list, so rebalancing reaches an old
+save immediately.
+
+`src/research/manufacture.ts` holds the recipes for the two chassis nobody sells.
+It is pure: it reports what a build would take and why it cannot happen, and the
+caller does the taking through the economy that owns balances and the roster that
+owns machines.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads

@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-1436 unit and integration tests, plus 132 Playwright browser tests.
+1517 unit and integration tests, plus 136 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,35 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 24 acceptance evidence
+
+Measured at seed 20260830, in the browser by hand and in the unit, integration
+and scenario suites. The scenario figures are one 60-sortie run per strategy,
+deterministic from that seed.
+
+| Acceptance item                                                    | Evidence                                                                                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Research prerequisites stay valid after migration and data changes | A save naming a dropped node and a dropped sample loads, drops both, and still resolves its countermeasures; version 13 migrates to an empty programme |
+| Benefits stay valid across a reload                                | Benefits are never stored. They are recomputed from the completed list, so a restored save with two nodes finished still reads a telegraph lead        |
+| A newly completed countermeasure changes a real rematch            | Same fighters, same seed, same move: with no research the wind-up never reads; with the nervous system mapped it reads; with the model it is named     |
+| Exclusive chassis manufacture consumes exactly the components      | Funding, alloy and reactor material each fall by exactly the bill, and the roster gains exactly one machine of that chassis                            |
+| ...and produces one owned unit                                     | One record, `acquiredBy` "research-manufacture", and nobody starts a campaign owning either frame                                                      |
+| The tree is not a list of tiny percentage upgrades                 | No benefit kind scales damage or health; the validator refuses a node that hands nothing over; a test asserts the profile has no damage field          |
+| No impossible missable sample gates core progression               | Every root node needs only what any kill drops, and a walk of the whole graph reaches every branch but chassis on common samples alone                 |
+| Samples do not encourage tedious repetition                        | Varied play finished 21 of 23 programmes and all nine branches; grinding one easy fight finished 12, touched 8, and unlocked no frame                  |
+| Playing well pays best                                             | Going after finishers, captures and awkward conditions finished all 23 and unlocked both frames                                                        |
+| A narrow player is still not stuck                                 | The grinding run still finished 12 programmes and still had a working telegraph lead                                                                   |
+| Research reaches the player early                                  | First countermeasure landed on sortie 4 of 60                                                                                                          |
+| The board says what it is doing                                    | Live: programmes with requirements read off real stores, greyed buttons carrying the reason, and "Nothing learned yet" rather than an empty panel      |
+
+Two defects found while building it. The chassis validator refused a research
+frame outright, because it required every chassis to carry a price above zero;
+a machine nobody sells should not have a price at all, so the rule now depends
+on whether the chassis can be purchased, and refuses a price on one that cannot.
+Adding the frames also broke two tests that compared "the newest thing on the
+board" against the whole registry, which had silently meant the same thing while
+every chassis was purchasable.
 
 ## Milestone 23 acceptance evidence
 

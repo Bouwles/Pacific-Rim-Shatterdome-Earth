@@ -295,6 +295,57 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Research nodes (Milestone 24)
+
+Twenty three in `src/data/research.ts` across nine branches. Every node carries
+prerequisites, named sample requirements, a facility and tier, researchers,
+ticks, a visible experiment and at least one benefit. The validator refuses a
+node that hands nothing over, and refuses any sample requirement above four.
+
+| Branch    | Nodes | Ends at                                                     |
+| --------- | ----- | ----------------------------------------------------------- |
+| biology   | 4     | Live containment study, which makes the tanks pay their way |
+| materials | 3     | Ablative shielding, which blunts burning and corrosion      |
+| weapons   | 3     | Harmonic payload, which opens the lance                     |
+| sensors   | 3     | Adaptive sonar, built out of their own hearing organ        |
+| mobility  | 2     | Reactive footing, which rides out a current spike           |
+| reactor   | 2     | Kaiju core study, which opens the resonance core            |
+| defense   | 2     | Breach shutters, for when it comes to you                   |
+| logistics | 2     | Field fabrication, which makes repairs cheaper              |
+| chassis   | 2     | The Leviathan frame, the end of the tree                    |
+
+Benefits are capabilities: `telegraph`, `status-resist`, `tracking`,
+`weak-point`, `equipment`, `chassis`, `facility`. There is deliberately no
+benefit kind that scales damage or health.
+
+## Samples (Milestone 24)
+
+Twenty one in `src/data/samples.ts`, graded common, rare and exotic on the same
+scale the economy values tissue by. Each declares the condition that yields it,
+so the award rules are derived from the data rather than written twice.
+
+| Trigger          | Meaning                                             | Examples                                     |
+| ---------------- | --------------------------------------------------- | -------------------------------------------- |
+| `any-kill`       | Any kill at all. The floor core progression runs on | Hide section, Blue, Skeletal section         |
+| `zone-destroyed` | A named body zone came apart                        | Cranial tissue, Neural cord, Core fragment   |
+| `mutation`       | It was carrying a mutation of that kind             | Plate lamina, Venom gland, Regenerative mass |
+| `captured`       | Brought down alive                                  | Live culture                                 |
+| `finisher`       | Finished cleanly rather than ground down            | Intact organ                                 |
+| `damage-kind`    | Killed mostly by one kind of damage                 | Vitrified tissue, Conductive tissue          |
+| `environment`    | Fought in a particular medium or weather            | Pressure-adapted tissue, Storm-etched plate  |
+| `objective`      | A named mission objective was met                   | Evacuation telemetry, Containment log        |
+
+## Research chassis (Milestone 24)
+
+Two in `src/data/jaegers.ts`, both `research-manufacture` only, both with a list
+price of zero because nobody sells them. Recipes live in
+`src/research/manufacture.ts`.
+
+| Chassis         | Programme                          | Needs                                                                  |
+| --------------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| `harmonic-mk1`  | `research.chassis.harmonic-frame`  | 4 laminate hull, 1,400 t alloy, 60 reactor material                    |
+| `leviathan-mk1` | `research.chassis.leviathan-frame` | 6 laminate hull, 1 resonance core, 2,600 t alloy, 180 reactor material |
+
 ## Resources (Milestone 23)
 
 Six in `src/world/resources.ts`. Each declares what pays it in and what spends

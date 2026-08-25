@@ -211,8 +211,18 @@ function validateJaeger(entry: JaegerDefinition): string[] {
     errors.push(`unknown provenance "${String(entry.provenance)}"`);
   }
   if (!CHASSIS_ROLES.includes(entry.role)) errors.push(`unknown role "${String(entry.role)}"`);
-  for (const key of ["listPrice", "upkeepPerDay"] as const) {
-    if (!Number.isFinite(entry[key]) || entry[key] <= 0) errors.push(`${key} must be above zero`);
+  if (!Number.isFinite(entry.upkeepPerDay) || entry.upkeepPerDay <= 0) {
+    errors.push("upkeepPerDay must be above zero");
+  }
+  // A price only means something when somebody is selling it. A chassis that can
+  // be bought must carry one; a research frame that nobody sells must not, or
+  // the board would be able to quote a figure for something with no seller.
+  const purchasable = entry.acquisition.includes("purchase");
+  if (purchasable && (!Number.isFinite(entry.listPrice) || entry.listPrice <= 0)) {
+    errors.push("listPrice must be above zero for anything that can be purchased");
+  }
+  if (!purchasable && entry.listPrice !== 0) {
+    errors.push("listPrice must be zero for a chassis that cannot be purchased");
   }
   if (entry.acquisition.length === 0) {
     errors.push("a chassis needs at least one way of being acquired");
@@ -496,4 +506,141 @@ jaegerRegistry.register({
   },
   description:
     "An old machine kept in service by people who would rather rebuild than replace. Non-canon development stand-in.",
+});
+
+// Two machines nobody sells.
+//
+// These exist only at the end of a research programme, and the acquisition list
+// says so: `research-manufacture` and nothing else. There is no price, because
+// there is no seller. What they cost is the tree behind them and the rare
+// components that tree makes buildable, which is what makes finishing a branch
+// feel like it produced something rather than incremented something.
+jaegerRegistry.register({
+  id: "harmonic-mk1",
+  name: "Placeholder Harmonic",
+  manufacturer: "Shatterdome Earth R&D",
+  markDesignation: "Mk-1 research frame (development stand-in)",
+  massBudget: { massTons: 2400, powerOutputMw: 240, coolingCapacity: 0.62 },
+  assetId: "jaeger.placeholder-mk0",
+  locomotion: {
+    heightMeters: 76,
+    walkSpeedMps: 8.2,
+    runSpeedMps: 15.5,
+    strafeSpeedMps: 5.4,
+    guardSpeedMps: 4.4,
+    accelerationMps2: 3.1,
+    brakingMps2: 4.2,
+    turnRateDegPerSecond: 23,
+    turnInPlaceRateDegPerSecond: 38,
+    stepUpMeters: 9,
+    maxSlopeDeg: 37,
+    strideMeters: 26,
+    boosterImpulseMps: 9,
+    boosterSeconds: 0.8,
+    boosterRechargeSeconds: 9,
+    landingImpulseScale: 0.06,
+    getUpSeconds: 3.8,
+  },
+  manufacturerId: "maker.tarrant-yards",
+  markGeneration: 6,
+  provenance: "prototype",
+  role: "brawler",
+  listPrice: 0,
+  upkeepPerDay: 9_400,
+  acquisition: ["research-manufacture"],
+  signatureEquipment: ["weapon.harmonic-lance"],
+  upgradeTracks: [
+    {
+      id: "track.harmonics",
+      displayName: "Harmonic tuning",
+      steps: 5,
+      effect: "The lance works further into the cord before the plate reacts.",
+    },
+    {
+      id: "track.laminate",
+      displayName: "Laminate hull",
+      steps: 4,
+      effect: "Their plating, layered into ours.",
+    },
+    { id: "track.actuators", displayName: "Actuator tuning", steps: 4, effect: "Faster walk and turn." },
+  ],
+  balance: {
+    durability: [0.5, 0.75],
+    damage: [0.6, 0.9],
+    mobility: [0.5, 0.7],
+    range: [0.35, 0.6],
+    tradeoff: "Built around one weapon. Take the lance off and it is an ordinary hull.",
+  },
+  description:
+    "Materials, weapons and sensor work in one frame, assembled rather than bought. Non-canon development stand-in.",
+});
+
+jaegerRegistry.register({
+  id: "leviathan-mk1",
+  name: "Placeholder Leviathan",
+  manufacturer: "Shatterdome Earth R&D",
+  markDesignation: "Mk-1 core frame (development stand-in)",
+  massBudget: { massTons: 3400, powerOutputMw: 340, coolingCapacity: 0.8 },
+  assetId: "jaeger.heavy-mk4",
+  locomotion: {
+    heightMeters: 88,
+    walkSpeedMps: 6.8,
+    runSpeedMps: 12.4,
+    strafeSpeedMps: 4.2,
+    guardSpeedMps: 3.8,
+    accelerationMps2: 2.2,
+    brakingMps2: 3.4,
+    turnRateDegPerSecond: 16,
+    turnInPlaceRateDegPerSecond: 27,
+    stepUpMeters: 11,
+    maxSlopeDeg: 32,
+    strideMeters: 31,
+    boosterImpulseMps: 6,
+    boosterSeconds: 0.5,
+    boosterRechargeSeconds: 13,
+    landingImpulseScale: 0.09,
+    getUpSeconds: 5.2,
+  },
+  manufacturerId: "maker.tarrant-yards",
+  markGeneration: 6,
+  provenance: "legendary",
+  role: "siege",
+  listPrice: 0,
+  upkeepPerDay: 15_800,
+  acquisition: ["research-manufacture"],
+  signatureEquipment: ["weapon.chain-sword", "weapon.harmonic-lance"],
+  upgradeTracks: [
+    {
+      id: "track.core",
+      displayName: "Core coupling",
+      steps: 6,
+      effect: "More out of the thing driving it, and more heat to deal with.",
+    },
+    {
+      id: "track.laminate",
+      displayName: "Laminate hull",
+      steps: 5,
+      effect: "Their plating, layered into ours.",
+    },
+    {
+      id: "track.ablative",
+      displayName: "Ablative shielding",
+      steps: 4,
+      effect: "Shielding meant to be destroyed instead of the frame.",
+    },
+    {
+      id: "track.reactor",
+      displayName: "Reactor uprating",
+      steps: 5,
+      effect: "More power for sustained weapons.",
+    },
+  ],
+  balance: {
+    durability: [0.8, 1],
+    damage: [0.7, 0.95],
+    mobility: [0.1, 0.25],
+    range: [0.3, 0.55],
+    tradeoff: "Driven by something that was alive. Expensive to keep and slow to bring anywhere.",
+  },
+  description: "The end of the tree: a hull built around a recovered core. Non-canon development stand-in.",
 });

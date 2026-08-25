@@ -15,6 +15,7 @@ import { emptyMarketSnapshot } from "../world/market";
 import { emptyCrewSnapshot } from "../pilots/crew";
 import { emptySquadSnapshot } from "../allies/squad";
 import { emptyEconomySnapshot } from "../world/economy";
+import { emptyResearchSnapshot } from "../research/program";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -394,6 +395,29 @@ function numberOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/**
+ * Version 13 to 14: research.
+ *
+ * Adds a `research` section: the programmes finished, the experiments in the
+ * labs, the samples on the shelf, and how familiar each kaiju category has
+ * become with giving each one up.
+ *
+ * A version 13 save has none of that, because there was nothing to research and
+ * samples were a single number on the market. That number is not carried across:
+ * a count of unnamed "research samples" cannot honestly become a named cranial
+ * section or an intact organ, and inventing which ones it was would be making
+ * something up. It stays where it is, as research data, which is what the
+ * economy already spends it as. The shelf starts empty and the first sample
+ * recovered after loading is the first there has ever been.
+ */
+const addResearchSection: MigrationStep = {
+  id: "13",
+  fromVersion: 13,
+  toVersion: 14,
+  description: "Add research: programmes, experiments, samples and familiarity.",
+  apply: (document) => ({ ...document, schemaVersion: 14, research: emptyResearchSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -421,6 +445,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addCrewSection);
   registry.register(addSquadSection);
   registry.register(addEconomySection);
+  registry.register(addResearchSection);
   return registry;
 }
 

@@ -160,6 +160,7 @@ describe("round trip through a kernel", () => {
       "market",
       "metadata",
       "mission",
+      "research",
       "roster",
       "savedAt",
       "schemaVersion",

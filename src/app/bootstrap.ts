@@ -75,6 +75,7 @@ import { Market, ROTATION_DAYS } from "../world/market";
 import { Crew, LINK_EXPERIENCE_PER_LEVEL } from "../pilots/crew";
 import { Squad, MAX_SQUAD_SIZE } from "../allies/squad";
 import { effectValue, describeEffects } from "../shatterdome/facilityEffects";
+import type { FacilityEffect } from "../data/facilities";
 import { AllyController, resolveSquadIntents, type AllyIntent } from "../allies/allyController";
 import type { SquadOrderId } from "../data/squadOrders";
 import { LEVEL_CAP, levelFromExperience, nextUnlock } from "../jaegers/progression";
@@ -145,9 +146,17 @@ import {
   type CrewPanelState,
   type BerthPanelState,
   type MarketPanelState,
+  type ResearchPanelState,
+  type ResearchRow,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
 import { RESOURCE_DEFINITIONS, type ResourceKind } from "../world/resources";
+import { ResearchProgram, type ResearchCapacity } from "../research/program";
+import { resolveCountermeasures } from "../research/countermeasures";
+import { awardSamples, type FightRecord } from "../research/sampleAwards";
+import { SAMPLE_DEFINITIONS } from "../data/samples";
+import { createMutationRegistry } from "../data/mutations";
+import { MANUFACTURE_RECIPES, manufactureCost, quoteManufacture } from "../research/manufacture";
 
 export interface AppHandle {
   dispose(): void;
@@ -456,6 +465,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               crew.snapshot(),
               squad.snapshot(),
               market.economy.snapshot(),
+              research.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -477,6 +487,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               crew.snapshot(),
               squad.snapshot(),
               market.economy.snapshot(),
+              research.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -510,6 +521,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             // own, and this restores all six plus the history and the references
             // that stop a settled reward being paid a second time.
             market.economy.restore(result.document.economy);
+            // What has been learned, what is in the labs, and what is on the
+            // shelf. Restored after the economy because the research data it
+            // spends lives there.
+            research.restore(result.document.research);
+            applyCountermeasures();
             marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
@@ -1010,6 +1026,62 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       progressionLog.unshift(`${record?.name ?? flownBy}: ${line}`);
     }
     while (progressionLog.length > 6) progressionLog.pop();
+
+    // What the recovery crews got off it. Worked out from what actually happened
+    // in the fight, so the same creature killed two different ways yields two
+    // different things, and a category that has already given something up
+    // yields less of it than one that has not.
+    const settled = attackDirector.incident(active.incidentId);
+    const lead = settled?.combatants[0];
+    const creature = lead ? kaijuRegistry.get(lead.kaijuId) : undefined;
+    const survivor = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
+    const settleSample = sampleEnvironment();
+    const fightRecord: FightRecord = {
+      category: creature?.category ?? "unknown",
+      defeated: results.outcome === "success",
+      finish:
+        results.outcome === "success"
+          ? survivor && survivor.zones.some((zone) => zone.health <= 0)
+            ? "finisher"
+            : "attrition"
+          : "escaped",
+      zonesDestroyed: (survivor?.zones ?? [])
+        .filter((zone) => zone.health <= 0)
+        .map((zone) => zone.id as FightRecord["zonesDestroyed"][number]),
+      mutationKinds: (settled?.combatants ?? [])
+        .flatMap((combatant) => combatant.mutationIds)
+        .map((id) => mutations.get(id)?.kind)
+        .filter((kind): kind is NonNullable<typeof kind> => kind !== undefined),
+      dominantDamageKind: "kinetic",
+      // Where it happened, in the terms the sample rules ask about: the weather
+      // it was fought in, and whether it was fought in the water.
+      environment: [settleSample.weather.kind, settleSample.water.submergedFraction > 0.4 ? "water" : "land"],
+      objectivesMet: results.objectives
+        .filter((objective) => objective.state === "met")
+        .map((objective) => objective.id),
+      objectiveScore: results.objectiveScore,
+    };
+    const recovered = awardSamples(fightRecord, {
+      familiarity: research.familiarity(),
+      // A finished dissection protocol means the crews know what to cut.
+      recoveryMultiplier: research.isComplete("research.biology.dissection") ? 1.3 : 1,
+    });
+    research.addSamples(recovered.awards);
+    research.recordFamiliarity(recovered.familiarity);
+    if (recovered.awards.length > 0) {
+      const total = recovered.awards.reduce((sum, award) => sum + award.count, 0);
+      researchNote =
+        `${total} sample${total === 1 ? "" : "s"} back from the field: ` +
+        recovered.awards
+          .map((award) => {
+            const name =
+              SAMPLE_DEFINITIONS.find((entry) => entry.id === award.sampleId)?.displayName ?? award.sampleId;
+            return `${award.count} ${name}`;
+          })
+          .join(", ") +
+        ".";
+    }
+
     directorNotice = results.summary;
     mission = undefined;
     refreshWorld();
@@ -1177,6 +1249,18 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     );
     // Injuries heal and stress falls on the same clock the yards build on.
     for (const line of crew.advanceDays(elapsed, day)) crewNote = line;
+    // And so do the labs. An experiment is work being done by people, on the
+    // same days everything else is being done by people.
+    const labTicks = elapsed * worldState.environment.clock.dayLengthTicks;
+    const finished = research.advance(labTicks, researchCapacity());
+    if (finished.length > 0) {
+      // What was just learned reaches the current fight, not the next reload.
+      applyCountermeasures();
+      const names = finished.map((node) => node.displayName).join(", ");
+      researchNote = `${names} finished. ${finished
+        .flatMap((node) => node.benefits.map((benefit) => benefit.summary))
+        .join(" ")}`;
+    }
     for (const arrival of market.advanceDays(elapsed)) {
       const record = roster.acquire({
         chassisId: arrival.chassisId,
@@ -1675,6 +1759,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // costing frames on a machine that cannot afford it.
       projectileCapacity: quality.maxProjectiles,
       groundHeight: localGroundHeight,
+      // Every fight is fought with whatever research has learned by the time it
+      // starts. Nothing in the arena knows what research is; it is handed one
+      // object and reads it where it already derives its numbers.
+      countermeasures: resolveCountermeasures(research.completed()),
       fighters: [
         {
           id: "jaeger",
@@ -3714,9 +3802,73 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * resolver that turns tiers into effects, so the bay and the numbers cannot
    * disagree about what an upgrade bought.
    */
-  const repairRate = (): number => {
+  /**
+   * What the complex is worth at one thing, research included.
+   *
+   * The facilities give a multiplier and research adds to it, so a logistics
+   * programme that says the bays make what they need actually makes a shift of
+   * repair work go further. One helper, so no reader can accidentally take the
+   * facility half and miss the research half.
+   */
+  const complexRate = (effect: FacilityEffect): number => {
     const onShift = session ? session.staffOnShiftTotal() : shatterdomeState.staffSlots();
-    return effectValue(shatterdomeState.effects(onShift), "repairRate");
+    const base = effectValue(shatterdomeState.effects(onShift), effect);
+    const learned = resolveCountermeasures(research.completed()).facility[effect] ?? 0;
+    return base + learned;
+  };
+
+  const repairRate = (): number => complexRate("repairRate");
+
+  /**
+   * The research programme.
+   *
+   * Ticks on the simulation clock alongside construction, out of the same pool
+   * of people, and reaches the fight through one countermeasure profile handed
+   * to the arena rather than through anything in combat knowing it exists.
+   */
+  const research = new ResearchProgram();
+  /** Read when a sortie settles, to say what the creature was carrying. */
+  const mutations = createMutationRegistry();
+  /** The last thing the labs reported, shown on the research panel. */
+  let researchNote: string | null = null;
+
+  /** What the labs can do right now, read off the complex that is standing. */
+  const researchCapacity = (): ResearchCapacity => {
+    const onShift = session ? session.staffOnShiftTotal() : shatterdomeState.staffSlots();
+    const effects = shatterdomeState.effects(onShift);
+    const tiers: Record<string, number> = {};
+    for (const standing of shatterdomeState.standings()) {
+      if (standing.operational) tiers[standing.facilityId] = standing.tier;
+    }
+    return {
+      // A share of the people on shift are researchers. Not all of them: the
+      // complex still has to be run while an experiment is going on.
+      researchers: Math.max(1, Math.floor(onShift * 0.25)),
+      researchRate: effectValue(effects, "researchYield"),
+      // Research improving research is deliberately left out of complexRate
+      // here: it is read before the profile exists on a fresh campaign, and a
+      // lab that speeds up its own study of itself is a loop nobody asked for.
+      facilityTiers: tiers,
+    };
+  };
+
+  /** Everything a start is checked against, money included. */
+  const researchContext = () => ({
+    ...researchCapacity(),
+    samples: research.samples(),
+    researchData: market.economy.balance("researchData"),
+    funding: market.economy.balance("funding"),
+  });
+
+  /**
+   * Pushes what research knows into the fight.
+   *
+   * Called whenever a programme finishes, so the next exchange is fought with
+   * what was just learned rather than the one after the next reload.
+   */
+  const applyCountermeasures = (): void => {
+    const profile = resolveCountermeasures(research.completed());
+    combatArena?.setCountermeasures(profile);
   };
 
   /** The last thing the repair crew reported, shown on the berth panel. */
@@ -4107,6 +4259,132 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const resourceUnit = (kind: ResourceKind): string =>
     RESOURCE_DEFINITIONS.find((entry) => entry.id === kind)?.unit ?? "";
 
+  /**
+   * The research board.
+   *
+   * Read from the programme every time it is opened, so nothing on screen can
+   * drift from what the labs are actually doing. A node that cannot be started
+   * carries the reason rather than only being grey.
+   */
+  const researchPanelFor = (): ResearchPanelState => {
+    const capacity = researchCapacity();
+    const context = researchContext();
+    const reports = new Map(research.report(capacity).map((entry) => [entry.nodeId, entry]));
+    const profile = resolveCountermeasures(research.completed());
+
+    const rows: ResearchRow[] = research.nodes.all().map((node) => {
+      const report = reports.get(node.id);
+      const done = research.isComplete(node.id);
+      return {
+        id: node.id,
+        name: node.displayName,
+        branch: node.branch,
+        summary: node.description,
+        benefits: node.benefits.map((benefit) => benefit.summary),
+        requirements: [
+          ...node.samples.map((requirement) => {
+            const name =
+              SAMPLE_DEFINITIONS.find((entry) => entry.id === requirement.sampleId)?.displayName ??
+              requirement.sampleId;
+            return `${name}: ${research.sampleCount(requirement.sampleId)} of ${requirement.count}`;
+          }),
+          `Research data: ${Math.floor(context.researchData)} of ${node.dataCost}`,
+          `Funding: ${node.fundingCost.toLocaleString("en-GB")}`,
+          `${node.staffRequired} researchers`,
+        ],
+        refusal: done || report ? null : research.refusalFor(node.id, context),
+        progress: report
+          ? {
+              percent: report.percent,
+              experiment: report.experiment,
+              staffing: `${report.staffAssigned} of ${report.staffRequired} on it.`,
+              stalledReason: report.stalledReason,
+              paused: report.state === "paused",
+            }
+          : null,
+        done,
+      };
+    });
+
+    const countermeasures: string[] = [];
+    if (profile.telegraphLead > 0) {
+      countermeasures.push(
+        profile.telegraphNamesMove
+          ? "Wind-ups are called by name before they commit."
+          : "A commit is flagged before it lands.",
+      );
+    }
+    for (const [statusId, value] of Object.entries(profile.statusResistance)) {
+      countermeasures.push(
+        `${statusId.replace("status.", "")} lasts ${Math.round(value * 100)} percent less time.`,
+      );
+    }
+    for (const [condition, metres] of Object.entries(profile.trackingRange)) {
+      countermeasures.push(
+        condition === "*"
+          ? `Contacts hold ${metres} m further out.`
+          : `Contacts hold ${metres} m further out in ${condition}.`,
+      );
+    }
+    if (profile.weakPointsMarked) countermeasures.push("Weak zones are marked before the first exchange.");
+    for (const id of profile.equipment) countermeasures.push(`${id.split(".")[1]} can be fitted.`);
+
+    const frames = MANUFACTURE_RECIPES.filter((recipe) => research.isComplete(recipe.requiresNode)).map(
+      (recipe) => {
+        const quote = quoteManufacture(recipe, manufactureContext());
+        return {
+          chassisId: recipe.chassisId,
+          name: jaegerRegistry.get(recipe.chassisId)?.name ?? recipe.chassisId,
+          lines: [recipe.summary, ...quote.lines.map((line) => `${line.label}: ${line.amount}`)],
+          refusal: quote.refusal,
+        };
+      },
+    );
+
+    const finished = research.completed().length;
+    return {
+      kind: "research",
+      title: "Research board",
+      summary:
+        `${finished} of ${research.nodes.all().length} programmes finished · ` +
+        `${capacity.researchers} researchers · labs at ${Math.round(capacity.researchRate * 100)} percent · ` +
+        `${reports.size} under way`,
+      rows,
+      samples: Object.entries(research.samples()).map(([id, count]) => {
+        const name = SAMPLE_DEFINITIONS.find((entry) => entry.id === id)?.displayName ?? id;
+        return `${name}: ${count}`;
+      }),
+      countermeasures,
+      frames,
+      note: researchNote,
+    };
+  };
+
+  /** What a frame build is checked against, read off what is actually held. */
+  const manufactureContext = () => {
+    const tiers: Record<string, number> = {};
+    for (const standing of shatterdomeState.standings()) {
+      if (standing.operational) tiers[standing.facilityId] = standing.tier;
+    }
+    return {
+      completedNodes: research.completed(),
+      // Researched components are held as ordinary components in the economy;
+      // what makes them special is that nothing unlocks them but research.
+      components: Object.fromEntries(
+        researchedComponentIds().map((id) => [id, market.economy.balance("components")]),
+      ),
+      alloy: market.economy.balance("alloy"),
+      reactorMaterial: market.economy.balance("reactorMaterial"),
+      funding: market.economy.balance("funding"),
+      facilityTiers: tiers,
+      ownedChassisIds: roster.all().map((record) => record.chassisId),
+    };
+  };
+
+  /** Component ids research has opened. Nothing else can produce one. */
+  const researchedComponentIds = (): readonly string[] =>
+    resolveCountermeasures(research.completed()).equipment.filter((id) => id.startsWith("component."));
+
   /** Signs for a machine. The refusal is the message, never a silent no-op. */
   const purchaseOffer = (offerId: string): void => {
     const result = market.purchase(offerId);
@@ -4171,6 +4449,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         // terminal is still the construction board.
         if (!outcome.connPod && outcome.facilityId === "contract") {
           openInteriorPanel(marketPanelFor());
+          break;
+        }
+        // The research wing's terminal is the research board. Every other
+        // terminal is still the construction board.
+        if (!outcome.connPod && outcome.facilityId === "research") {
+          openInteriorPanel(researchPanelFor());
           break;
         }
         openInteriorPanel(
@@ -4480,6 +4764,109 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             ? `${roster.definition(jaegerId).name} is ${describeStatus(record.status)}, ${Math.ceil(record.hoursRemaining)} hours from ready.`
             : "Nothing to do.");
         openInteriorPanel(berthPanelFor(active, jaegerId, roster.definition(jaegerId).name));
+      },
+      onStartResearch: (nodeId: string) => {
+        const started = research.start(nodeId, researchContext());
+        researchNote = started.message;
+        if (started.ok && started.spent) {
+          // The programme took the samples itself; the money goes through the
+          // one path that owns balances, so the ledger has a line for it.
+          const day = worldState.environment.clock.dayNumber;
+          if (started.spent.funding > 0) {
+            market.economy.spend("funding", started.spent.funding, {
+              source: "research-conversion",
+              reason: `${research.nodes.getOrThrow(nodeId).displayName} started.`,
+              day,
+            });
+          }
+          if (started.spent.researchData > 0) {
+            market.economy.spend("researchData", started.spent.researchData, {
+              source: "research-conversion",
+              reason: `${research.nodes.getOrThrow(nodeId).displayName} started.`,
+              day,
+            });
+          }
+        }
+        openInteriorPanel(researchPanelFor());
+      },
+      onCancelResearch: (nodeId: string) => {
+        const cancelled = research.cancel(nodeId);
+        researchNote = cancelled.message;
+        if (cancelled.ok && cancelled.refund) {
+          const day = worldState.environment.clock.dayNumber;
+          if (cancelled.refund.funding > 0) {
+            market.economy.earn("funding", cancelled.refund.funding, {
+              source: "refund",
+              reason: "Half of a stopped programme.",
+              day,
+            });
+          }
+          if (cancelled.refund.researchData > 0) {
+            market.economy.earn("researchData", cancelled.refund.researchData, {
+              source: "refund",
+              reason: "Half of a stopped programme.",
+              day,
+            });
+          }
+        }
+        openInteriorPanel(researchPanelFor());
+      },
+      onPrioritiseResearch: (nodeId: string) => {
+        research.prioritise(nodeId);
+        researchNote = `${research.nodes.getOrThrow(nodeId).displayName} moved to the front.`;
+        openInteriorPanel(researchPanelFor());
+      },
+      onManufacture: (chassisId: string) => {
+        const recipe = MANUFACTURE_RECIPES.find((entry) => entry.chassisId === chassisId);
+        if (!recipe) return;
+        const quote = quoteManufacture(recipe, manufactureContext());
+        if (quote.refusal) {
+          researchNote = quote.refusal;
+          openInteriorPanel(researchPanelFor());
+          return;
+        }
+        // Exactly what the bill said, and nothing rounds in anybody's favour.
+        const cost = manufactureCost(recipe);
+        const day = worldState.environment.clock.dayNumber;
+        const paid = market.economy.spend("funding", cost.funding, {
+          source: "construction",
+          reason: `${chassisId} laid down.`,
+          day,
+        });
+        if (!paid.ok) {
+          researchNote = paid.message;
+          openInteriorPanel(researchPanelFor());
+          return;
+        }
+        market.economy.spend("alloy", cost.alloy, {
+          source: "construction",
+          reason: `${chassisId} laid down.`,
+          day,
+        });
+        market.economy.spend("reactorMaterial", cost.reactorMaterial, {
+          source: "construction",
+          reason: `${chassisId} laid down.`,
+          day,
+        });
+        for (const [id, count] of Object.entries(cost.components)) {
+          market.economy.spend("components", count, {
+            source: "construction",
+            reason: `${id} into ${chassisId}.`,
+            day,
+          });
+        }
+
+        const built = roster.acquire({ chassisId, acquiredBy: "research-manufacture", day });
+        if (!built) {
+          researchNote = "The yard could not lay it down.";
+          openInteriorPanel(researchPanelFor());
+          return;
+        }
+        roster.record(built.jaegerId, day, "Assembled from research components.");
+        market.unlock(chassisId, "research-manufacture");
+        syncSquadMachines();
+        researchNote = `${built.name} (${built.serial}) assembled. Nobody else has one.`;
+        openInteriorPanel(researchPanelFor());
       },
       onClosePanel: () => openInteriorPanel(null),
       onResume: () => setInteriorPaused(false),

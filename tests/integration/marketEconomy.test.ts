@@ -192,7 +192,11 @@ describe("the board across a save", () => {
 
 describe("an old Mark", () => {
   const oldMark = jaegerRegistry.getOrThrow("veteran-mk1");
-  const newMark = [...jaegerRegistry.all()].sort((a, b) => b.markGeneration - a.markGeneration)[0]!;
+  // The newest thing on the board, which means the newest thing anybody sells:
+  // the research frames have a later generation and no seller.
+  const newMark = [...jaegerRegistry.all()]
+    .filter((chassis) => chassis.acquisition.includes("purchase"))
+    .sort((a, b) => b.markGeneration - a.markGeneration)[0]!;
 
   it("is affordable next to the newest thing on the board", () => {
     expect(oldMark.listPrice).toBeLessThan(newMark.listPrice);

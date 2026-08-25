@@ -10,6 +10,7 @@ import type { MarketSnapshot } from "../world/market";
 import type { CrewSnapshot } from "../pilots/crew";
 import type { SquadSnapshot } from "../allies/squad";
 import type { EconomySnapshot } from "../world/economy";
+import type { ResearchSnapshot } from "../research/program";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -65,6 +66,7 @@ export class SaveController {
     crew?: CrewSnapshot,
     squad?: SquadSnapshot,
     economy?: EconomySnapshot,
+    research?: ResearchSnapshot,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -79,6 +81,7 @@ export class SaveController {
       crew,
       squad,
       economy,
+      research,
     });
   }
 
@@ -93,6 +96,7 @@ export class SaveController {
     crew?: CrewSnapshot,
     squad?: SquadSnapshot,
     economy?: EconomySnapshot,
+    research?: ResearchSnapshot,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
@@ -106,6 +110,7 @@ export class SaveController {
       crew,
       squad,
       economy,
+      research,
     });
   }
 

@@ -16,7 +16,7 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 13`
+- `ROOT_SAVE_VERSION = 14`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
@@ -41,6 +41,7 @@ migration, or the reverse.
 | 11      | Adds the `crew` section                                         | Per pilot: status, stress, injuries carried, the link tracks built with everybody they have flown with, and the ids of sorties already paid out.                                                                                                         |
 | 12      | Adds the `squad` section                                        | Per allied crew: the machine they fly, sorties flown beside the player, confidence, standing order, perks learned, and the sorties already settled.                                                                                                      |
 | 13      | Adds the `economy` section                                      | Every resource held, the difficulty the campaign is being run at, and the ledger behind each balance, including the references that stop a settled reward being paid twice.                                                                              |
+| 14      | Adds the `research` section                                     | Programmes finished, experiments in the labs with the work already put into them, the samples on the shelf, and how familiar each kaiju category has become with giving each one up.                                                                     |
 
 ## Detection
 
@@ -222,6 +223,30 @@ Two rules the restore enforces rather than trusts. A project naming a facility
 this build no longer has is dropped. And a project that was active comes back
 queued, holding no crews: it is given crews again on the first tick after
 loading, so nothing is mid-tick across a save.
+
+## Version 13 to 14: research (Milestone 24)
+
+Version 14 adds a `research` section: the programmes finished, the experiments
+in the labs with the work already put into them, the samples on the shelf, and
+how familiar each kaiju category has become with giving each sample up.
+
+A version 13 save has none of that, because there was nothing to research and
+samples were a single unnamed count on the market. That count is deliberately
+not carried across. A number of "research samples" cannot honestly become a
+named cranial section or an intact organ, and deciding which ones it was would
+be inventing a history the file never had. It stays where it is, as research
+data, which is what the economy already spends it as.
+
+Three rules the restore enforces rather than trusts. A completed node this build
+no longer ships is dropped, so removing content cannot strand a save. A running
+experiment comes back queued holding no researchers, and is given them again on
+the first tick, so nothing is mid-tick across a save; the work already put in is
+kept. And a sample naming something this build does not have is dropped rather
+than resurrected.
+
+Benefits are never stored. They are recomputed from the completed list every
+time, so rebalancing what a programme hands over reaches an old save
+immediately rather than leaving it carrying the numbers it was saved with.
 
 ## Version 12 to 13: the economy (Milestone 23)
 

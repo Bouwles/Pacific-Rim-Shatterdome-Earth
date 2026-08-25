@@ -222,7 +222,18 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - the market delegating every balance to the economy, so there is one balance and one history rather than two that have to agree;
   - a books view: what is held, thirty days of income and spending broken down by source with bars, the trend, and the last dozen entries in plain words;
   - a headless 360-day balance simulation across four player strategies, run from a seed, asserting solvency, that ordinary play progresses without buying the catalogue, and that an over-extended lean programme struggles.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1436 unit+integration), `smoke` (132 Playwright), `build` all pass.
+- **A research tree that changes how a fight goes**, run from the wing's own console:
+  - twenty three nodes across nine branches, each with prerequisites, named sample requirements, a facility and tier, researchers, time, a visible experiment and benefits that are capabilities rather than scalars;
+  - a validator that refuses a node handing nothing over, and refuses a sample requirement large enough to be a grind;
+  - twenty one samples awarded from what actually happened: body zone destroyed, mutation carried, capture, finisher, damage kind, environment and objective met;
+  - a familiarity curve per kaiju category, so repeating one fight yields steadily less and varying what you fight yields in full, with a floor so a lost sample can always be replaced;
+  - a proof, walked over the whole graph, that every branch has a road through it built on common samples alone;
+  - countermeasures resolved into one profile the arena reads where it already derives: telegraph lead and naming, per-status resistance capped short of immunity, tracking range by condition, weak-point marking, and equipment unlocks;
+  - a telegraph readout built on the startup window moves already had, silent until something is learned;
+  - an experiment queue with priorities, pause, resume and cancellation at a fixed half refund, sharing the researchers out fresh every tick;
+  - two research-exclusive chassis assembled from several branches and rare components, with an itemised bill that refuses and names exactly what is short;
+  - a deterministic 60-sortie scenario over three ways of playing, proving that grinding one fight finishes less of the tree than varying it and never unlocks a frame.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1519 unit+integration), `smoke` (136 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

@@ -1,5 +1,12 @@
 import type { ContentRegistry } from "../data/registry";
 import {
+  neutralCountermeasures,
+  readTelegraph,
+  resistedDuration,
+  type CountermeasureProfile,
+  type TelegraphReadout,
+} from "../research/countermeasures";
+import {
   COMBAT_TICK_SECONDS,
   moveLengthTicks,
   phaseAt,
@@ -363,6 +370,15 @@ export interface ArenaOptions {
   readonly groundHeight?: (east: number, north: number) => number | null;
   /** Which component carries which weapon mount. Injected so a test can vary it. */
   readonly components?: ContentRegistry<ComponentDefinition>;
+  /**
+   * What research has learned about fighting these things.
+   *
+   * Injected with a neutral default, so an arena built without one behaves
+   * exactly as it always has. Nothing in here is a damage bonus: it shortens a
+   * status the crews now know how to deal with, and it decides how much of a
+   * wind-up the display is allowed to call.
+   */
+  readonly countermeasures?: CountermeasureProfile;
 }
 
 /** Turns a kaiju definition into fighter zones. */
@@ -444,6 +460,8 @@ export class CombatArena {
   private readonly componentsRegistry: ContentRegistry<ComponentDefinition>;
   private readonly seedValue: number;
   private readonly groundHeight: (east: number, north: number) => number | null;
+  /** What research knows. Neutral until something has been finished. */
+  private countermeasures: CountermeasureProfile;
   private tickValue = 0;
   private readonly events: CombatEvent[] = [];
   /** How far the panel has already read. See `drain`. */
@@ -457,7 +475,45 @@ export class CombatArena {
     this.seedValue = options.seed ?? 20260824;
     this.groundHeight = options.groundHeight ?? (() => null);
     this.componentsRegistry = options.components ?? createComponentRegistry();
+    this.countermeasures = options.countermeasures ?? neutralCountermeasures();
     for (const spec of options.fighters) this.add(spec);
+  }
+
+  /**
+   * Swaps in what research has learned.
+   *
+   * Called when a programme finishes mid-campaign, so the next fight is fought
+   * with what was just learned rather than the one after the next reload.
+   */
+  setCountermeasures(profile: CountermeasureProfile): void {
+    this.countermeasures = profile;
+  }
+
+  /**
+   * What the display is allowed to say about wind-ups in progress.
+   *
+   * Empty without research, which is the fight everybody had before: a player
+   * reads the animation. With the nervous system map it flags a commit; with the
+   * behavioural model it names the move and marks what it is about to threaten.
+   */
+  telegraphs(): readonly (TelegraphReadout & { readonly fighterId: string })[] {
+    const readouts: (TelegraphReadout & { readonly fighterId: string })[] = [];
+    for (const fighter of this.fighters.values()) {
+      const attack = fighter.attack;
+      if (!attack) continue;
+      const readout = readTelegraph(
+        {
+          moveDisplayName: attack.move.displayName,
+          startupTicks: attack.move.startupTicks,
+          ticksElapsed: attack.tick,
+          threatenedZones: attack.move.volumes.map((volume) => volume.id),
+        },
+        this.countermeasures,
+      );
+      if (!readout.visible) continue;
+      readouts.push({ ...readout, fighterId: fighter.id });
+    }
+    return readouts;
   }
 
   get tick(): number {
@@ -1901,7 +1957,9 @@ export class CombatArena {
       applyStatus(
         target.statuses,
         weapon.status.statusId,
-        weapon.status.durationTicks,
+        // Research does not stop a status landing. It decides how long the crews
+        // have to live with it once it has.
+        resistedDuration(weapon.status.durationTicks, weapon.status.statusId, this.countermeasures),
         weapon.status.maxStacks,
       );
       this.pushEvent({

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-30, Milestone 24: Research, samples and two machines nobody sells
+
+What you learn in a fight now changes the next one.
+
+- Twenty three programmes across nine branches: weapons, materials, reactor, mobility, sensors, kaiju biology, Shatterdome defense, logistics, and exclusive chassis. Every one is a piece of work with people on it, not a percentage on a list.
+- Nothing in the tree makes you hit harder. A programme tells you what is coming, blunts something that was hurting you, holds a contact you would have lost, or opens a piece of equipment. Finish the whole thing and you do exactly the same damage you always did, and you know vastly more about what you are hitting.
+- Telegraphs you can read. Map the nervous system and the display flags the moment before it commits. Build the behavioural model and it names the move and marks what it is about to threaten. Before either, you read the animation, the way you always have.
+- Statuses that stop being sentences. Ablative shielding puts the fire out in a third of the time. Reactive footing keeps the actuators working through a current spike. Nothing is ever made immune to anything.
+- Sensors that keep a contact. Signature work holds them further out, the thermal array sees through weather, and adaptive sonar means going under is no longer a way to disappear.
+- Twenty one samples, and what you get depends on how the fight went. Which zone you took apart. What it was carrying. Whether you finished it clean or ground it down. Whether you took it alive. What killed it. Whether it happened in a storm or in the water. What you were sent there to do.
+- One exotic sample is worth more than a truckload of common, because what makes it valuable is what it came off.
+- Fighting the same easy thing over and over stops paying. A category gives up a sample fully the first time and a fraction of it the tenth, so varying what you go after is the efficient way to play rather than the scenic one. It never falls to nothing: a sample you lost can always be replaced.
+- Nothing core is behind a lucky drop. Every branch has a road through it built on samples that any kill yields. Rare and exotic gate the spectacular and the optional, never the way forward.
+- Two machines nobody sells. The Harmonic frame comes out of materials, weapons and sensor work together. The Leviathan comes out of that plus a recovered core and the ablative programme. Neither has a price, because neither has a seller.
+- Building one takes exactly what the bill says: laminate hull sections, a resonance core, alloy, reactor material and money. Short of one component, it refuses and tells you which.
+- A research board at the wing's own console. Every programme with what it needs against what you hold, what it will hand over, and the experiment itself while it runs. Nothing has been learned yet, and it says so in words rather than showing you an empty panel.
+
+An old save keeps everything it had. Version 13 files come back with an empty programme and an empty shelf rather than an invented history.
+
 ## 2026-08-29, Milestone 23: An economy with books you can read
 
 Money stopped being a number on a panel and became something with a history.

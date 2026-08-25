@@ -291,8 +291,52 @@ export interface LedgerBreakdownRow {
   readonly share: number;
 }
 
+/** One programme on the research board. */
+export interface ResearchRow {
+  readonly id: string;
+  readonly name: string;
+  readonly branch: string;
+  /** What it is for, in words. */
+  readonly summary: string;
+  /** What it hands over when it lands. */
+  readonly benefits: readonly string[];
+  /** What it will consume, sample by sample, against what is held. */
+  readonly requirements: readonly string[];
+  /** Null when it can be started; otherwise exactly why not. */
+  readonly refusal: string | null;
+  /** Set when it is running: the experiment, and how far along it is. */
+  readonly progress: {
+    readonly percent: number;
+    readonly experiment: string;
+    readonly staffing: string;
+    readonly stalledReason: string | null;
+    readonly paused: boolean;
+  } | null;
+  readonly done: boolean;
+}
+
+export interface ResearchPanelState {
+  readonly kind: "research";
+  readonly title: string;
+  /** Researchers, lab rate, and how much of the tree is finished. */
+  readonly summary: string;
+  readonly rows: readonly ResearchRow[];
+  /** What is on the shelf, named and counted. */
+  readonly samples: readonly string[];
+  /** What research currently does to a fight. Empty before anything lands. */
+  readonly countermeasures: readonly string[];
+  /** Frames that can be laid down, with the whole bill. */
+  readonly frames: readonly {
+    readonly chassisId: string;
+    readonly name: string;
+    readonly lines: readonly string[];
+    readonly refusal: string | null;
+  }[];
+  readonly note: string | null;
+}
+
 export type ShatterdomePanelState =
-  FacilityPanelState | BerthPanelState | ConnPodPanelState | MarketPanelState;
+  FacilityPanelState | BerthPanelState | ConnPodPanelState | MarketPanelState | ResearchPanelState;
 
 export interface ShatterdomeScreenState {
   readonly roomName: string;
@@ -333,6 +377,14 @@ export interface ShatterdomeScreenCallbacks {
   readonly onRepair: (jaegerId: string) => void;
   /** Signs for one machine on the contracts board. */
   readonly onPurchase: (offerId: string) => void;
+  /** Starts a research programme. Takes the samples and the money now. */
+  readonly onStartResearch: (nodeId: string) => void;
+  /** Stops one, giving half of everything back. */
+  readonly onCancelResearch: (nodeId: string) => void;
+  /** Moves one to the front of the queue. */
+  readonly onPrioritiseResearch: (nodeId: string) => void;
+  /** Lays down a frame nobody sells. */
+  readonly onManufacture: (chassisId: string) => void;
   /** Takes a passive at the tier the machine has opened. */
   readonly onChoosePassive: (jaegerId: string, passiveId: string) => void;
   /** Gives every passive back, to choose again. */
@@ -650,6 +702,65 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     ledger.className = "sd-market-orders";
     ledger.dataset["field"] = "market-ledger";
     element.appendChild(ledger);
+  } else if (panel.kind === "research") {
+    const summary = document.createElement("p");
+    summary.className = "sd-panel-summary";
+    summary.dataset["field"] = "research-summary";
+    element.appendChild(summary);
+
+    const list = document.createElement("ul");
+    list.className = "sd-market-list";
+    for (const row of panel.rows) list.appendChild(buildResearchRow(row, callbacks));
+    if (panel.rows.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "sd-market-empty";
+      empty.textContent = "Nothing to work on. Build a research wing.";
+      list.appendChild(empty);
+    }
+    element.appendChild(list);
+
+    const framesHeading = document.createElement("h4");
+    framesHeading.className = "sd-panel-subheading";
+    framesHeading.textContent = "Frames";
+    element.appendChild(framesHeading);
+
+    const frames = document.createElement("ul");
+    frames.className = "sd-market-list";
+    frames.dataset["field"] = "research-frames";
+    for (const frame of panel.frames) frames.appendChild(buildFrameRow(frame, callbacks));
+    if (panel.frames.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "sd-market-empty";
+      empty.textContent = "No frame programme has been finished yet.";
+      frames.appendChild(empty);
+    }
+    element.appendChild(frames);
+
+    const shelfHeading = document.createElement("h4");
+    shelfHeading.className = "sd-panel-subheading";
+    shelfHeading.textContent = "Shelf";
+    element.appendChild(shelfHeading);
+
+    const samples = document.createElement("ul");
+    samples.className = "sd-balance-list";
+    samples.dataset["field"] = "research-samples";
+    element.appendChild(samples);
+
+    const effectsHeading = document.createElement("h4");
+    effectsHeading.className = "sd-panel-subheading";
+    effectsHeading.textContent = "In the field";
+    element.appendChild(effectsHeading);
+
+    const effects = document.createElement("ul");
+    effects.className = "sd-market-orders";
+    effects.dataset["field"] = "research-countermeasures";
+    element.appendChild(effects);
+
+    const note = document.createElement("p");
+    note.className = "sd-panel-notes";
+    note.dataset["field"] = "research-note";
+    note.setAttribute("aria-live", "polite");
+    element.appendChild(note);
   } else {
     element.appendChild(definitionList(connPodFields(panel)));
     const notes = document.createElement("p");
@@ -700,6 +811,148 @@ function buildBreakdownRow(row: LedgerBreakdownRow): HTMLElement {
   fill.style.width = `${Math.round(Math.max(0, Math.min(1, row.share)) * 100)}%`;
   track.appendChild(fill);
   item.appendChild(track);
+  return item;
+}
+
+/**
+ * One programme on the board.
+ *
+ * A finished node reads as finished, a running one shows the experiment rather
+ * than only a bar, and one that cannot be started carries the reason on the
+ * button that is greyed out.
+ */
+function buildResearchRow(row: ResearchRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "sd-market-row";
+  item.dataset["node"] = row.id;
+  if (row.done) item.dataset["state"] = "done";
+  else if (row.progress) item.dataset["state"] = row.progress.paused ? "paused" : "running";
+  else item.dataset["state"] = row.refusal ? "blocked" : "ready";
+
+  const head = document.createElement("div");
+  head.className = "sd-market-head";
+  const name = document.createElement("span");
+  name.className = "sd-market-name";
+  name.dataset["field"] = "node-name";
+  name.textContent = row.name + " \u00b7 " + row.branch;
+  const status = document.createElement("span");
+  status.className = "sd-market-price";
+  status.dataset["field"] = "node-status";
+  status.textContent = researchStatusText(row);
+  head.append(name, status);
+  item.appendChild(head);
+
+  const summary = document.createElement("p");
+  summary.className = "sd-market-summary";
+  summary.dataset["field"] = "node-summary";
+  summary.textContent = row.summary;
+  item.appendChild(summary);
+
+  const benefits = document.createElement("ul");
+  benefits.className = "sd-market-terms";
+  benefits.dataset["field"] = "node-benefits";
+  for (const line of row.benefits) {
+    const entry = document.createElement("li");
+    entry.textContent = line;
+    benefits.appendChild(entry);
+  }
+  item.appendChild(benefits);
+
+  if (row.progress) {
+    // What is actually happening in the lab, which is the point of an experiment
+    // being a thing rather than a timer with a name on it.
+    const experiment = document.createElement("p");
+    experiment.className = "sd-panel-notes";
+    experiment.dataset["field"] = "node-experiment";
+    experiment.textContent = researchExperimentText(row);
+    item.appendChild(experiment);
+
+    const track = document.createElement("div");
+    track.className = "sd-breakdown-track";
+    const fill = document.createElement("div");
+    fill.className = "sd-breakdown-fill";
+    fill.style.width = Math.max(0, Math.min(100, row.progress.percent)) + "%";
+    track.appendChild(fill);
+    item.appendChild(track);
+  } else if (!row.done) {
+    const requirements = document.createElement("ul");
+    requirements.className = "sd-market-terms";
+    requirements.dataset["field"] = "node-requirements";
+    for (const line of row.requirements) {
+      const entry = document.createElement("li");
+      entry.textContent = line;
+      requirements.appendChild(entry);
+    }
+    item.appendChild(requirements);
+  }
+
+  if (row.done) return item;
+
+  if (row.progress) {
+    const front = button("To the front", "secondary-button", () => callbacks.onPrioritiseResearch(row.id));
+    front.dataset["action"] = "prioritise-research";
+    const stop = button("Stop", "secondary-button", () => callbacks.onCancelResearch(row.id));
+    stop.dataset["action"] = "cancel-research";
+    stop.title = "Half of everything comes back.";
+    item.append(front, stop);
+    return item;
+  }
+
+  const start = button("Start", "secondary-button", () => callbacks.onStartResearch(row.id));
+  start.dataset["action"] = "start-research";
+  start.disabled = row.refusal !== null;
+  // A greyed button that says nothing is the failure this project keeps out.
+  start.title = row.refusal ?? "Start " + row.name;
+  start.dataset["refusal"] = row.refusal ?? "";
+  item.appendChild(start);
+  return item;
+}
+
+function researchStatusText(row: ResearchRow): string {
+  if (row.done) return "Finished";
+  if (row.progress) return row.progress.percent + "%";
+  return row.refusal ? "Blocked" : "Ready";
+}
+
+function researchExperimentText(row: ResearchRow): string {
+  if (!row.progress) return "";
+  const tail = row.progress.stalledReason ?? row.progress.staffing;
+  return row.progress.experiment + " " + tail;
+}
+
+/** One frame that can be laid down, with the whole bill whether or not it can. */
+function buildFrameRow(
+  frame: ResearchPanelState["frames"][number],
+  callbacks: ShatterdomeScreenCallbacks,
+): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "sd-market-row";
+  item.dataset["frame"] = frame.chassisId;
+
+  const head = document.createElement("div");
+  head.className = "sd-market-head";
+  const name = document.createElement("span");
+  name.className = "sd-market-name";
+  name.textContent = frame.name;
+  head.appendChild(name);
+  item.appendChild(head);
+
+  const lines = document.createElement("ul");
+  lines.className = "sd-market-terms";
+  lines.dataset["field"] = "frame-bill";
+  for (const line of frame.lines) {
+    const entry = document.createElement("li");
+    entry.textContent = line;
+    lines.appendChild(entry);
+  }
+  item.appendChild(lines);
+
+  const build = button("Lay it down", "secondary-button", () => callbacks.onManufacture(frame.chassisId));
+  build.dataset["action"] = "manufacture";
+  build.disabled = frame.refusal !== null;
+  build.title = frame.refusal ?? "Build " + frame.name;
+  build.dataset["refusal"] = frame.refusal ?? "";
+  item.appendChild(build);
   return item;
 }
 
@@ -1294,6 +1547,66 @@ function refreshPanelElement(
         }),
       );
     }
+    return;
+  }
+
+  if (panel.kind === "research") {
+    setField(element, "research-summary", panel.summary);
+    for (const row of panel.rows) {
+      const item = element.querySelector<HTMLElement>('[data-node="' + row.id + '"]');
+      if (!item) continue;
+      setField(item, "node-name", row.name + " \u00b7 " + row.branch);
+      setField(item, "node-status", researchStatusText(row));
+      setField(item, "node-summary", row.summary);
+      if (row.progress) {
+        setField(item, "node-experiment", researchExperimentText(row));
+        const fill = item.querySelector<HTMLElement>(".sd-breakdown-fill");
+        if (fill) fill.style.width = Math.max(0, Math.min(100, row.progress.percent)) + "%";
+      }
+      const action = item.querySelector<HTMLButtonElement>('[data-action="start-research"]');
+      if (action) {
+        action.disabled = row.refusal !== null;
+        action.title = row.refusal ?? "Start " + row.name;
+        action.dataset["refusal"] = row.refusal ?? "";
+      }
+    }
+
+    const samples = element.querySelector<HTMLElement>('[data-field="research-samples"]');
+    if (samples) {
+      samples.replaceChildren(
+        ...(panel.samples.length === 0 ? ["Nothing on the shelf yet."] : panel.samples).map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
+
+    const effects = element.querySelector<HTMLElement>('[data-field="research-countermeasures"]');
+    if (effects) {
+      const lines =
+        panel.countermeasures.length === 0
+          ? ["Nothing learned yet. You are reading the animation, like everybody else."]
+          : panel.countermeasures;
+      effects.replaceChildren(
+        ...lines.map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
+
+    for (const frame of panel.frames) {
+      const item = element.querySelector<HTMLElement>('[data-frame="' + frame.chassisId + '"]');
+      const action = item?.querySelector<HTMLButtonElement>('[data-action="manufacture"]');
+      if (!action) continue;
+      action.disabled = frame.refusal !== null;
+      action.title = frame.refusal ?? "Build " + frame.name;
+      action.dataset["refusal"] = frame.refusal ?? "";
+    }
+
+    setField(element, "research-note", panel.note ?? "");
     return;
   }
 

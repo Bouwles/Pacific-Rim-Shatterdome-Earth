@@ -205,10 +205,22 @@ describe("the saved record", () => {
       shatterdome: { marker: "untouched" },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["5", "6", "7", "8", "9", "10", "11", "12"]);
+    expect(result.applied).toEqual(["5", "6", "7", "8", "9", "10", "11", "12", "13"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRosterSnapshot(result.document.roster)).toEqual([]);
-    expect(result.document.roster.machines.length).toBe(jaegerRegistry.all().length);
+    // One record per machine a campaign actually starts with. A research frame
+    // is in the registry but nobody owns one until it has been researched, so a
+    // migrated save must not be handed one for free.
+    const startable = jaegerRegistry
+      .all()
+      .filter(
+        (chassis) =>
+          chassis.acquisition.includes("purchase") || chassis.acquisition.includes("milestone-unlock"),
+      );
+    expect(result.document.roster.machines.length).toBe(startable.length);
+    expect(result.document.roster.machines.some((machine) => machine.jaegerId === "harmonic-mk1")).toBe(
+      false,
+    );
     for (const machine of result.document.roster.machines) {
       expect(machine.status).toBe("ready");
       expect(machine.damage.scars).toEqual([]);

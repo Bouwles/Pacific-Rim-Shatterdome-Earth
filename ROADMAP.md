@@ -572,6 +572,33 @@ save envelope to version 13, and the contracts terminal panel.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1436), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 24 - Research tree, kaiju samples, exclusive Jaegers and countermeasures
+
+**Depends on:** Milestone 22 (the facilities that house the labs), 23 (the samples and data it spends).
+**Status:** done.
+**Scope:** twenty three research nodes across nine branches, each carrying prerequisites, named sample
+requirements, a facility and tier, researchers, time, a visible experiment and benefits that are
+capabilities rather than percentages; twenty one samples awarded by body zone, mutation, capture
+condition, finishing method, damage kind, environment and mission objective, with a familiarity curve
+that makes repeating one fight pay less each time; countermeasures that reveal telegraphs, blunt named
+statuses and extend tracking, resolved into one profile the arena reads where it already derives; two
+research-exclusive chassis assembled from several branches and rare components, with a bill that refuses
+and says exactly what is short. Created `src/data/research.ts`, `src/data/samples.ts`,
+`src/research/program.ts`, `src/research/sampleAwards.ts`, `src/research/countermeasures.ts`,
+`src/research/manufacture.ts`, `src/debug/researchScenario.ts`. Extended `src/combat/arena.ts` with an
+injected countermeasure profile and a telegraph readout, `src/data/jaegers.ts` with the two frames and a
+price rule that depends on whether anybody sells it, the save envelope to version 14, and the bootstrap
+wiring and research board panel.
+**Acceptance tests:**
+
+- Research prerequisites and benefits stay valid across a save, a reload and a node being dropped.
+- A finished countermeasure changes a real rematch: the same fighters, seed and move, and the wind-up
+  reads where it previously did not.
+- Building an exclusive frame consumes exactly the components, alloy, reactor material and funding the
+  bill named, and produces exactly one owned machine.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1519), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

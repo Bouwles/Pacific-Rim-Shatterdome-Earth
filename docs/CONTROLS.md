@@ -288,6 +288,32 @@ cap, or bay work on a machine that is not in the bay.
 
 ## The contracts terminal (Milestone 18)
 
+### The research board
+
+Kaiju Research has to be built before it can be walked into, the same way the
+Contracts Office does. Its terminal is the research board; the analysis benches
+next to it are staff posts and do nothing.
+
+| Control              | Effect                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| **E** at the console | Open the research board                                                            |
+| **Start**            | Begin a programme: the samples and the money leave now, not when it finishes       |
+| **To the front**     | Move a running experiment ahead of the others. Takes effect on the next tick       |
+| **Stop**             | Cancel it. Half of everything comes back, samples included                         |
+| **Lay it down**      | Build a research frame, once its programme is finished and the stores can cover it |
+| **E** or **Close**   | Leave the board                                                                    |
+
+Every programme shows what it needs against what you hold, what it hands over
+when it lands, and the experiment itself while it runs. A programme that cannot
+be started is greyed out and carries the reason: the prerequisite it is waiting
+on, the sample it is short of, or the facility tier it needs. A frame that
+cannot be built names the component it is missing.
+
+Research runs on the same clock everything else does, so time skipped on the
+world map is time the labs were working.
+
+### The contracts board
+
 The Contracts Office has to be built before it can be walked into: order it from
 any facility terminal, then take the door out of LOCCENT. Its terminal is the
 market.

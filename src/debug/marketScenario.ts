@@ -124,9 +124,10 @@ export function compareGenerations(): {
   };
 } {
   // Generation zero is the development stand-in rather than a machine anybody
-  // fielded, so the comparison starts at the first real Mark.
+  // fielded, so the comparison starts at the first real Mark. Research frames are
+  // out too: this compares what is on the board, and nobody sells those.
   const sorted = [...jaegerRegistry.all()]
-    .filter((chassis) => chassis.markGeneration > 0)
+    .filter((chassis) => chassis.markGeneration > 0 && chassis.acquisition.includes("purchase"))
     .sort((a, b) => a.markGeneration - b.markGeneration);
   const oldest = sorted[0]!;
   const newest = sorted[sorted.length - 1]!;
