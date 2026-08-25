@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-25, Milestone 18: Jaeger roster registry, manufacturers and purchasing
+
+There is money now, and a place to spend it.
+
+- Four yards, each with a home, a speciality, a price, a wait and terms it will not move on. Buy from one often enough and it charges you less and builds you quicker, but never for nothing and never overnight.
+- A board of contracts at the Contracts Office terminal, which you have to build before you can walk into it. It turns over every fourteen days.
+- The board cannot be rerolled. It is derived from your world seed and the rotation you have reached, so asking again, loading the save, or reloading the page shows you the same offers. Nothing is rolled when a save is opened, which is why there is nothing to reroll.
+- Offers that describe a machine honestly: four performance ranges shown as bands rather than one power number, what it gives up written underneath, what it costs a day to keep, how long the yard says it will take, what it comes with, how far it can be upgraded, and the terms of the contract in full.
+- Buying takes the money once, and you own nothing until it is delivered. A refurbished hull arrives worn, with a percentage on it, and goes straight into the bay.
+- Every machine is its own machine. Two built from the same chassis have their own ids, their own yard serials, their own names and their own service records, and buying a second of something you already own gives you a second one.
+- Old marks are worth owning. The Mark 1 is 2.9M against the Mark 5's 6.6M, costs half as much a day to keep, is slower and shorter ranged, and has twenty upgrade steps against the Mark 5's seven.
+- Machines can also arrive without money: a milestone unlock, a research programme, a wreck rebuilt, or something pulled out of an archive.
+- Upkeep on everything you own, charged by the day, on whichever clock you are using. Skipping a fortnight costs you a fortnight.
+- No premium currency, no crates, no timers pressuring you into anything. One treasury, plain prices, and an offer sits there for the whole rotation.
+
+Two problems found by hand. Every performance bar read six thousand to nine and a half thousand and filled its whole track, because the percentages were multiplied by a hundred twice. And skipping a month to wait for a delivery left three hundred and thirteen live attacks on the board with the war pinned at maximum, because an attack that landed and was never answered stayed live forever; attacks nobody comes to now close on their own, and sixteen unattended days leave three.
+
 ## 2026-08-25, Milestone 17: Deployment preparation, carrier sequence and mission lifecycle
 
 The alert board goes somewhere now. You can answer one.

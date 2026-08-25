@@ -166,7 +166,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - results carrying damage, repair hours, city impact, salvage, samples, civilians, reputation, drift link, experience, funding and a replay, every line with the reason it exists;
   - five endings that all explain themselves, including an abort that still credits what was achieved;
   - results that reconcile: the only path in is the simulation's own numbers, and completing twice pays once.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1071 unit+integration), `smoke` (129 Playwright), `build` all pass.
+- **An economy you buy machines with**, at the Contracts Office terminal once that office is built:
+  - four manufacturers with home regions, specialities, standing, lead times, price multipliers and contract terms, all read from one table;
+  - a board of up to five offers derived from the world seed and the rotation number rather than rolled, so it is identical on a reask, on a reload and on a reopened save, and it turns over every fourteen days;
+  - previews carrying four performance ranges as bands, the written tradeoff, upkeep, lead time, fitted weapons, upgrade depth and the full terms, with no single power score anywhere;
+  - buying that deducts once, takes the offer off the board, and delivers only after the lead time, with a refurbished hull arriving worn and needing the bay;
+  - six acquisition paths, so a machine can also arrive through a milestone, a research programme, a rebuilt wreck, an archive or an event;
+  - a roster of owned machines rather than chassis rows: own ids, own yard serials, own names, own service histories, and two of the same chassis are two machines;
+  - upkeep charged per day on everything owned, settled from the clock's absolute day number so every time path charges exactly once;
+  - an old Mark that stays worth flying: 2.9M against 6.6M, half the upkeep, slower and shorter ranged, and twenty upgrade steps against seven.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1115 unit+integration), `smoke` (129 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -275,15 +284,28 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Shadow stability under a moving Jaeger is unverified, because no Jaeger exists in the world view. Only the mechanism that prevents jitter, local coordinates bounded at 2,000 m, is confirmed. Physics behaviour across a rebase is likewise unverified with no physics backend wired.
 - `src/world/**` uses trigonometry, which the kernel is forbidden from doing. Cross-engine bit-identical replay would not survive world movement becoming authoritative; see TECH_DECISIONS.md for the mitigation path.
 - Save documents are not encrypted or signed. The checksum detects accidental corruption and casual tampering, not deliberate editing; a player who wants to edit their own save can.
+- A campaign starts owning one of every purchasable chassis, which makes the contracts board a place to buy a second of something rather than a first. Tightening the starting fleet means the pilot picker, the world panel and the berths have to list owned machines instead of chassis rows, which is Milestone 19's problem because that is when instance ids stop being interchangeable with chassis ids.
+- Manufacturer standing only moves when you buy. Missions produce a reputation figure that the war reads, but nothing yet connects a good sortie to a better price.
 
 ## Exact next task
 
-Start Phase 2 (ROADMAP.md): the on-foot player controller and the first real Shatterdome interior. This is the first consumer of the `shatterdome.jaeger-bay` asset and the point where an entity is bound to an asset manifest. It is also the first milestone that needs a real scene lifecycle, since the hub, the globe and the boot scene are genuinely different environments.
+Milestone 19 (ROADMAP.md): per-machine progression. Levels, moves, passives, module
+slots and voluntary prestige, on top of the records the roster now owns.
 
-The pieces it builds on all exist now: positions are geodetic and the Shatterdome sits at a known region centre, the floating origin keeps local coordinates small, `RootSave` version 3 already carries world and environment state, the streamed ground gives the controller real terrain and a real height field to stand on, and the environment already computes the traction, movement and water-state multipliers a controller has to obey. Extend `RootSave` for hub state rather than adding a parallel store, put the player controller behind the same tangent-frame conversion the world screen already uses, take ground height from `SectorStreamer.sampleGroundHeight`, and give the creature behaviour rather than a cadence, and give the machine components rather than a hull.
-Melee now has enough vocabulary for a real fight, so what the creature lacks is the part that chooses
-between answers.
-The arena already resolves both sides, already reports every hit by zone, and already carries the reactions a
-behaviour would choose between; what it lacks is anything deciding what the creature does. Per-component
-damage is the other half: the zone path exists and the machine currently uses one zone through it, so
-splitting a Jaeger into head, torso, arms, legs and weapons is data plus a save section rather than new code.
+The pieces it builds on all exist. A `MachineRecord` is already an owned instance
+with `level`, `experience` and `prestige` fields carried through the save, so the
+curve has somewhere to live without a parallel store. `data/jaegers.ts` already
+carries upgrade tracks with steps and written effects, which is the shape an
+unlock table wants. Missions already produce an `experience` figure through the
+one `report` path that pays everything else, so there is exactly one place for
+experience to come from. Extend the roster record and the chassis tracks rather
+than adding a progression store beside them, and keep difficulty in behaviour,
+mutations and objectives rather than in raw numbers.
+
+One thing to know before starting: instance ids are `chassisId#n` for anything
+bought during a campaign, but the pilot picker, the world panel and the berths
+still list chassis rows from `jaegerRegistry.all()` rather than owned machines.
+That works today because a campaign starts owning one of each. Per-machine
+progression is the point where it stops working, so those three lists want to
+read the roster, and `roster.definition()` already resolves an instance id back
+to its chassis for everything downstream.

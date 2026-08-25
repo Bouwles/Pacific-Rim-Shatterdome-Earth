@@ -43,6 +43,12 @@ export const RECOVERY_WINDOW_TICKS = 18_000;
 /** How often the director considers spawning anything at all. */
 export const ROLL_INTERVAL_TICKS = 1_800;
 
+/**
+ * How long an attack that has landed waits for somebody before the city is
+ * counted as overrun. Six in-game hours at the default frequency.
+ */
+export const ABANDON_WINDOW_TICKS = 21_600;
+
 export const INCIDENT_STATUSES = ["forecast", "inbound", "landed", "resolved", "expired"] as const;
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
 
@@ -618,6 +624,26 @@ export class AttackDirector {
       this.quietUntilTick,
       incident.arrivalTick + Math.round(RECOVERY_WINDOW_TICKS / this.crisisFrequency),
     );
+  }
+
+  /**
+   * Settles everything nobody answered.
+   *
+   * An attack that lands and is never met does not wait forever: after its
+   * window the city is overrun and the incident closes. Without this a month of
+   * skipped time leaves hundreds of live attacks on the board, which is not a
+   * war, it is a queue.
+   */
+  settleAbandoned(tick: number): readonly Resolution[] {
+    const settled: Resolution[] = [];
+    const window = Math.round(ABANDON_WINDOW_TICKS / this.crisisFrequency);
+    for (const incident of this.incidentsById.values()) {
+      if (incident.status !== "landed") continue;
+      if (tick < incident.arrivalTick + window) continue;
+      const resolution = this.expire(incident.id);
+      if (resolution) settled.push(resolution);
+    }
+    return settled;
   }
 
   /** Marks an incident nobody answered and nobody defended. */

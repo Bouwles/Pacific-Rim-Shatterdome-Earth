@@ -263,6 +263,26 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
 
+## Milestone 18 acceptance evidence
+
+Measured on WebGPU at seed 20260825 on High, in the browser by hand and in the
+unit and integration suites.
+
+| Acceptance item                                                               | Evidence                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purchasing creates exactly one owned instance and deducts the price once      | Live: 6.0M to 4.3M on signing for a 1.7M hull, the offer leaves the board, and fifteen days later the fleet reads five machines with a second Ironclad at serial VETERAN-MK1-0002. Buying the same offer again is refused and deducts nothing |
+| Market rotation is seeded, saved, and cannot be rerolled by refreshing        | Live: saved, reloaded the page, loaded the slot, and the board came back with the same four offers in the same order, the same treasury and the same fleet. In tests, five reloads of one snapshot produce identical boards                   |
+| Older Mark units stay affordable, distinctive, upgradeable and endgame-viable | The Mark 1 is 2.9M against the Mark 5's 6.6M, 6.2k a day against 12.8k, twenty upgrade steps against seven, and wins outright on durability while losing on mobility and reach                                                                |
+| A machine is not owned until it is delivered                                  | Nothing arrives before the lead time, and running the clock on afterwards does not deliver a second one                                                                                                                                       |
+| No gacha, no premium currency, no timed pressure                              | One treasury, plain prices, previews carrying bands and terms rather than a score, and an offer stays on the board for the whole fourteen day rotation                                                                                        |
+| Upkeep is charged on what is owned                                            | Live: 45k a day on four machines became 51k on five, and sixteen unattended days cost 720k. Settlement is driven by the clock's absolute day number, so every time path charges once                                                          |
+
+Two defects found by hand. Performance bands were multiplied by a hundred twice,
+so every bar read 6000-9500 and every bar was full width. And a month of skipped
+time left 313 live attacks on the board with escalation pinned at 100 percent,
+because an attack that landed and was never answered stayed live forever: the
+director now settles what nobody came to, and sixteen unattended days leave three.
+
 ## Milestone 17 acceptance evidence
 
 Measured on WebGPU at seed 20260825 on High, in the browser suite and by hand.

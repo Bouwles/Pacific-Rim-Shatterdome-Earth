@@ -295,6 +295,37 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Manufacturers (Milestone 18)
+
+Four original yards in `src/data/manufacturers.ts`. Adding a fifth is a row here
+and nothing else: the board, the previews and the pricing all read the table.
+
+| id                      | Yard              | Home                    | Builds for              | Standing | Lead | Price | Refurb chance |
+| ----------------------- | ----------------- | ----------------------- | ----------------------- | -------- | ---- | ----- | ------------- |
+| maker.tarrant-yards     | Tarrant Yards     | Clyde estuary, Scotland | heavy armour, endurance | 0.62     | 18 d | 1.00  | 0.40          |
+| maker.hanjin-dynamics   | Hanjin Dynamics   | Busan, Korea            | speed, gunnery          | 0.71     | 11 d | 1.15  | 0.20          |
+| maker.novaya-kuznitsa   | Novaya Kuznitsa   | Vladivostok, Russia     | heavy armour, refits    | 0.55     | 15 d | 0.82  | 0.55          |
+| maker.aurora-collective | Aurora Collective | Valparaiso, Chile       | prototypes, speed       | 0.48     | 24 d | 1.40  | 0.05          |
+
+Standing moves with what you buy and shortens the wait and the price, but a yard
+that likes you still takes at least five days and still charges.
+
+## Jaeger chassis as goods (Milestone 18)
+
+The same four chassis the game has always had, now with what they cost.
+
+| id              | Mark | Role       | Yard            | Price | Upkeep | Upgrade steps |
+| --------------- | ---- | ---------- | --------------- | ----- | ------ | ------------- |
+| placeholder-mk0 | 0    | brawler    | Tarrant Yards   | 4.2M  | 9.5k   | 7             |
+| veteran-mk1     | 1    | siege      | Tarrant Yards   | 2.9M  | 6.2k   | 20            |
+| heavy-mk4       | 4    | guardian   | Novaya Kuznitsa | 7.8M  | 16.4k  | 8             |
+| agile-mk5       | 5    | skirmisher | Hanjin Dynamics | 6.6M  | 12.8k  | 7             |
+
+The Mark 1 is the shape of the answer to "does an old machine stay worth flying":
+less than half the price of the newest, cheaper to keep, slower and shorter
+ranged, and upgradeable nearly three times as far, reaching the same ceiling by
+a different route.
+
 ## Pilots (Milestone 17)
 
 Five original characters in `src/data/pilots.ts`. Drift compatibility is

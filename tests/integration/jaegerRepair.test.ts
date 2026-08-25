@@ -205,7 +205,7 @@ describe("the saved record", () => {
       shatterdome: { marker: "untouched" },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["5", "6", "7", "8"]);
+    expect(result.applied).toEqual(["5", "6", "7", "8", "9"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRosterSnapshot(result.document.roster)).toEqual([]);
     expect(result.document.roster.machines.length).toBe(jaegerRegistry.all().length);

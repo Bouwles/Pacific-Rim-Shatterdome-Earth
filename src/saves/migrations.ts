@@ -11,6 +11,7 @@ import { emptyShatterdomeSnapshot } from "../shatterdome/facilityState";
 import { emptyRosterSnapshot } from "../jaegers/roster";
 import { emptyDamageSnapshot } from "../world/destruction";
 import { emptyDirectorSnapshot } from "../world/director";
+import { emptyMarketSnapshot } from "../world/market";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -286,6 +287,24 @@ const addMissionSlot: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 9, mission: null }),
 };
 
+/**
+ * Adds the market introduced by Milestone 18.
+ *
+ * A version 9 save has no money, no standing with any yard and nothing on
+ * order, because none of those existed: a roster was whatever the build shipped
+ * with. Every such file therefore comes back with the opening balance and a
+ * board that has not rotated yet.
+ *
+ * Nothing else in the document is touched.
+ */
+const addMarketSection: MigrationStep = {
+  id: "9",
+  fromVersion: 9,
+  toVersion: 10,
+  description: "Add the market: funding, standing with each yard, deliveries and the rotation.",
+  apply: (document) => ({ ...document, schemaVersion: 10, market: emptyMarketSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -309,6 +328,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addRegionDamage);
   registry.register(addDirectorSection);
   registry.register(addMissionSlot);
+  registry.register(addMarketSection);
   return registry;
 }
 

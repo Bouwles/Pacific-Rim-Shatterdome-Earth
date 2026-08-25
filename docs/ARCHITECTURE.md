@@ -967,6 +967,50 @@ rather than from the file, so rebalancing a chassis does not leave old saves
 carrying old numbers, and a component this build has never heard of is dropped
 rather than resurrected.
 
+## The economy: yards, contracts and ownership
+
+Three modules, and none of them knows about the others' internals.
+
+`data/manufacturers.ts` is the yard table: four builders, each with a home
+region, what it is good at, a base standing, a lead time, a price multiplier, how
+often it sells refurbished hulls, how many offers it can have on one board, and
+the contract terms it insists on. `priceFor` and `leadTimeFor` turn standing into
+a price and a wait, and neither can reach zero: a well liked yard is quicker and
+cheaper, never instant and never free.
+
+`data/jaegers.ts` carries what a chassis costs rather than only what it can do:
+list price, upkeep per day, mark generation, provenance, role, the acquisition
+paths that can put it on the pad, its upgrade tracks, and performance as four
+low-to-high bands with a written tradeoff. `validateJaeger` refuses a row with an
+unknown yard, an inverted band, a duplicate upgrade track, or a track with no
+steps in it, so a broken machine cannot reach a board.
+
+`world/market.ts` is the board. Offers are derived from the rotation number and
+the world seed through a named stream, so `offers()` is a pure function of state
+rather than a roll: asking twice gives the same board, and so does loading the
+save on another machine. `preview()` answers with bands, a tradeoff, the terms
+and the upkeep, never with a single power score. `purchase()` deducts once,
+records the offer as taken, and puts the machine on order; nothing is owned until
+its lead time runs out, which is the difference between buying and spawning.
+`unlock()` is the door for everything that is not bought: a milestone, a research
+programme, a rebuilt wreck or an archive.
+
+Ownership lives in the roster, which now holds instances rather than chassis
+rows. Each record has its own id, a yard serial that is never reused, a name the
+crew can change, how it was acquired, its damage, and a service history. Two
+machines built from the same chassis are two records, and `roster.definition()`
+resolves either one back to the chassis so nothing downstream has to care.
+
+One clock drives both halves. `settleMarket()` reads the world clock's absolute
+day number and settles the difference: upkeep for the days that passed, and any
+delivery whose lead time ran out. Because it is driven by an absolute day rather
+than by elapsed ticks, every path that moves time forward, including the skip
+buttons, charges exactly once and cannot double-charge or miss a delivery.
+
+The board is reached at the Contracts Office terminal, which means the office has
+to be built first. There is no menu entry for it, the same way there is no menu
+entry for repairing a machine.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads

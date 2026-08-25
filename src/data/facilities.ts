@@ -14,7 +14,8 @@ import { ContentRegistry, type RegistryEntry } from "./registry";
  * laboratory can be refused because the reactor cannot carry it. **Crews** come
  * from logistics and are tied up for the length of a build, so two orders at
  * once is a choice rather than a formality. Money, contracts and research
- * unlocks arrive with the economy milestone; nothing here pretends they exist.
+ * unlocks are the economy's business, and the contracts office is where they are
+ * dealt with; power and crews are still what a facility order costs.
  */
 
 export const FACILITY_KINDS = [
@@ -632,7 +633,9 @@ const DEFINITIONS: readonly FacilityDefinition[] = [
         benefit: "Several negotiations at once, which is what a rotating market needs.",
       },
     ],
-    description: "Where the money and the machines are argued about. Not yet an economy.",
+    description:
+      "Where the money and the machines are argued about. Its terminal is the contracts board: " +
+      "what the yards are offering, what it costs to buy and to keep, and what is already on order.",
   },
   {
     id: "launch",

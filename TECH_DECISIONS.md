@@ -677,6 +677,43 @@ sees a variable delta.
 survives a battle is its own milestone with its own save section, and inventing
 that schema now would be guessing.
 
+## 2026-08-25, Milestone 18
+
+**The board is derived, not stored.** Offers come from the rotation number and
+the world seed through a named stream, so `offers()` is a pure function of saved
+state. Storing the board would create a second source of truth and a way to edit
+it in a file; deriving it means reloading the page cannot reroll it, because
+nothing is rolled at load time. What the save carries is the rotation reached and
+which offers were signed.
+
+**Bands, not a power score.** A preview answers with four low-to-high ranges and
+a written tradeoff. A single number cannot express a machine that is slow and
+unkillable next to one that is fast and brittle, and reducing them to one number
+is exactly what would make an old Mark look like a worse copy of a new one
+instead of a different answer.
+
+**An old Mark is upgradeable further, not buffed.** The Mark 1 keeps its low
+mobility and short reach and stays cheap to buy and cheap to keep. What makes it
+worth flying is twenty upgrade steps against the Mark 5's seven: it arrives at a
+comparable ceiling by a longer road, which is a decision rather than a handout.
+
+**A record is a machine, not a chassis.** The roster now holds instances with
+their own ids, serials and histories, and `definition()` resolves an instance
+back to its chassis. Buying a second of something you already own has to produce
+a second machine, and every system that only cares what kind of machine it is
+keeps working without knowing there are two.
+
+**One clock, one settlement.** `settleMarket()` is driven by the world clock's
+absolute day number rather than by elapsed ticks. Two milestones in a row shipped
+a defect where one of the two time paths did nothing; an absolute day makes
+double-charging and missed deliveries impossible by construction rather than by
+remembering to call it in both places.
+
+**Nothing is owned until it is delivered.** Buying puts a machine on order and
+takes the money; the machine appears when its lead time runs out. That is the
+difference between a purchase and a spawn, and it is what makes lead time a real
+consideration rather than a number on a card.
+
 ## 2026-08-25, Milestone 17
 
 **One object for the whole sortie.** Planning, carrier, active and results are

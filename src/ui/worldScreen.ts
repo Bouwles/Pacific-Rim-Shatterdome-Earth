@@ -415,6 +415,9 @@ export function renderWorldScreen(
   const timeButtons: readonly (readonly [string, string, () => void])[] = [
     ["time-hour", "+1h", () => callbacks.onAdvanceHours(1)],
     ["time-six-hours", "+6h", () => callbacks.onAdvanceHours(6)],
+    // A day at a time, because waiting out a build order or a repair should not
+    // mean clicking the six hour button ninety times.
+    ["time-day", "+1d", () => callbacks.onAdvanceHours(24)],
     ["time-morning", "06:00", () => callbacks.onSkipToDayFraction(0.25)],
     ["time-noon", "12:00", () => callbacks.onSkipToDayFraction(0.5)],
     ["time-evening", "18:00", () => callbacks.onSkipToDayFraction(0.75)],

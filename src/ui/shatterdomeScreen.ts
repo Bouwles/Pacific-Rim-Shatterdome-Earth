@@ -101,7 +101,49 @@ export interface ConnPodPanelState {
   readonly readiness: string;
 }
 
-export type ShatterdomePanelState = FacilityPanelState | BerthPanelState | ConnPodPanelState;
+/** One performance range, drawn as a bar rather than reduced to a score. */
+export interface MarketBand {
+  readonly label: string;
+  /** Percentages, 0 to 100, the same numbers the bar and the figures show. */
+  readonly low: number;
+  readonly high: number;
+}
+
+export interface MarketOfferRow {
+  readonly id: string;
+  readonly name: string;
+  readonly maker: string;
+  /** Mark, role, condition and where it is being built. */
+  readonly summary: string;
+  readonly priceText: string;
+  /** Lead time and what it costs to keep. */
+  readonly termsText: string;
+  readonly bands: readonly MarketBand[];
+  readonly tradeoff: string;
+  /** The terms of the contract, in the words a person would read out. */
+  readonly conditions: readonly string[];
+  readonly equipment: string;
+  readonly upgrades: string;
+  /** Null when it can be signed; otherwise why it cannot. */
+  readonly refusal: string | null;
+}
+
+export interface MarketPanelState {
+  readonly kind: "market";
+  readonly title: string;
+  /** Money, salvage and where the calendar is in the rotation. */
+  readonly summary: string;
+  readonly rows: readonly MarketOfferRow[];
+  /** What is on order, with the day it is due. */
+  readonly pending: readonly string[];
+  /** What is already owned, so a purchase is a decision about a fleet. */
+  readonly fleet: readonly string[];
+  /** The last thing the office said. Null before anything is signed. */
+  readonly note: string | null;
+}
+
+export type ShatterdomePanelState =
+  FacilityPanelState | BerthPanelState | ConnPodPanelState | MarketPanelState;
 
 export interface ShatterdomeScreenState {
   readonly roomName: string;
@@ -133,6 +175,8 @@ export interface ShatterdomeScreenCallbacks {
   readonly onOrder: (facilityId: string) => void;
   /** Puts one shift of work into the machine in this berth. */
   readonly onRepair: (jaegerId: string) => void;
+  /** Signs for one machine on the contracts board. */
+  readonly onPurchase: (offerId: string) => void;
   readonly onClosePanel: () => void;
   readonly onResume: () => void;
   readonly onOpenSaves: () => void;
@@ -290,6 +334,11 @@ export function renderShatterdomeScreen(
 
 function panelIdentity(panel: ShatterdomePanelState | null): string {
   if (!panel) return "";
+  // The board is part of the identity: signing for a machine takes a row away,
+  // and a refresh in place would leave the old row on screen.
+  if (panel.kind === "market") {
+    return `market|${panel.title}|${panel.rows.map((row) => row.id).join(",")}`;
+  }
   return `${panel.kind}|${panel.title}`;
 }
 
@@ -336,6 +385,38 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     work.dataset["action"] = "repair";
     work.disabled = panel.workOrder === null || panel.jaegerId === null;
     element.appendChild(work);
+  } else if (panel.kind === "market") {
+    const summary = document.createElement("p");
+    summary.className = "sd-panel-summary";
+    summary.dataset["field"] = "market-summary";
+    element.appendChild(summary);
+
+    const list = document.createElement("ul");
+    list.className = "sd-market-list";
+    for (const row of panel.rows) list.appendChild(buildOfferRow(row, callbacks));
+    if (panel.rows.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "sd-market-empty";
+      empty.textContent = "Nothing on the board this rotation.";
+      list.appendChild(empty);
+    }
+    element.appendChild(list);
+
+    const orders = document.createElement("ul");
+    orders.className = "sd-market-orders";
+    orders.dataset["field"] = "market-orders";
+    element.appendChild(orders);
+
+    const fleet = document.createElement("p");
+    fleet.className = "sd-panel-notes";
+    fleet.dataset["field"] = "market-fleet";
+    element.appendChild(fleet);
+
+    const note = document.createElement("p");
+    note.className = "sd-panel-notes";
+    note.dataset["field"] = "market-note";
+    note.setAttribute("aria-live", "polite");
+    element.appendChild(note);
   } else {
     element.appendChild(definitionList(connPodFields(panel)));
     const notes = document.createElement("p");
@@ -371,6 +452,67 @@ function buildFacilityRow(row: FacilityRow, callbacks: ShatterdomeScreenCallback
   action.dataset["action"] = "order";
 
   item.append(info, action);
+  return item;
+}
+
+function buildOfferRow(row: MarketOfferRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "sd-market-row";
+  item.dataset["offer"] = row.id;
+
+  const head = document.createElement("div");
+  head.className = "sd-market-head";
+  const name = document.createElement("span");
+  name.className = "sd-market-name";
+  name.dataset["field"] = "offer-name";
+  const price = document.createElement("span");
+  price.className = "sd-market-price";
+  price.dataset["field"] = "offer-price";
+  head.append(name, price);
+
+  const summary = document.createElement("span");
+  summary.className = "sd-facility-detail";
+  summary.dataset["field"] = "offer-summary";
+  const terms = document.createElement("span");
+  terms.className = "sd-facility-detail";
+  terms.dataset["field"] = "offer-terms";
+
+  // Bands, not a score. Each bar shows the range the machine works in, so two
+  // machines can be compared without either being reduced to one number.
+  const bands = document.createElement("div");
+  bands.className = "sd-band-set";
+  for (const band of row.bands) {
+    const line = document.createElement("div");
+    line.className = "sd-band";
+    const label = document.createElement("span");
+    label.className = "sd-band-label";
+    label.textContent = band.label;
+    const track = document.createElement("span");
+    track.className = "sd-band-track";
+    const fill = document.createElement("span");
+    fill.className = "sd-band-fill";
+    fill.style.left = `${Math.max(0, Math.min(100, band.low))}%`;
+    fill.style.width = `${Math.max(2, Math.min(100 - band.low, band.high - band.low))}%`;
+    track.appendChild(fill);
+    const value = document.createElement("span");
+    value.className = "sd-band-value";
+    value.textContent = `${Math.round(band.low)}-${Math.round(band.high)}`;
+    line.append(label, track, value);
+    bands.appendChild(line);
+  }
+
+  const tradeoff = document.createElement("span");
+  tradeoff.className = "sd-facility-benefit";
+  tradeoff.dataset["field"] = "offer-tradeoff";
+
+  const terms2 = document.createElement("ul");
+  terms2.className = "sd-market-terms";
+  terms2.dataset["field"] = "offer-conditions";
+
+  const action = button("Sign", "secondary-button", () => callbacks.onPurchase(row.id));
+  action.dataset["action"] = "purchase";
+
+  item.append(head, summary, terms, bands, tradeoff, terms2, action);
   return item;
 }
 
@@ -419,6 +561,53 @@ function refreshPanelElement(element: HTMLElement, panel: ShatterdomePanelState)
         action.dataset["refusal"] = row.refusal ?? "";
       }
     }
+    return;
+  }
+
+  if (panel.kind === "market") {
+    setField(element, "market-summary", panel.summary);
+    for (const row of panel.rows) {
+      const item = element.querySelector<HTMLElement>(`[data-offer="${row.id}"]`);
+      if (!item) continue;
+      setField(item, "offer-name", `${row.name} · ${row.maker}`);
+      setField(item, "offer-price", row.priceText);
+      setField(item, "offer-summary", row.summary);
+      setField(item, "offer-terms", row.termsText);
+      setField(item, "offer-tradeoff", row.tradeoff);
+      const conditions = item.querySelector<HTMLElement>('[data-field="offer-conditions"]');
+      if (conditions) {
+        conditions.replaceChildren(
+          ...row.conditions.map((text) => {
+            const line = document.createElement("li");
+            line.textContent = text;
+            return line;
+          }),
+        );
+      }
+      const action = item.querySelector<HTMLButtonElement>('[data-action="purchase"]');
+      if (action) {
+        action.disabled = row.refusal !== null;
+        // A greyed button that says nothing is a bug, so the reason rides along.
+        action.title = row.refusal ?? `Sign for ${row.name}`;
+        action.dataset["refusal"] = row.refusal ?? "";
+      }
+    }
+    const orders = element.querySelector<HTMLElement>('[data-field="market-orders"]');
+    if (orders) {
+      orders.replaceChildren(
+        ...(panel.pending.length === 0 ? ["Nothing on order."] : panel.pending).map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
+    setField(
+      element,
+      "market-fleet",
+      panel.fleet.length === 0 ? "No machines assigned." : `Fleet: ${panel.fleet.join(", ")}`,
+    );
+    setField(element, "market-note", panel.note ?? "");
     return;
   }
 

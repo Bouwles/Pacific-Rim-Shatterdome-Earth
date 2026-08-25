@@ -5,12 +5,13 @@ import { SHATTERDOME_SCHEMA_VERSION, type ShatterdomeSnapshot } from "../shatter
 import { validateRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { validateDirectorSnapshot, type DirectorSnapshot } from "../world/director";
 import { validateMissionSnapshot, type MissionSnapshot } from "../missions/mission";
+import { validateMarketSnapshot, type MarketSnapshot } from "../world/market";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 9;
+export const ROOT_SAVE_VERSION = 10;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -46,6 +47,8 @@ export interface RootSave {
   readonly director: DirectorSnapshot;
   /** The sortie in progress, or null when nobody is out. */
   readonly mission: MissionSnapshot | null;
+  /** Money, standing, what is on order and what the board is showing. */
+  readonly market: MarketSnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -194,6 +197,7 @@ export function validateRootSave(document: unknown): string[] {
   if (document["mission"] !== null) {
     errors.push(...validateMissionSnapshot(document["mission"]));
   }
+  errors.push(...validateMarketSnapshot(document["market"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

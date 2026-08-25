@@ -60,7 +60,80 @@ export interface JaegerDefinition {
   readonly assetId: string;
   /** Locomotion numbers. The controller is shared; only this differs per machine. */
   readonly locomotion: LocomotionProfile;
+  /** Which yard built it. Names a registered manufacturer. */
+  readonly manufacturerId: string;
+  /** Technology generation. A Mark 1 is not a worse Mark 5, it is an older one. */
+  readonly markGeneration: number;
+  /** Where the design came from. Read by the market, never switched on. */
+  readonly provenance: ChassisProvenance;
+  /** What it is for. Drives which offers a yard puts up. */
+  readonly role: ChassisRole;
+  /** List price before any yard scaling or standing. */
+  readonly listPrice: number;
+  /** What it costs to keep on the pad, per day. */
+  readonly upkeepPerDay: number;
+  /** How it can be acquired at all. An empty list means it cannot be. */
+  readonly acquisition: readonly AcquisitionPath[];
+  /** Weapons that come fitted and are not sold separately. */
+  readonly signatureEquipment: readonly string[];
+  /** Upgrade tracks this chassis can be taken down. */
+  readonly upgradeTracks: readonly UpgradeTrack[];
+  /**
+   * Honest performance ranges rather than one number.
+   *
+   * Each is a low and a high on a 0 to 1 scale, so a preview can show a band
+   * and a tradeoff instead of reducing a machine to a power score.
+   */
+  readonly balance: ChassisBalance;
   readonly description: string;
+}
+
+export const CHASSIS_PROVENANCE = [
+  "mass-production",
+  "prototype",
+  "refit",
+  "salvage-rebuild",
+  "legendary",
+] as const;
+export type ChassisProvenance = (typeof CHASSIS_PROVENANCE)[number];
+
+export const CHASSIS_ROLES = ["brawler", "marksman", "guardian", "skirmisher", "siege"] as const;
+export type ChassisRole = (typeof CHASSIS_ROLES)[number];
+
+/**
+ * How a machine can come to be owned.
+ *
+ * Purchase is the ordinary path. The others exist so that a milestone, a
+ * research programme, a wreck or an archive can each put something on the pad
+ * without the market being the only door.
+ */
+export const ACQUISITION_PATHS = [
+  "purchase",
+  "milestone-unlock",
+  "research-manufacture",
+  "recovery-rebuild",
+  "legendary-archive",
+  "special-event",
+] as const;
+export type AcquisitionPath = (typeof ACQUISITION_PATHS)[number];
+
+export interface UpgradeTrack {
+  readonly id: string;
+  readonly displayName: string;
+  /** How many steps the track has. Every chassis can finish every track it has. */
+  readonly steps: number;
+  /** What the track improves, in words. */
+  readonly effect: string;
+}
+
+export interface ChassisBalance {
+  /** Low and high of what it can do, 0 to 1. Never a single number. */
+  readonly durability: readonly [number, number];
+  readonly damage: readonly [number, number];
+  readonly mobility: readonly [number, number];
+  readonly range: readonly [number, number];
+  /** What it gives up to be good at what it is good at. */
+  readonly tradeoff: string;
 }
 
 function validateLocomotion(profile: LocomotionProfile | undefined): string[] {
@@ -125,6 +198,49 @@ function validateJaeger(entry: JaegerDefinition): string[] {
   // failure would surface as an empty room rather than as a content error.
   if (!entry.assetId) errors.push("assetId required so the roster resolves to an asset manifest");
   errors.push(...validateLocomotion(entry.locomotion));
+
+  // Market and ownership metadata. A chassis with no way of being acquired is a
+  // chassis nobody can ever own, which is a content error rather than a design.
+  if (!entry.manufacturerId.startsWith("maker.")) {
+    errors.push('manufacturerId must name a registered manufacturer, starting "maker."');
+  }
+  if (!Number.isInteger(entry.markGeneration) || entry.markGeneration < 0) {
+    errors.push("markGeneration must be a non-negative integer");
+  }
+  if (!CHASSIS_PROVENANCE.includes(entry.provenance)) {
+    errors.push(`unknown provenance "${String(entry.provenance)}"`);
+  }
+  if (!CHASSIS_ROLES.includes(entry.role)) errors.push(`unknown role "${String(entry.role)}"`);
+  for (const key of ["listPrice", "upkeepPerDay"] as const) {
+    if (!Number.isFinite(entry[key]) || entry[key] <= 0) errors.push(`${key} must be above zero`);
+  }
+  if (entry.acquisition.length === 0) {
+    errors.push("a chassis needs at least one way of being acquired");
+  }
+  for (const path of entry.acquisition) {
+    if (!ACQUISITION_PATHS.includes(path)) errors.push(`unknown acquisition path "${path}"`);
+  }
+  const trackIds = new Set<string>();
+  for (const track of entry.upgradeTracks) {
+    if (trackIds.has(track.id)) errors.push(`duplicate upgrade track "${track.id}"`);
+    trackIds.add(track.id);
+    if (!Number.isInteger(track.steps) || track.steps <= 0) {
+      errors.push(`upgrade track "${track.id}" needs at least one step`);
+    }
+    if (!track.effect) errors.push(`upgrade track "${track.id}" must say what it does`);
+  }
+  // Ranges rather than one number, and a range has to be a range.
+  for (const key of ["durability", "damage", "mobility", "range"] as const) {
+    const [low, high] = entry.balance[key];
+    if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high > 1) {
+      errors.push(`balance.${key} must be two values within [0, 1]`);
+    } else if (low > high) {
+      errors.push(`balance.${key} is inverted: the low must not exceed the high`);
+    }
+  }
+  if (!entry.balance.tradeoff) {
+    errors.push("balance.tradeoff required: every machine gives something up");
+  }
   return errors;
 }
 
@@ -160,6 +276,30 @@ jaegerRegistry.register({
     landingImpulseScale: 0.055,
     getUpSeconds: 3.2,
   },
+  manufacturerId: "maker.tarrant-yards",
+  markGeneration: 0,
+  provenance: "mass-production",
+  role: "brawler",
+  listPrice: 4_200_000,
+  upkeepPerDay: 9_500,
+  acquisition: ["purchase", "milestone-unlock"],
+  signatureEquipment: [],
+  upgradeTracks: [
+    {
+      id: "track.frame",
+      displayName: "Frame reinforcement",
+      steps: 4,
+      effect: "More structure per component.",
+    },
+    { id: "track.actuators", displayName: "Actuator tuning", steps: 3, effect: "Faster walk and turn." },
+  ],
+  balance: {
+    durability: [0.45, 0.6],
+    damage: [0.4, 0.55],
+    mobility: [0.5, 0.65],
+    range: [0.3, 0.45],
+    tradeoff: "Middling at everything, which is what makes it the yardstick.",
+  },
   description:
     "Development stand-in Jaeger used to exercise the content-registry pattern. Not a film or canon design.",
 });
@@ -192,6 +332,35 @@ jaegerRegistry.register({
     boosterRechargeSeconds: 11,
     landingImpulseScale: 0.075,
     getUpSeconds: 4.6,
+  },
+  manufacturerId: "maker.novaya-kuznitsa",
+  markGeneration: 4,
+  provenance: "mass-production",
+  role: "guardian",
+  listPrice: 7_800_000,
+  upkeepPerDay: 16_400,
+  acquisition: ["purchase", "recovery-rebuild"],
+  signatureEquipment: ["weapon.shoulder-mortar"],
+  upgradeTracks: [
+    {
+      id: "track.plating",
+      displayName: "Ablative plating",
+      steps: 5,
+      effect: "Armour that comes off before the frame does.",
+    },
+    {
+      id: "track.reactor",
+      displayName: "Reactor uprating",
+      steps: 3,
+      effect: "More power for sustained weapons.",
+    },
+  ],
+  balance: {
+    durability: [0.7, 0.9],
+    damage: [0.5, 0.7],
+    mobility: [0.2, 0.35],
+    range: [0.4, 0.6],
+    tradeoff: "It will outlast anything on the field and never catch anything that runs.",
   },
   description:
     "Heavier development stand-in, used to prove the roster and the berths are data rather than fixtures.",
@@ -226,6 +395,105 @@ jaegerRegistry.register({
     landingImpulseScale: 0.04,
     getUpSeconds: 2.1,
   },
+  manufacturerId: "maker.hanjin-dynamics",
+  markGeneration: 5,
+  provenance: "mass-production",
+  role: "skirmisher",
+  listPrice: 6_600_000,
+  upkeepPerDay: 12_800,
+  acquisition: ["purchase", "research-manufacture"],
+  signatureEquipment: ["weapon.rotary-cannon"],
+  upgradeTracks: [
+    {
+      id: "track.thrusters",
+      displayName: "Thruster package",
+      steps: 4,
+      effect: "Longer boosters and faster recovery.",
+    },
+    {
+      id: "track.targeting",
+      displayName: "Targeting suite",
+      steps: 3,
+      effect: "Tighter spread and faster locks.",
+    },
+  ],
+  balance: {
+    durability: [0.25, 0.4],
+    damage: [0.45, 0.6],
+    mobility: [0.75, 0.95],
+    range: [0.55, 0.75],
+    tradeoff: "Reaches the fight first and cannot afford to be in it for long.",
+  },
   description:
     "Light development stand-in. Shares the placeholder mesh; what makes it a different machine is its locomotion profile.",
+});
+
+// An old machine that is still worth flying. Cheap to buy and to keep, slower
+// than anything modern, and with the deepest upgrade tracks of anything on the
+// board: an early Mark stays viable by being improved rather than by having
+// numbers that quietly match the newest hull.
+jaegerRegistry.register({
+  id: "veteran-mk1",
+  name: "Placeholder Ironclad",
+  manufacturer: "Tarrant Yards",
+  markDesignation: "Mk-1 (development stand-in)",
+  massBudget: { massTons: 2100, powerOutputMw: 190, coolingCapacity: 0.5 },
+  assetId: "jaeger.heavy-mk4",
+  locomotion: {
+    heightMeters: 72,
+    walkSpeedMps: 7,
+    runSpeedMps: 13,
+    strafeSpeedMps: 4,
+    guardSpeedMps: 3.6,
+    accelerationMps2: 2.4,
+    brakingMps2: 3.6,
+    turnRateDegPerSecond: 18,
+    turnInPlaceRateDegPerSecond: 30,
+    stepUpMeters: 8,
+    maxSlopeDeg: 34,
+    strideMeters: 25,
+    boosterImpulseMps: 7,
+    boosterSeconds: 0.6,
+    boosterRechargeSeconds: 11,
+    landingImpulseScale: 0.07,
+    getUpSeconds: 4.4,
+  },
+  manufacturerId: "maker.tarrant-yards",
+  markGeneration: 1,
+  provenance: "refit",
+  role: "siege",
+  listPrice: 2_900_000,
+  upkeepPerDay: 6_200,
+  acquisition: ["purchase", "recovery-rebuild", "legendary-archive"],
+  signatureEquipment: ["weapon.chain-sword"],
+  upgradeTracks: [
+    {
+      id: "track.frame",
+      displayName: "Frame reinforcement",
+      steps: 6,
+      effect: "More structure per component.",
+    },
+    {
+      id: "track.plating",
+      displayName: "Ablative plating",
+      steps: 5,
+      effect: "Armour that comes off before the frame does.",
+    },
+    { id: "track.actuators", displayName: "Actuator tuning", steps: 5, effect: "Faster walk and turn." },
+    {
+      id: "track.reactor",
+      displayName: "Reactor uprating",
+      steps: 4,
+      effect: "More power for sustained weapons.",
+    },
+  ],
+  balance: {
+    durability: [0.6, 0.95],
+    damage: [0.55, 0.85],
+    mobility: [0.15, 0.3],
+    range: [0.25, 0.45],
+    tradeoff: "Slow enough to be caught anywhere, and upgradeable further than anything newer.",
+  },
+  description:
+    "An old machine kept in service by people who would rather rebuild than replace. Non-canon development stand-in.",
 });

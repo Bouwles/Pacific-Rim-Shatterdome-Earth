@@ -70,7 +70,7 @@ backup can still be loaded.
 | Deploy to + Teleport | Jump to a region centre; the floating origin rebases immediately |
 | **N / S / E / W**    | Walk the selected distance, settling onto the streamed ground    |
 | Walk distance        | 100 m, 1 km or 10 km per step                                    |
-| **+1h / +6h**        | Advance the world clock by whole in-game hours                   |
+| **+1h / +6h / +1d**  | Advance the world clock by whole in-game hours or a whole day    |
 | **06:00 to 00:00**   | Skip forward to that clock time; never backwards                 |
 | **Dive / Surface**   | Walk the seabed instead of floating. Ground view only            |
 | Quality              | Low, Medium, High or Cinematic                                   |
@@ -198,6 +198,28 @@ Opened by using something in the world, never from a menu.
 Resume, Saves and Back to Menu. Pausing stops the simulation, which stops
 construction, the clock and the weather with it. Saves can be opened from inside
 the complex and returns there rather than to the main menu.
+
+## The contracts terminal (Milestone 18)
+
+The Contracts Office has to be built before it can be walked into: order it from
+any facility terminal, then take the door out of LOCCENT. Its terminal is the
+market.
+
+| Control               | Effect                                                                           |
+| --------------------- | -------------------------------------------------------------------------------- |
+| **E** at the terminal | Open the contracts board                                                         |
+| **Sign**              | Take the offer: the price leaves the treasury once and the machine goes on order |
+| **E** or **Close**    | Leave the board                                                                  |
+
+Each offer shows the yard, the mark, the role, the condition, the price, the lead
+time, what it costs a day to keep, and four performance bands drawn as ranges
+rather than a score, with the tradeoff written underneath and the contract terms
+listed in full. An offer you cannot afford is disabled and says how short you
+are, in money, rather than failing on the click.
+
+Below the board: what is on order and how many days out, and the fleet you
+already own by name and serial. Nothing is owned until it is delivered, and time
+only moves on the world map, so a purchase means going away and coming back.
 
 ## Piloting a Jaeger (Milestone 09)
 
@@ -417,7 +439,7 @@ transparent model, and the resolution that comes back is listed underneath with
 its full ledger: kaiju strength, regional defences, civilian density, the margin
 on the day, city integrity, escalation and any funding.
 
-The **+1h** and **+6h** time controls advance the war as well as the clock, the
+The **+1h**, **+6h** and **+1d** time controls advance the war as well as the clock, the
 weather and the city's recovery.
 
 ### Reading a creature (Milestone 15)
@@ -455,7 +477,7 @@ refusals are sentences: nothing to clear there, work is already underway, or it
 is still burning and crews go in once the fire is down.
 
 Nothing is bound to a new key. Damage is something that happens to the city
-while you fight in it, and the **+1h** and **+6h** time controls now advance the
+while you fight in it, and the **+1h**, **+6h** and **+1d** time controls now advance the
 city's recovery as well as the clock: fires burn down, people come out, and any
 crews on site keep working.
 

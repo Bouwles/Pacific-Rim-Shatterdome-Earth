@@ -9,6 +9,7 @@ import { emptyShatterdomeSnapshot, type ShatterdomeSnapshot } from "../shatterdo
 import { emptyRosterSnapshot, type RosterSnapshot } from "../jaegers/roster";
 import { emptyDirectorSnapshot, type DirectorSnapshot } from "../world/director";
 import type { MissionSnapshot } from "../missions/mission";
+import { emptyMarketSnapshot, type MarketSnapshot } from "../world/market";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -54,6 +55,8 @@ export interface SaveRequest {
   readonly director?: DirectorSnapshot;
   /** The sortie in progress. Omitted when nobody is out, which is normal. */
   readonly mission?: MissionSnapshot | null;
+  /** Money, standing and the market board. Omitted by callers with no market. */
+  readonly market?: MarketSnapshot;
 }
 
 /**
@@ -116,6 +119,8 @@ export class SaveService {
     // A quiet war rather than an absent one: the director always exists.
     const director = request.director ?? emptyDirectorSnapshot();
     const mission = request.mission ?? null;
+    // A market always exists, even for a save written before anybody opened it.
+    const market = request.market ?? emptyMarketSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -135,6 +140,7 @@ export class SaveService {
       roster,
       director,
       mission,
+      market,
     };
   }
 

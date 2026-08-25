@@ -1,5 +1,5 @@
 import { createComponentRegistry, type ComponentDefinition } from "../data/components";
-import { jaegerRegistry } from "../data/jaegers";
+import { jaegerRegistry, type AcquisitionPath } from "../data/jaegers";
 import type { ContentRegistry } from "../data/registry";
 import type { JaegerDefinition } from "../data/jaegers";
 import {
@@ -35,22 +35,58 @@ export const REBUILD_THRESHOLD = 0.25;
 /** Hours it takes to tow a machine home before any work can start. */
 export const RECOVERY_HOURS = 12;
 
+/** One entry in a machine's service history. Short, and kept forever. */
+export interface ServiceEntry {
+  /** Day this happened, so a history reads as a timeline. */
+  readonly day: number;
+  readonly event: string;
+}
+
 export interface MachineRecord {
+  /**
+   * The machine itself. Stable for the life of the save, and what everything
+   * else refers to: two machines built from the same chassis are two records.
+   */
   readonly jaegerId: string;
+  /** Which chassis it was built from. */
+  readonly chassisId: string;
+  /** Yard serial. Assigned once and never reused. */
+  readonly serial: string;
+  /** What the crew call it. Renameable; the serial is not. */
+  name: string;
+  /** How it came to be owned. */
+  readonly acquiredBy: AcquisitionPath;
   status: MachineStatus;
   damage: JaegerDamageState;
   /** Hours of recovery or work still owed before the machine is ready. */
   hoursRemaining: number;
   /** How many sorties it has come home from, for the memorial archive later. */
   sorties: number;
+  /** Progression. The mechanics of these arrive with their own milestone. */
+  level: number;
+  experience: number;
+  prestige: number;
+  /** Weapons currently fitted, by id. */
+  loadout: string[];
+  /** Everything that has happened to it, oldest first. */
+  history: ServiceEntry[];
 }
 
 export interface RosterSnapshot {
   readonly machines: readonly {
     readonly jaegerId: string;
+    readonly chassisId: string;
+    readonly serial: string;
+    readonly name: string;
+    readonly acquiredBy: AcquisitionPath;
     readonly status: MachineStatus;
     readonly hoursRemaining: number;
     readonly sorties: number;
+    readonly level: number;
+    readonly experience: number;
+    readonly prestige: number;
+    readonly loadout: readonly string[];
+    readonly history: readonly ServiceEntry[];
     readonly damage: DamageSnapshot;
   }[];
 }
@@ -68,13 +104,28 @@ export class Roster {
   ) {
     this.machines = machines;
     this.components = components;
+    // The machines a campaign starts with. Each is an owned instance whose id
+    // happens to match its chassis, because there is exactly one of each at the
+    // start; anything bought later gets its own id and serial.
     for (const jaeger of machines.all()) {
+      if (!jaeger.acquisition.includes("purchase") && !jaeger.acquisition.includes("milestone-unlock")) {
+        continue;
+      }
       this.records.set(jaeger.id, {
         jaegerId: jaeger.id,
+        chassisId: jaeger.id,
+        serial: `${jaeger.id.toUpperCase()}-0001`,
+        name: jaeger.name,
+        acquiredBy: "milestone-unlock",
         status: "ready",
         damage: createDamageState(jaeger, components),
         hoursRemaining: 0,
         sorties: 0,
+        level: 1,
+        experience: 0,
+        prestige: 0,
+        loadout: [...jaeger.signatureEquipment],
+        history: [{ day: 0, event: "Assigned to the complex." }],
       });
     }
   }
@@ -94,7 +145,74 @@ export class Roster {
   }
 
   definition(jaegerId: string): JaegerDefinition {
-    return this.machines.getOrThrow(jaegerId);
+    const record = this.records.get(jaegerId);
+    return this.machines.getOrThrow(record?.chassisId ?? jaegerId);
+  }
+
+  /**
+   * Takes ownership of a new machine.
+   *
+   * One call, one instance. The serial is derived from how many of that chassis
+   * have ever been owned, so two machines from the same yard are told apart by
+   * something a person would actually read out.
+   */
+  acquire(options: {
+    readonly chassisId: string;
+    readonly acquiredBy: AcquisitionPath;
+    readonly day?: number;
+    /** 0 to 1 of structure it arrives missing. Refurbished hulls are not new. */
+    readonly wear?: number;
+    readonly name?: string;
+  }): MachineRecord | null {
+    const definition = this.machines.get(options.chassisId);
+    if (!definition) return null;
+
+    const built = [...this.records.values()].filter(
+      (record) => record.chassisId === options.chassisId,
+    ).length;
+    const jaegerId = `${options.chassisId}#${built + 1}`;
+    const damage = createDamageState(definition, this.components);
+    const wear = Math.max(0, Math.min(0.9, options.wear ?? 0));
+    if (wear > 0) {
+      // Arrives with history rather than arriving perfect.
+      for (const component of damage.components) component.health = component.maxHealth * (1 - wear);
+      damage.lostStructure = damage.components.reduce(
+        (total, component) => total + (component.maxHealth - component.health),
+        0,
+      );
+    }
+
+    const record: MachineRecord = {
+      jaegerId,
+      chassisId: options.chassisId,
+      serial: `${options.chassisId.toUpperCase()}-${String(built + 1).padStart(4, "0")}`,
+      name: options.name ?? definition.name,
+      acquiredBy: options.acquiredBy,
+      status: wear > 0 ? "repairing" : "ready",
+      damage,
+      hoursRemaining: 0,
+      sorties: 0,
+      level: 1,
+      experience: 0,
+      prestige: 0,
+      loadout: [...definition.signatureEquipment],
+      history: [
+        {
+          day: options.day ?? 0,
+          event: `Acquired by ${options.acquiredBy.replace("-", " ")}${wear > 0 ? `, ${Math.round(wear * 100)} percent worn on delivery` : ""}.`,
+        },
+      ],
+    };
+    this.records.set(jaegerId, record);
+    return record;
+  }
+
+  /** Adds a line to a machine's history. Bounded, oldest trimmed first. */
+  record(jaegerId: string, day: number, event: string): void {
+    const record = this.records.get(jaegerId);
+    if (!record) return;
+    record.history.push({ day, event });
+    while (record.history.length > 40) record.history.shift();
   }
 
   componentRegistry(): ContentRegistry<ComponentDefinition> {
@@ -242,9 +360,18 @@ export class Roster {
     return {
       machines: this.all().map((record) => ({
         jaegerId: record.jaegerId,
+        chassisId: record.chassisId,
+        serial: record.serial,
+        name: record.name,
+        acquiredBy: record.acquiredBy,
         status: record.status,
         hoursRemaining: Math.round(record.hoursRemaining * 10) / 10,
         sorties: record.sorties,
+        level: record.level,
+        experience: record.experience,
+        prestige: record.prestige,
+        loadout: [...record.loadout],
+        history: record.history.map((entry) => ({ ...entry })),
         damage: serializeDamage(record.damage),
       })),
     };
@@ -260,10 +387,38 @@ export class Roster {
    */
   restore(snapshot: RosterSnapshot): void {
     for (const entry of snapshot.machines) {
-      const record = this.records.get(entry.jaegerId);
-      if (!record) continue;
-      const definition = this.machines.get(entry.jaegerId);
+      const chassisId = entry.chassisId ?? entry.jaegerId;
+      const definition = this.machines.get(chassisId);
+      // A chassis this build no longer has is dropped rather than resurrected.
       if (!definition) continue;
+      // A machine bought in a previous session is recreated rather than skipped:
+      // ownership is what the save is for.
+      let record = this.records.get(entry.jaegerId);
+      if (!record) {
+        record = {
+          jaegerId: entry.jaegerId,
+          chassisId,
+          serial: entry.serial ?? `${chassisId.toUpperCase()}-0001`,
+          name: entry.name ?? definition.name,
+          acquiredBy: entry.acquiredBy ?? "purchase",
+          status: "ready",
+          damage: createDamageState(definition, this.components),
+          hoursRemaining: 0,
+          sorties: 0,
+          level: 1,
+          experience: 0,
+          prestige: 0,
+          loadout: [...definition.signatureEquipment],
+          history: [],
+        };
+        this.records.set(entry.jaegerId, record);
+      }
+      record.name = entry.name ?? record.name;
+      record.level = Math.max(1, Math.round(entry.level ?? 1));
+      record.experience = Math.max(0, entry.experience ?? 0);
+      record.prestige = Math.max(0, Math.round(entry.prestige ?? 0));
+      record.loadout = [...(entry.loadout ?? record.loadout)];
+      record.history = (entry.history ?? []).map((line) => ({ ...line }));
       record.damage = restoreDamage(entry.damage, definition, this.components);
       record.status = MACHINE_STATUSES.includes(entry.status) ? entry.status : "ready";
       // A machine cannot still be out: a sortie is not saved.

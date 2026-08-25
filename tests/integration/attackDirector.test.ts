@@ -77,6 +77,54 @@ describe("simultaneous crises", () => {
   });
 });
 
+describe("a month nobody answers", () => {
+  it("closes the attacks it left behind rather than stacking them forever", () => {
+    const director = new AttackDirector({ regions, seed: 4242 });
+    let tick = 0;
+    // Thirty in-game days of skipped time, which is what waiting out a delivery
+    // or a long build actually looks like.
+    for (let day = 0; day < 30; day += 1) {
+      tick += 86_400;
+      director.advance(tick, 86_400);
+      director.settleAbandoned(tick);
+      director.prune(tick);
+    }
+    const live = director.incidents().filter((incident) => incident.status === "landed");
+    expect(live.length).toBeLessThanOrEqual(4);
+    expect(director.incidents().length).toBeLessThan(30);
+  });
+
+  it("says what happened to each one", () => {
+    const director = new AttackDirector({ regions, seed: 99 });
+    let tick = 0;
+    const settled = [];
+    for (let day = 0; day < 10; day += 1) {
+      tick += 86_400;
+      director.advance(tick, 86_400);
+      settled.push(...director.settleAbandoned(tick));
+    }
+    expect(settled.length).toBeGreaterThan(0);
+    for (const resolution of settled) {
+      expect(resolution.summary.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("leaves an attack alone while there is still time to answer it", () => {
+    const director = new AttackDirector({ regions, seed: 4242 });
+    let tick = 0;
+    let landed;
+    for (let step = 0; step < 400 && !landed; step += 1) {
+      tick += 1_800;
+      director.advance(tick, 1_800);
+      landed = director.incidents().find((incident) => incident.status === "landed");
+    }
+    expect(landed).toBeDefined();
+    // The moment it lands is not the moment it is lost.
+    expect(director.settleAbandoned(landed!.arrivalTick)).toEqual([]);
+    expect(director.incident(landed!.id)?.status).toBe("landed");
+  });
+});
+
 describe("nobody is punished with nonstop alerts", () => {
   it("leaves long quiet stretches even at the highest frequency", () => {
     const result = runDirectorScenario({ crisisFrequency: 2, policy: "defend-all" });
@@ -161,7 +209,7 @@ describe("the war survives a save", () => {
       roster: { machines: [] },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["7", "8"]);
+    expect(result.applied).toEqual(["7", "8", "9"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(result.document.director.incidents).toEqual([]);
     expect(result.document.director.escalation).toBeGreaterThan(0);

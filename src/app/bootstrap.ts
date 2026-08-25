@@ -71,6 +71,8 @@ import {
 import { CityView } from "../engine/cityView";
 import { RegionDestruction } from "../world/destruction";
 import { AttackDirector, type Resolution } from "../world/director";
+import { Market, ROTATION_DAYS } from "../world/market";
+import { createManufacturerRegistry } from "../data/manufacturers";
 import { createObjectiveRegistry } from "../missions/objectives";
 import { createPilotRegistry } from "../data/pilots";
 import {
@@ -122,6 +124,7 @@ import {
   renderShatterdomeScreen,
   type FacilityRow,
   type ShatterdomePanelState,
+  type MarketOfferRow,
   type BerthPanelState,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
@@ -429,6 +432,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               roster.snapshot(),
               attackDirector.snapshot(),
               mission?.snapshot() ?? null,
+              market.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -446,6 +450,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               roster.snapshot(),
               attackDirector.snapshot(),
               mission?.snapshot() ?? null,
+              market.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -468,6 +473,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             roster.restore(result.document.roster);
             // And so does the war: escalation, threat and everything inbound.
             attackDirector.restore(result.document.director);
+            // Money, standing, orders in transit and the board itself.
+            market.restore(result.document.market);
+            marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
             saveController.resetPlayTime(result.document.metadata.playTimeMs);
             const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
@@ -747,6 +755,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       clearTarget();
       stopPilot();
     }
+    // The sortie pays into the same treasury the market spends from, once,
+    // from the mission's own ledger.
+    market.credit(results.funding, results.salvageTons, results.samples);
     directorNotice = results.summary;
     mission = undefined;
     refreshWorld();
@@ -759,6 +770,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     worldState.advanceAlerts(ticks);
 
     advanceWar(ticks);
+    // Upkeep and deliveries run on the same clock as the war.
+    settleMarket();
 
     // The sortie runs on the same clock as everything else.
     if (mission) {
@@ -793,6 +806,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         worldState.setRegionAlert(incident.regionId, "attack", kernel?.tick ?? 0);
       }
     }
+    // An attack nobody answered closes on its own: the city was overrun. Without
+    // this, skipped time leaves every landed attack live forever.
+    for (const resolution of attackDirector.settleAbandoned(warClock)) {
+      resolutionLog.unshift(resolution);
+    }
+    while (resolutionLog.length > 5) resolutionLog.pop();
     attackDirector.prune(warClock);
   };
   // The complex is authoritative and session-lived, like the world: it is saved
@@ -845,6 +864,55 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // The roster is where a machine's damage lives between fights. Nothing is ever
   // removed from it: a machine that loses comes back as work rather than a gap.
   const roster = new Roster();
+  // ------------------------------------------------------------------- economy
+  //
+  // Money, standing with the yards, and the board of contracts. The market is
+  // seeded from the world seed, so the offers a campaign sees are that
+  // campaign's offers and reloading the page does not change them.
+  const manufacturerRegistry = createManufacturerRegistry();
+  const market = new Market({ seed: kernel?.seed ?? 0, manufacturers: manufacturerRegistry });
+  /**
+   * The last day the market was settled to.
+   *
+   * Settling is driven by the clock's absolute day number rather than by
+   * elapsed ticks, so every path that moves time forward, including the skip
+   * button, charges upkeep and delivers orders exactly once.
+   */
+  let marketDay = 0;
+  /** The last thing the contracts office said. Shown on its terminal. */
+  let contractsNote: string | null = null;
+
+  /** Money as a person would say it. Millions to one decimal, thousands whole. */
+  const formatMoney = (amount: number): string => {
+    const value = Math.round(amount);
+    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+    if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}k`;
+    return String(value);
+  };
+
+  const settleMarket = (): void => {
+    const day = worldState.environment.clock.dayNumber;
+    if (day <= marketDay) return;
+    const elapsed = day - marketDay;
+    marketDay = day;
+    market.chargeUpkeep(
+      roster.all().map((record) => record.chassisId),
+      elapsed,
+    );
+    for (const arrival of market.advanceDays(elapsed)) {
+      const record = roster.acquire({
+        chassisId: arrival.chassisId,
+        acquiredBy: "purchase",
+        day,
+        wear: arrival.wear,
+      });
+      if (!record) continue;
+      roster.record(record.jaegerId, day, "Delivered to the complex.");
+      contractsNote =
+        `${record.name} (${record.serial}) has arrived` +
+        `${arrival.wear > 0 ? ` and needs work before it can go out` : ""}.`;
+    }
+  };
   /** The ranged row: one key, one weapon, and L reloads whatever is empty. */
   const WEAPON_KEYS: Readonly<Record<string, string>> = {
     Digit7: "weapon.plasma-caster",
@@ -2781,6 +2849,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           const regionId = worldState.activeRegionId;
           if (regionId) advanceRegionHours(regionId, hours);
           advanceWar(ticks);
+          // Skipped time is still time the yards were building and the pad was
+          // costing money.
+          settleMarket();
           refreshWorld();
         },
         onDiveToggle: () => {
@@ -3086,6 +3157,82 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
   };
 
+  /**
+   * The contracts board.
+   *
+   * Every figure is read from the market: what is on offer, what it costs to
+   * buy and to keep, how long the yard says it will take, and the terms of the
+   * contract. Bands rather than a power score, because a machine that is good
+   * at one thing and poor at another cannot be honestly reduced to one number.
+   */
+  const marketPanelFor = (): ShatterdomePanelState => {
+    const owned = roster.all();
+    const upkeep = owned.reduce(
+      (total, record) => total + (jaegerRegistry.get(record.chassisId)?.upkeepPerDay ?? 0),
+      0,
+    );
+    const rows: MarketOfferRow[] = [];
+    for (const offer of market.offers()) {
+      const preview = market.preview(offer.id);
+      if (!preview) continue;
+      rows.push({
+        id: offer.id,
+        name: preview.chassisName,
+        maker: preview.manufacturerName,
+        summary:
+          `${preview.mark} ${preview.role} · ${preview.condition}` +
+          `${preview.wearPercent > 0 ? ` (${preview.wearPercent}% worn)` : ""} · ${preview.homeRegion}`,
+        priceText: formatMoney(preview.price),
+        termsText:
+          `${preview.leadTimeDays} days to deliver · ${formatMoney(preview.upkeepPerDay)} a day to keep · ` +
+          `${preview.signatureEquipment.length} weapon${preview.signatureEquipment.length === 1 ? "" : "s"} fitted · ` +
+          `${preview.upgradeTracks.length} upgrade tracks`,
+        bands: preview.bands.map((band) => ({ label: band.label, low: band.low, high: band.high })),
+        tradeoff: preview.tradeoff,
+        conditions: preview.conditions,
+        equipment: preview.signatureEquipment.join(", "),
+        upgrades: preview.upgradeTracks.join(", "),
+        refusal: preview.affordable
+          ? null
+          : `Short by ${formatMoney(preview.price - market.treasury.funding)}.`,
+      });
+    }
+    return {
+      kind: "market",
+      title: "Contracts terminal",
+      summary:
+        `${formatMoney(market.treasury.funding)} on hand · ` +
+        `${formatMoney(upkeep)} a day upkeep on ${owned.length} machine${owned.length === 1 ? "" : "s"} · ` +
+        `${Math.round(market.treasury.salvageTons)} t salvage · ` +
+        `board turns in ${market.daysUntilRotation} of ${ROTATION_DAYS} days`,
+      rows,
+      pending: market.pending().map((order) => {
+        const chassis = jaegerRegistry.get(order.chassisId);
+        return (
+          `${chassis?.name ?? order.chassisId} from ` +
+          `${manufacturerRegistry.get(order.manufacturerId)?.displayName ?? order.manufacturerId}, ` +
+          `${order.daysRemaining} day${order.daysRemaining === 1 ? "" : "s"} out`
+        );
+      }),
+      fleet: owned.map((record) => `${record.name} (${record.serial})`),
+      note: contractsNote,
+    };
+  };
+
+  /** Signs for a machine. The refusal is the message, never a silent no-op. */
+  const purchaseOffer = (offerId: string): void => {
+    const result = market.purchase(offerId);
+    if (result.ok && result.delivery) {
+      const chassis = jaegerRegistry.get(result.delivery.chassisId);
+      contractsNote =
+        `Signed for ${chassis?.name ?? result.delivery.chassisId}. ` +
+        `It arrives in ${result.delivery.daysRemaining} days.`;
+    } else {
+      contractsNote = result.message;
+    }
+    openInteriorPanel(marketPanelFor());
+  };
+
   const connPodPanelFor = (active: ShatterdomeSession): ShatterdomePanelState => {
     const sample = sampleInteriorEnvironment();
     const selectedId = active.state.selectedJaegerId;
@@ -3132,6 +3279,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const outcome = session.interact();
     switch (outcome.kind) {
       case "terminal":
+        // The contracts office is where machines are bought. Every other
+        // terminal is still the construction board.
+        if (!outcome.connPod && outcome.facilityId === "contract") {
+          openInteriorPanel(marketPanelFor());
+          break;
+        }
         openInteriorPanel(
           outcome.connPod ? connPodPanelFor(session) : facilityPanelFor(session, outcome.facilityId),
         );
@@ -3274,6 +3427,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         // The order changes the room and the panel in the same breath.
         openInteriorPanel(facilityPanelFor(active, active.currentRoom.facilityId));
       },
+      onPurchase: (offerId) => purchaseOffer(offerId),
       onRepair: (jaegerId) => {
         // One shift of work. The crew takes the worst component first, which is
         // why a machine gets its legs back before its paint.

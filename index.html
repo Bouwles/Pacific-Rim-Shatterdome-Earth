@@ -420,6 +420,102 @@
         opacity: 0.45;
         cursor: not-allowed;
       }
+      #uiRoot .sd-market-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 46vh;
+        overflow-y: auto;
+      }
+      #uiRoot .sd-market-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px;
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+      }
+      #uiRoot .sd-market-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+      }
+      #uiRoot .sd-market-name {
+        font-weight: 600;
+      }
+      #uiRoot .sd-market-price {
+        font-family: "Consolas", monospace;
+        color: #cfe6f5;
+        white-space: nowrap;
+      }
+      #uiRoot .sd-band-set {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 2px 0;
+      }
+      #uiRoot .sd-band {
+        display: grid;
+        grid-template-columns: 74px 1fr 44px;
+        align-items: center;
+        gap: 6px;
+        font:
+          10px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-band-track {
+        position: relative;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.12);
+        overflow: hidden;
+      }
+      #uiRoot .sd-band-fill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(127, 214, 255, 0.65);
+        border-radius: 3px;
+      }
+      #uiRoot .sd-band-value {
+        text-align: right;
+      }
+      #uiRoot .sd-market-terms {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #6f97b0;
+      }
+      #uiRoot .sd-market-orders {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-market-empty {
+        font-size: 12px;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-market-row button {
+        align-self: flex-start;
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-market-row button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
       #uiRoot .sd-panel-fields {
         display: grid;
         grid-template-columns: 96px 1fr;

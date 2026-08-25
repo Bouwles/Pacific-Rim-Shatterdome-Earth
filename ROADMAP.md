@@ -442,6 +442,27 @@ world panel and the bootstrap wiring.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1071), `smoke` (129), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 18 - Jaeger roster registry, manufacturers and purchasing
+
+**Depends on:** Milestone 13 (the roster), 17 (the missions that pay for this).
+**Status:** done.
+**Scope:** a manufacturer table with home regions, specialties, standing, lead times and contract terms;
+chassis carried as goods with a price, an upkeep, a mark generation, a provenance, a role, acquisition
+paths, upgrade tracks and honest performance bands; a rotating contracts board derived from the world
+seed rather than rolled, previewed with ranges and tradeoffs rather than a power score; buying that
+deducts once and delivers after a real wait; six acquisition paths including milestone unlocks, research,
+rebuilt wrecks and archives; and a roster that owns individual machines with their own ids, serials,
+names and service histories. Created `src/data/manufacturers.ts`, `src/world/market.ts`,
+`src/debug/marketScenario.ts`. Extended `src/data/jaegers.ts`, `src/jaegers/roster.ts`, the save schema
+and migrations to version 10, the Shatterdome interface and the bootstrap wiring.
+**Acceptance tests:**
+
+- Purchasing creates exactly one owned instance and deducts the quoted resources once.
+- Market rotation is seeded, saved, and cannot be rerolled by refreshing the page.
+- Older Mark units remain affordable, distinctive, upgradeable and endgame-viable.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1115), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

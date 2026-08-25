@@ -16,9 +16,10 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 2`
+- `ROOT_SAVE_VERSION = 10`
 - `SIM_SCHEMA_VERSION = 1`
-- `WORLD_SCHEMA_VERSION = 1`
+- `WORLD_SCHEMA_VERSION = 4`
+- `MARKET_SCHEMA_VERSION = 1`
 
 ## Version history
 
@@ -27,6 +28,14 @@ migration, or the reverse.
 | 0       | A bare `SimSnapshot`: `{ schemaVersion, seed, tick, entities }` | Not a format any released build wrote. It is what `SimulationKernel.serialize()` returns on its own, which was the only save-like artifact that existed before Milestone 03. Treated as version 0 so a raw snapshot can be imported instead of rejected. |
 | 1       | `{ schemaVersion, savedAt, metadata, sim }`                     | Adds the envelope: name, world seed, play time, last played, sim tick, app version, thumbnail.                                                                                                                                                           |
 | 2       | `{ schemaVersion, savedAt, metadata, sim, world }`              | Adds the world section from Milestone 04: player position on the globe, active sector, active region, and a strategic record per region.                                                                                                                 |
+| 3       | Adds the environment to the world section                       | Clock, weather and sea state, so the sky a save was written under is the sky it comes back to.                                                                                                                                                           |
+| 4       | Adds region alert levels                                        | What each region was doing when the file was written, and how far its evacuation had got.                                                                                                                                                                |
+| 5       | Adds the `shatterdome` section                                  | Facility records, construction in progress, and where the player was standing inside the complex.                                                                                                                                                        |
+| 6       | Adds the `roster` section                                       | One record per machine: status, work owed, sorties survived, and a per-component damage snapshot with scars.                                                                                                                                             |
+| 7       | Adds regional destruction to the world section                  | Which building groups a city has lost and how far it has been rebuilt, held per region rather than per block.                                                                                                                                            |
+| 8       | Adds the `director` section                                     | Escalation, breach pressure, per-region threat and cooldown, and every live incident.                                                                                                                                                                    |
+| 9       | Adds the `mission` section                                      | The sortie in progress, or null when nobody is out.                                                                                                                                                                                                      |
+| 10      | Adds the `market` section                                       | Money, salvage, research samples, standing with each yard, which offers have been signed, what is on order, and where the rotation is.                                                                                                                   |
 
 ## Detection
 
@@ -191,6 +200,29 @@ facility grammar.
 One rule the location field enforces: a saved `roomId` is validated against the
 rooms this build knows about rather than trusted, and the session falls back to a
 room that exists rather than throwing the player into nowhere.
+
+## Version 9 to 10: the market (Milestone 18)
+
+Version 10 adds a `market` section: funding, salvage and research samples, one
+standing figure per manufacturer, the ids of every offer already signed, the
+machines on order with the days left on each, and how far the calendar has moved
+through the current rotation.
+
+The board itself is not saved, and that is the point. Offers are derived from the
+rotation number and the world seed, so writing them down would create two sources
+of truth and a way to edit the board by editing a file. What is saved is the
+rotation the campaign has reached and which offers have been taken, which is
+enough to rebuild exactly the same board on load. This is also why reloading the
+page cannot reroll it: nothing is rolled at load time.
+
+A version 9 save has no economy at all, so the migration writes an empty market:
+the campaign's starting funding, base standing with every yard, nothing on order,
+rotation zero. That is the honest reading of a file written before money existed.
+
+Two rules the restore enforces rather than trusts. A pending delivery naming a
+chassis or a manufacturer this build has never heard of is dropped rather than
+resurrected. Standing is clamped to 0 to 1 on the way in, so an edited file
+cannot buy a machine at a negative price.
 
 ## Version 8 to 9: the sortie in progress (Milestone 17)
 

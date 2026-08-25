@@ -26,11 +26,18 @@ async function fight(page: Page, query = "?seed=20260824"): Promise<void> {
   await expect(page.locator(`${PILOT} [data-section="combat"]`)).toBeVisible({ timeout: 10_000 });
 }
 
-/** Walks forward until the target is inside the given distance. */
+/**
+ * Walks forward until the target is inside the given distance.
+ *
+ * Generous with attempts on purpose: a machine crossing a hundred metres takes
+ * as long as the frame rate allows, and the browser is slower inside a long
+ * suite than it is on its own. A short budget here failed as a timeout rather
+ * than as anything about the game.
+ */
 async function closeTo(page: Page, meters: number): Promise<number> {
   await page.keyboard.down("w");
   let distance = Number.POSITIVE_INFINITY;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
     await page.waitForTimeout(250);
     const match = /(\d+) m/.exec(await text(page, "target"));
     distance = match ? Number(match[1]) : distance;

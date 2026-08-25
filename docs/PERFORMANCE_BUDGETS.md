@@ -182,6 +182,33 @@ All four hold the frame comfortably at this scene complexity, which is expected:
 combat, no destruction and no AI. These figures confirm the budgets are wired and scale, not that the
 target has been met.
 
+## Economy cost (Milestone 18)
+
+The market has no render cost: it is a DOM panel over derived data, and it draws
+nothing into the scene. What it does cost is a little work per day of world time
+and a little more in the save.
+
+Measured in the browser on WebGPU at High, seed 20260825, standing in the
+Contracts Office with the board open:
+
+| State                                      | Draw calls | Frame time | Notes                              |
+| ------------------------------------------ | ---------- | ---------- | ---------------------------------- |
+| Contracts Office, board closed             | 11 meshes  | 0.2 ms     | An ordinary interior room          |
+| Contracts Office, board open with 4 offers | 7 draws    | 1.1 ms     | Movement is stopped while it is up |
+
+Budgets the code holds itself to:
+
+| Thing                       | Budget               | Why                                                                                  |
+| --------------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| Offers on one board         | 5                    | A board a person can read in one go, and a bounded amount of derived work            |
+| Offer generation            | Once per rotation    | `offers()` derives from the rotation number, so it is stable and cheap to recompute  |
+| Market settlement           | Once per in-game day | Driven by the clock's absolute day number, so no time path can charge twice          |
+| Service history per machine | 40 lines             | Bounded, oldest trimmed first, so a long campaign cannot grow a save without limit   |
+| Market section in a save    | Under 2 KB           | Money, standing, signed offer ids and pending orders. The board itself is not stored |
+
+The board is derived rather than stored on purpose, which is also why it costs
+nothing at load: there is no roll to redo and no list to validate.
+
 ## Mission lifecycle cost (Milestone 17)
 
 Measured in the browser on WebGPU at High, seed 20260825, deploying from the

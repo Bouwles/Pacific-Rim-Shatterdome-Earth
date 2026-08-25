@@ -565,6 +565,61 @@ contact, reason }`. Types are `attack-started`, `attack-cancelled`,
 `ROOT_SAVE_VERSION` stays at 5. A fight is live state, and per-component damage
 that survives a battle belongs to its own milestone.
 
+## Economy schemas (Milestone 18)
+
+### `ManufacturerDefinition` (src/data/manufacturers.ts)
+
+`{ id, displayName, homeRegion, specialties[], baseReputation, leadTimeDays,
+priceScale, refurbishedChance, refurbishedDiscount, maxConcurrentOffers,
+conditions[], description }`. The id is prefixed `maker.`. Standing is within
+[0, 1]; `leadTimeDays` must be a positive integer, because nothing is delivered
+instantly; `priceScale` is positive; `conditions` must not be empty, because a
+contract nobody has read is not a contract. `priceFor(maker, listPrice, standing)`
+and `leadTimeFor(maker, standing)` apply standing, and neither can reach zero.
+
+### Chassis economy fields (src/data/jaegers.ts)
+
+Added to `JaegerDefinition`: `{ manufacturerId, markGeneration, provenance, role,
+listPrice, upkeepPerDay, acquisition[], upgradeTracks[], balance }`.
+
+`provenance` is one of mass-production, prototype, refit, salvage-rebuild or
+legendary. `role` is one of brawler, marksman, guardian, skirmisher or siege.
+`acquisition` lists the paths that can put the machine on the pad: purchase,
+milestone-unlock, research-manufacture, recovery-rebuild, legendary-archive or
+special-event. An `UpgradeTrack` is `{ id, displayName, steps, effect }` with at
+least one step and no duplicate ids.
+
+`ChassisBalance` is `{ durability, damage, mobility, range, tradeoff }` where each
+of the first four is a `[low, high]` pair on a 0 to 1 scale and `tradeoff` says in
+words what the machine gives up. Ranges, never one number: a preview that reduces
+a machine to a power score cannot express a machine that is slow and unkillable.
+`validateJaeger` rejects an unknown yard, a non-positive price, an unknown
+acquisition path, a duplicate or empty upgrade track, and an inverted band.
+
+### `MarketOffer`, `OfferPreview` and `MarketSnapshot` (src/world/market.ts)
+
+`MarketOffer` is `{ id, chassisId, manufacturerId, condition, price,
+leadTimeDays, rotation, conditions[], wear }`, where condition is new,
+refurbished or prototype. Offers are derived from the rotation number and the
+world seed rather than stored, so the same rotation always produces the same
+board.
+
+`OfferPreview` adds the readable half: names, mark, role, upkeep, affordability,
+four bands as 0 to 100 percentages, the tradeoff, the fitted weapons, the upgrade
+tracks and the contract terms.
+
+`MarketSnapshot` is `{ schemaVersion, rotation, daysIntoRotation, funding,
+salvageTons, researchSamples, reputation, purchasedOfferIds[], pending[],
+unlocked }`. `ROTATION_DAYS` is 14 and `MAX_OFFERS` is 5.
+
+### `MachineRecord` and `ServiceEntry` (src/jaegers/roster.ts)
+
+A record is an owned machine, not a chassis row: `{ jaegerId, chassisId, serial,
+name, acquiredBy, status, damage, hoursRemaining, sorties, level, experience,
+prestige, loadout[], history[] }`. `jaegerId` is `chassisId#n` for anything
+acquired during a campaign; `serial` is `CHASSIS-000N` and is never reused. A
+`ServiceEntry` is `{ day, event }`, oldest first, bounded to forty lines.
+
 ## Mission schemas (Milestone 17)
 
 ### `PilotDefinition` (src/data/pilots.ts)
