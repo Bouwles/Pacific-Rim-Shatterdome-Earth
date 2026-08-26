@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-1717 unit and integration tests, plus 150 Playwright browser tests.
+1769 unit and integration tests, plus 158 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,30 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 28 acceptance evidence
+
+Measured at seed 20260903, in the browser by hand and in the unit, integration
+and scenario suites.
+
+| Acceptance item                                                       | Evidence                                                                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critical state stays readable in rain, fog, darkness, water and glare | 60 of 60 rows across six viewing conditions and eleven settings combinations kept every critical alert intact                               |
+| ...at any display setting                                             | The critical layer ignores opacity and gets 1.1x the text scale; asserted over every colour-vision preset, text size and contrast setting   |
+| Cockpit indicators change because systems change                      | One value changed, exactly one instrument moved and the other ten were byte-identical. Building the model twice from the same state matches |
+| ...not because an animation plays                                     | Every motion token is capped at 900 ms and nothing loops; reduced motion sets all of them to zero                                           |
+| The loop is usable with the keyboard alone                            | Live: tabbing reaches the text-size and high-contrast controls, Space operates them, and the focused control shows a ring                   |
+| Nothing critical is hidden for cinematic purity                       | Live: a torso at 9 percent raised `!! Torso 9% — Another solid hit here takes it out.` in the band, which no setting can fade               |
+| The cockpit view is not weaker                                        | Targeting and faults are instruments in their own right; live it read "Targeting locked, 115 m" and the fault line named the offline part   |
+| Colour is never the only signal                                       | All five severities have distinct glyphs and three distinct border weights; live the strip read ✓ at 100 percent, △ at 52, !! at 9          |
+| Icon and motion tokens documented                                     | `tokenTable()` emits the whole vocabulary, and a test asserts it matches the token set exactly                                              |
+
+Four defects found, all in this milestone's own scenario rather than its
+shipping code: spreading an override of `null` over a default object left the
+object, so "no target" never meant no target and "the radio is quiet" silently
+became "the radio said something"; the instrument trace changed two systems at
+once, so it could not have proven which instrument follows which; and the calm
+case inherited a dry weapon, so a quiet HUD was never actually quiet.
 
 ## Milestone 27 acceptance evidence
 

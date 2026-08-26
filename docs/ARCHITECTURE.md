@@ -1351,6 +1351,40 @@ Regions are described by geography and infrastructure only. A test asserts that
 no profile text characterises the people who live anywhere, and every layout is
 a stylised procedural approximation with no commercial map data involved.
 
+## The interface: tokens, the HUD model and presentation
+
+Three modules, none of which touches Babylon, and one of which is the only part
+that touches the DOM.
+
+`src/ui/hudTokens.ts` is the vocabulary. Every severity carries a colour, a
+**glyph** and a **border weight**, which is the accessibility rule made
+structural rather than remembered: nothing in the interface can depend on hue
+alone, because the token that supplies the colour also supplies two things that
+are not colour. Motion tokens cap every animation at 900 ms and say what each
+duration is for, so nobody reaches for a number at random, and `tokenTable()`
+emits the whole vocabulary as rows so the documentation and the code cannot
+drift apart.
+
+`src/ui/hudModel.ts` is pure and is where the decisions live. Authoritative
+state goes in; a ranked list of what is worth saying comes out, along with
+component condition, target zones, ammunition, the instruments and the context
+lines. Because it is pure, "is this warning shown, and is it the most urgent
+one" is a unit test rather than something you check by looking at a screen.
+
+`src/ui/presentation.ts` holds the player's display settings and the rule that
+matters most: `styleFor` returns full opacity for anything critical whatever the
+player set, so no combination of settings can hide a failing reactor.
+`criticalRemainsVisible` and `motionIsBounded` exist so that rule is asserted
+rather than trusted, and `normalisePresentation` clamps a bad value rather than
+refusing it, because presentation should never be the reason a save will not
+load.
+
+`src/ui/pilotScreen.ts` renders it. The HUD is a layer above the existing dense
+readout rather than a replacement for it: the panel is for somebody who has time
+to read, and the HUD is for somebody who is fighting. Safe-area insets keep it
+off the edges, and every size derives from a single `--hud-text-scale` custom
+property so text scaling is one change rather than a hundred.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads

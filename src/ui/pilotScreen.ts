@@ -1,4 +1,7 @@
 import type { CameraMode } from "../jaegers/camera";
+import { COLOUR_VISION_PRESETS, TEXT_SCALES, SEVERITY_TOKENS, iconGlyph } from "./hudTokens";
+import { type HudModel } from "./hudModel";
+import { styleFor, type PresentationSettings } from "./presentation";
 import type { PilotReadout } from "../jaegers/pilotSession";
 
 /**
@@ -124,6 +127,8 @@ export interface PilotDamageState {
 
 export interface PilotScreenState {
   readonly readout: PilotReadout;
+  /** The HUD and how the player wants it drawn. Null before a machine is out. */
+  readonly hud: HudLayerState | null;
   /** Null only before a machine is taken out. */
   readonly damage: PilotDamageState | null;
   readonly view: PilotViewStats | null;
@@ -159,6 +164,12 @@ export interface SquadPanelState {
   readonly log: readonly string[];
 }
 
+/** What the HUD layer needs, beyond what the panel already had. */
+export interface HudLayerState {
+  readonly model: HudModel;
+  readonly settings: PresentationSettings;
+}
+
 export interface PilotScreenCallbacks {
   readonly onCameraMode: (mode: CameraMode) => void;
   readonly onShakeScale: (value: number) => void;
@@ -176,6 +187,12 @@ export interface PilotScreenCallbacks {
   readonly onMoveList: (open: boolean) => void;
   readonly onHoldToComplete: (enabled: boolean) => void;
   readonly onSkipSequences: (enabled: boolean) => void;
+  /** How far the ordinary interface fades. The critical layer ignores it. */
+  readonly onHudOpacity: (value: number) => void;
+  readonly onTextScale: (value: number) => void;
+  readonly onHighContrast: (enabled: boolean) => void;
+  readonly onColourVision: (preset: string) => void;
+  readonly onSubtitles: (enabled: boolean) => void;
   readonly onExit: () => void;
 }
 
@@ -295,6 +312,47 @@ function refreshSquad(
       }),
     );
   }
+}
+
+/** One reading on a strip: a glyph, a colour, a border, and the words. */
+interface StripEntry {
+  readonly key: string;
+  readonly severity: keyof typeof SEVERITY_TOKENS;
+  readonly text: string;
+  readonly icon: string;
+}
+
+/**
+ * Fills one strip of readings.
+ *
+ * Every entry carries the severity three ways: colour, glyph and border weight.
+ * That is what makes the display work for a player who cannot separate the
+ * hues, and what makes a grey screenshot still readable.
+ */
+function fillStrip(list: HTMLElement, entries: readonly StripEntry[], settings: PresentationSettings): void {
+  list.replaceChildren(
+    ...entries.map((entry) => {
+      const token = SEVERITY_TOKENS[entry.severity];
+      const style = styleFor(entry.severity, settings);
+      const item = document.createElement("li");
+      item.className = "pilot-hud-entry";
+      item.dataset["severity"] = entry.severity;
+      item.dataset["reading"] = entry.key;
+      item.style.color = style.colour;
+      item.style.borderLeftWidth = `${token.borderWidth}px`;
+      item.style.opacity = String(style.opacity);
+      item.style.transitionDuration = `${style.motionMs}ms`;
+
+      const glyph = document.createElement("span");
+      glyph.className = "pilot-hud-glyph";
+      glyph.dataset["glyph"] = token.glyph;
+      glyph.textContent = `${iconGlyph(entry.icon)}${token.glyph}`;
+      const label = document.createElement("span");
+      label.textContent = entry.text;
+      item.append(glyph, label);
+      return item;
+    }),
+  );
 }
 
 export function renderPilotScreen(
@@ -568,13 +626,230 @@ export function renderPilotScreen(
     "Fight: 1 jab · 2 cross · 3 heavy · 4 launcher · 5 shoulder · 6 finisher · F guard · R aim mode. " +
     "Ranged: 7 plasma · 8 missiles · 9 mortar · 0 cannon · J whip · K sword · O booster strike · L reload";
 
-  panel.append(header, cameraRow, rosterRow, comfortRow, combatRow, readout, combat, squadPanel, moves, hint);
+  // The HUD. A separate layer from the panel below it, because the panel is a
+  // dense readout for somebody who is looking, and this is what has to be
+  // readable by somebody who is fighting.
+  const hud = document.createElement("div");
+  hud.className = "pilot-hud";
+  hud.dataset["section"] = "hud";
+  hud.hidden = true;
+
+  // The critical band sits above everything and never fades. This is the one
+  // rule the whole layer exists to keep.
+  const criticalBand = document.createElement("div");
+  criticalBand.className = "pilot-hud-critical";
+  criticalBand.dataset["field"] = "hud-critical";
+
+  const hudGrid = document.createElement("div");
+  hudGrid.className = "pilot-hud-grid";
+
+  const conditionStrip = document.createElement("ul");
+  conditionStrip.className = "pilot-hud-strip";
+  conditionStrip.dataset["field"] = "hud-condition";
+
+  const targetStrip = document.createElement("ul");
+  targetStrip.className = "pilot-hud-strip";
+  targetStrip.dataset["field"] = "hud-target";
+
+  const ammoStrip = document.createElement("ul");
+  ammoStrip.className = "pilot-hud-strip";
+  ammoStrip.dataset["field"] = "hud-ammo";
+
+  const contextStrip = document.createElement("ul");
+  contextStrip.className = "pilot-hud-strip";
+  contextStrip.dataset["field"] = "hud-context";
+
+  hudGrid.append(conditionStrip, targetStrip, ammoStrip, contextStrip);
+
+  const cockpit = document.createElement("ul");
+  cockpit.className = "pilot-cockpit";
+  cockpit.dataset["field"] = "hud-instruments";
+
+  hud.append(criticalBand, hudGrid, cockpit);
+
+  // Display settings, next to the comfort ones because they answer the same
+  // question: how do you want to be shown this.
+  const displayRow = document.createElement("div");
+  displayRow.className = "pilot-controls";
+  displayRow.dataset["section"] = "display";
+
+  const opacityLabel = document.createElement("label");
+  opacityLabel.append(document.createTextNode("HUD "));
+  const opacity = document.createElement("input");
+  opacity.type = "range";
+  opacity.min = "35";
+  opacity.max = "100";
+  opacity.value = "100";
+  opacity.dataset["action"] = "hud-opacity";
+  opacity.addEventListener("input", () => callbacks.onHudOpacity(Number(opacity.value) / 100));
+  opacityLabel.appendChild(opacity);
+
+  const textLabel = document.createElement("label");
+  textLabel.append(document.createTextNode("Text "));
+  const textSelect = document.createElement("select");
+  textSelect.dataset["action"] = "text-scale";
+  for (const scale of TEXT_SCALES) {
+    const option = document.createElement("option");
+    option.value = String(scale);
+    option.textContent = `${Math.round(scale * 100)}%`;
+    if (scale === 1) option.selected = true;
+    textSelect.appendChild(option);
+  }
+  textSelect.addEventListener("change", () => callbacks.onTextScale(Number(textSelect.value)));
+  textLabel.appendChild(textSelect);
+
+  const contrastLabel = document.createElement("label");
+  const contrast = document.createElement("input");
+  contrast.type = "checkbox";
+  contrast.dataset["action"] = "high-contrast";
+  contrast.addEventListener("change", () => callbacks.onHighContrast(contrast.checked));
+  contrastLabel.append(contrast, document.createTextNode(" High contrast"));
+
+  const visionLabel = document.createElement("label");
+  visionLabel.append(document.createTextNode("Colour "));
+  const visionSelect = document.createElement("select");
+  visionSelect.dataset["action"] = "colour-vision";
+  for (const preset of COLOUR_VISION_PRESETS) {
+    const option = document.createElement("option");
+    option.value = preset;
+    option.textContent = preset;
+    visionSelect.appendChild(option);
+  }
+  visionSelect.addEventListener("change", () => callbacks.onColourVision(visionSelect.value));
+  visionLabel.appendChild(visionSelect);
+
+  const subtitleLabel = document.createElement("label");
+  const subtitles = document.createElement("input");
+  subtitles.type = "checkbox";
+  subtitles.checked = true;
+  subtitles.dataset["action"] = "subtitles";
+  subtitles.addEventListener("change", () => callbacks.onSubtitles(subtitles.checked));
+  subtitleLabel.append(subtitles, document.createTextNode(" Subtitles"));
+
+  displayRow.append(opacityLabel, textLabel, contrastLabel, visionLabel, subtitleLabel);
+
+  panel.append(
+    header,
+    hud,
+    cameraRow,
+    displayRow,
+    rosterRow,
+    comfortRow,
+    combatRow,
+    readout,
+    combat,
+    squadPanel,
+    moves,
+    hint,
+  );
   container.appendChild(panel);
 
   let lastMode: CameraMode | null = null;
 
   return {
     update(state: PilotScreenState): void {
+      // The HUD first, because it is the part that has to be right under
+      // pressure. Everything below it is for somebody who has time to read.
+      const layer = state.hud;
+      hud.hidden = layer === null;
+      if (layer) {
+        const { model, settings } = layer;
+        hud.style.setProperty("--hud-opacity", String(settings.hudOpacity));
+        hud.style.setProperty("--hud-text-scale", String(settings.textScale));
+
+        // The critical band. Never faded, never hidden, and empty when there is
+        // genuinely nothing critical rather than as a stylistic choice.
+        const criticals = model.alerts.filter((alert) => alert.severity === "critical");
+        criticalBand.hidden = criticals.length === 0;
+        criticalBand.replaceChildren(
+          ...criticals.map((alert) => {
+            const style = styleFor("critical", settings);
+            const item = document.createElement("div");
+            item.className = "pilot-hud-alert";
+            item.dataset["severity"] = "critical";
+            item.dataset["alert"] = alert.id;
+            item.style.color = style.colour;
+            item.style.borderWidth = `${SEVERITY_TOKENS.critical.borderWidth}px`;
+            item.style.opacity = String(style.opacity);
+            // Glyph as well as colour, so the meaning survives without hue.
+            const glyph = document.createElement("span");
+            glyph.className = "pilot-hud-glyph";
+            glyph.textContent = SEVERITY_TOKENS.critical.glyph;
+            const label = document.createElement("span");
+            label.textContent = `${alert.label} — ${alert.detail}`;
+            item.append(glyph, label);
+            return item;
+          }),
+        );
+
+        fillStrip(
+          conditionStrip,
+          model.components.map((component) => ({
+            key: component.id,
+            severity: component.severity,
+            text: `${component.name} ${component.offline ? "offline" : `${Math.round(component.fraction * 100)}%`}`,
+            icon: "structure",
+          })),
+          settings,
+        );
+
+        fillStrip(
+          targetStrip,
+          model.targetZones.map((zone) => ({
+            key: zone.id,
+            severity: zone.severity,
+            text: `${zone.aimed ? "▶ " : ""}${zone.id} ${Math.round(zone.fraction * 100)}%`,
+            icon: "target",
+          })),
+          settings,
+        );
+
+        fillStrip(
+          ammoStrip,
+          model.weapons.map((weapon) => ({
+            key: weapon.id,
+            severity: weapon.severity,
+            text: `${weapon.name} ${weapon.readout}`,
+            icon: "ammunition",
+          })),
+          settings,
+        );
+
+        fillStrip(
+          contextStrip,
+          [
+            { key: "objective", severity: "info" as const, text: model.objective, icon: "objective" },
+            {
+              key: "city",
+              severity: model.citySafety.severity,
+              text: `City ${model.citySafety.text}`,
+              icon: "civilians",
+            },
+            ...(model.squadOrder
+              ? [{ key: "squad", severity: "info" as const, text: model.squadOrder, icon: "squad" }]
+              : []),
+            ...model.abilities.map((ability, index) => ({
+              key: `ability.${index}`,
+              severity: "info" as const,
+              text: ability,
+              icon: "ability",
+            })),
+          ],
+          settings,
+        );
+
+        fillStrip(
+          cockpit,
+          model.instruments.map((instrument) => ({
+            key: instrument.id,
+            severity: instrument.severity,
+            text: `${instrument.label} ${instrument.value}`,
+            icon: instrument.icon,
+          })),
+          settings,
+        );
+      }
+
       refreshSquad(squadPanel, state.squad, callbacks);
       const readoutValues = state.readout;
       title.textContent = `${readoutValues.jaegerName} · ${readoutValues.markDesignation}`;

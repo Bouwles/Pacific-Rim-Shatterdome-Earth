@@ -140,6 +140,15 @@ The project is built in numbered milestones. Everything listed here actually run
 - Old machines that stay worth flying. A Mark 1 is less than half the price of a Mark 5, cheaper to keep, slower, shorter ranged, and upgradeable nearly three times as far
 - Machines that arrive without money too, through milestone unlocks, research programmes, rebuilt wrecks and archive recoveries
 - Upkeep on everything on the pad, charged by the day, whether you are watching the clock or skipping it
+- A cockpit that tells you things. Component condition, target zones, ammunition, heat, reactor load, abilities, the squad's standing order, the objective and how the city is doing, on one minimal layer
+- Minimal because there is usually little to say, never because anything is kept from you. A critical band sits above everything, never fades and never shrinks, so you can turn the interface right down and still be told the reactor is going
+- Eleven instruments reading real systems: heading, speed, depth or altitude, reactor, heat, drift stability, faults, targeting, weather, radio and the whole loadout
+- Instruments that move because a system moved. Change one thing and exactly one instrument changes. Nothing loops to look busy
+- Severity shown three ways at once: colour, a glyph and a border weight. A tick for nominal, a triangle for caution, an exclamation for warning, a double one for critical, so a reading survives colour blindness and a grey screenshot
+- Four colour-vision presets that keep all five severities apart, and a high contrast mode that overrides them when you ask for the strongest separation there is
+- Four text sizes, HUD opacity with a floor under it, subtitles, and reduced motion that sets every animation to zero without taking anything off the screen
+- Warnings that say what to do rather than only what is wrong. "Torso 9 percent. Another solid hit here takes it out."
+- Everything reachable from the keyboard, with a visible focus ring on whatever has it
 - Seven cities, and each one is a different place rather than the same place recoloured. Tokyo is capped low by seismic code and packed almost solid. Anchorage is single storey and spread thin under enormous mountains. Manila is a vast low sprawl with a few towers standing out of it. Vladivostok steps up hillsides around a narrow frozen inlet. Lima sits on a desert terrace a hundred metres above the sea
 - The difference is real, not a label. 256 blocks and 354 towers in Anchorage against 711 blocks and 3,976 towers in Manila, out of the same generator with nothing bespoke anywhere
 - Seven conditions that change how a fight goes: ice, typhoon, dense harbour, volcanic ground, shallow bay, shipping congestion, mountainous approaches. Each one moves footing, gunnery, sight, water depth, clutter, collateral damage and how fast the place rebuilds

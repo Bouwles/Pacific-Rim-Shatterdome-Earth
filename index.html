@@ -172,6 +172,103 @@
       #uiRoot .world-header h2 {
         margin: 0;
       }
+      /* The HUD. A layer above the dense panel, sized from the player's own
+         text scale and faded by their own opacity, except for the critical
+         band which ignores both. */
+      #uiRoot .pilot-hud {
+        --hud-opacity: 1;
+        --hud-text-scale: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 6px 0 10px;
+        /* Safe area: never against the edge, and never under a notch. */
+        padding: calc(8px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-right, 0px))
+          calc(8px + env(safe-area-inset-bottom, 0px)) calc(10px + env(safe-area-inset-left, 0px));
+        border: 1px solid rgba(127, 214, 255, 0.16);
+        border-radius: 5px;
+        background: rgba(6, 14, 22, 0.5);
+      }
+      #uiRoot .pilot-hud-critical {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        /* Deliberately not affected by --hud-opacity. */
+        opacity: 1;
+      }
+      #uiRoot .pilot-hud-alert {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        border-left-style: solid;
+        padding: 4px 8px;
+        border-radius: 3px;
+        background: rgba(60, 12, 8, 0.55);
+        font:
+          calc(12px * var(--hud-text-scale)) / 1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-hud-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 4px 14px;
+        opacity: var(--hud-opacity);
+      }
+      #uiRoot .pilot-hud-strip,
+      #uiRoot .pilot-cockpit {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      #uiRoot .pilot-cockpit {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 2px 12px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.14);
+        opacity: var(--hud-opacity);
+      }
+      #uiRoot .pilot-hud-entry {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+        border-left-style: solid;
+        border-left-color: currentColor;
+        padding-left: 6px;
+        transition-property: color, opacity;
+        font:
+          calc(11px * var(--hud-text-scale)) / 1.5 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-hud-glyph {
+        min-width: 2.2em;
+        letter-spacing: 0.06em;
+      }
+      /* One pulse for a critical warning, and only when motion is allowed. */
+      @media (prefers-reduced-motion: no-preference) {
+        #uiRoot .pilot-hud-alert {
+          animation: hud-attention 900ms ease-out 1;
+        }
+      }
+      @keyframes hud-attention {
+        0% {
+          background: rgba(150, 30, 20, 0.9);
+        }
+        100% {
+          background: rgba(60, 12, 8, 0.55);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #uiRoot .pilot-hud-alert,
+        #uiRoot .pilot-hud-entry {
+          animation: none;
+          transition: none;
+        }
+      }
       #uiRoot .world-identity-list {
         list-style: none;
         margin: 4px 0 0;

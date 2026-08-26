@@ -1258,3 +1258,38 @@ matches a region id exactly, and `cityPlanId` on the region names it.
 `src/data/missionModifiers.ts`. Every scale must be above zero and at or below
 two; anything larger is refused as "not a modifier, a different game". A
 modifier that leaves every value at its neutral is refused as a label.
+
+## Interface tokens (Milestone 28)
+
+`src/ui/hudTokens.ts`. Not a registry: a fixed vocabulary everything that draws
+reads from.
+
+| Severity | Glyph | Border | Pulses | Meaning                                                |
+| -------- | ----- | ------ | ------ | ------------------------------------------------------ |
+| critical | `!!`  | 3px    | once   | Act now or lose the machine, the crew or the objective |
+| warning  | `!`   | 2px    | once   | Going wrong, and will get worse if ignored             |
+| caution  | `△`   | 2px    | no     | Worth knowing about. Not yet a problem                 |
+| info     | `·`   | 1px    | no     | State the player asked to see                          |
+| nominal  | `✓`   | 1px    | no     | Working as it should                                   |
+
+Motion tokens: `instant` 0 ms, `quick` 90 ms, `settle` 180 ms, `attention`
+900 ms. Nothing may exceed `MAX_MOTION_MS` (900), and reduced motion sets every
+one to zero.
+
+Icons are one glyph per meaning: structure, reactor, heat, ammunition, ability,
+target, squad, objective, civilians, drift, depth, heading, speed, weather,
+radio, fault.
+
+## Presentation settings (Milestone 28)
+
+`src/ui/presentation.ts`. Validated, and clamped rather than refused on load.
+
+| Field           | Range                                          | Notes                                     |
+| --------------- | ---------------------------------------------- | ----------------------------------------- |
+| `hudOpacity`    | 0.35 to 1                                      | Never applies to the critical layer       |
+| `textScale`     | 0.9, 1, 1.15, 1.35                             | Critical text is 1.1x whatever this is    |
+| `highContrast`  | boolean                                        | Overrides the colour vision preset        |
+| `colourVision`  | standard, protanopia, deuteranopia, tritanopia | All five severities stay distinct in each |
+| `subtitles`     | boolean                                        |                                           |
+| `reducedMotion` | boolean                                        | Every duration becomes zero               |
+| `shakeScale`    | 0 to 1                                         | Never scales above the authored value     |

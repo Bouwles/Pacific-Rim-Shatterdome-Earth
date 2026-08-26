@@ -288,6 +288,38 @@ cap, or bay work on a machine that is not in the bay.
 
 ## The contracts terminal (Milestone 18)
 
+### The HUD and the cockpit
+
+Taking a machine out puts a HUD above the readout panel. It carries component
+condition, the zones on whatever you are fighting with the one you are aiming at
+marked, your ammunition by feed type, the objective, how the city is doing, the
+squad's standing order and your abilities. Below it are the instruments:
+heading, speed, depth or altitude, reactor, heat, drift stability, faults,
+targeting, weather, radio and the loadout.
+
+Above all of it is the critical band. It only appears when something is actually
+critical, and it is the one part of the interface that no display setting can
+fade, shrink or hide.
+
+Every reading carries its severity three ways: a colour, a glyph and a border
+weight. Nominal is a tick, caution a triangle, warning an exclamation mark, and
+critical a double one. That is so a reading survives colour blindness, a grey
+screenshot and a screen in direct sun.
+
+| Control            | Effect                                                                  |
+| ------------------ | ----------------------------------------------------------------------- |
+| **HUD** slider     | Fades everything except the critical band. Will not go below 35 percent |
+| **Text**           | Four sizes. Critical text is always a little larger than the rest       |
+| **High contrast**  | The strongest separation available. Overrides the colour vision preset  |
+| **Colour**         | Standard, protanopia, deuteranopia or tritanopia                        |
+| **Subtitles**      | Radio traffic and spoken lines as text                                  |
+| **Reduced motion** | Every animation becomes zero length. Nothing is removed from the screen |
+
+None of these changes the game. They change how it is shown to you.
+
+Everything on the pilot screen is reachable by Tab, and whatever has focus shows
+a ring.
+
 ### The region panel
 
 The world screen carries a Region section reporting where you are standing: the

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-03, Milestone 28: A cockpit that tells you things
+
+The interface stopped being a debug readout and became something you can fly with.
+
+- A minimal HUD that is minimal because there is usually little to say, never because anything is being kept from you. Component condition, target zones, ammunition, heat, reactor load, abilities, the squad's standing order, the objective and how the city is doing, all on one layer.
+- A critical band above everything else that never fades, never shrinks and never waits. Fade the rest of the interface as far as it goes and a failing reactor still tells you so.
+- Eleven cockpit instruments reading real systems: heading, speed, depth or altitude, reactor, heat, drift stability, component faults, targeting, weather, radio and the whole weapon loadout.
+- Instruments that move because a system moved. Change one value and exactly one instrument changes; the other ten stay exactly where they were. Nothing loops to look busy.
+- Severity carried three ways at once. Colour, a glyph, and a border weight, so a reading survives colour blindness, a grey screenshot and a bright screen. Nominal is a tick, caution a triangle, warning an exclamation, critical a double one.
+- Four colour-vision presets that keep all five severities visibly apart, and a high contrast mode that overrides them when somebody asks for the strongest separation available.
+- Text at four sizes, HUD opacity with a floor under it, subtitles, and reduced motion that sets every animation to zero without removing anything from the screen.
+- A warning that says what to do rather than only what is wrong. "Torso 9 percent. Another solid hit here takes it out." "Overheated. Weapons are locked out until it comes down."
+- Safe area padding, so nothing sits under a notch or against an edge, and every size derives from the player's own text scale.
+- Everything reachable from the keyboard, with a visible focus ring on whatever has it.
+
+None of these settings changes the game. They change how it is shown to you, and a test asserts the same fight comes out the same whatever they are set to.
+
 ## 2026-09-02, Milestone 27: Seven places that are actually different
 
 Hong Kong stopped being the only city with a city in it.

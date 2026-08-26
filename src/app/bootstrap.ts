@@ -135,6 +135,9 @@ import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../da
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry, type JaegerDefinition } from "../data/jaegers";
 import { ContentRegistry } from "../data/registry";
+import { buildHud, type HudInput } from "../ui/hudModel";
+import { defaultPresentation, normalisePresentation, type PresentationSettings } from "../ui/presentation";
+import type { ColourVisionPreset, TextScale } from "../ui/hudTokens";
 import { Exploration, planRoute, travelHoursBetween } from "../world/exploration";
 import { SITE_DEFINITIONS } from "../data/sites";
 import { ShatterdomeState } from "../shatterdome/facilityState";
@@ -2937,6 +2940,29 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onHoldToComplete: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { holdToComplete: enabled });
         },
+        onHudOpacity: (value: number) => {
+          presentation = normalisePresentation({ ...presentation, hudOpacity: value });
+          refreshPilot();
+        },
+        onTextScale: (value: number) => {
+          presentation = normalisePresentation({ ...presentation, textScale: value as TextScale });
+          refreshPilot();
+        },
+        onHighContrast: (enabled: boolean) => {
+          presentation = normalisePresentation({ ...presentation, highContrast: enabled });
+          refreshPilot();
+        },
+        onColourVision: (preset: string) => {
+          presentation = normalisePresentation({
+            ...presentation,
+            colourVision: preset as ColourVisionPreset,
+          });
+          refreshPilot();
+        },
+        onSubtitles: (enabled: boolean) => {
+          presentation = normalisePresentation({ ...presentation, subtitles: enabled });
+          refreshPilot();
+        },
         onSkipSequences: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
         },
@@ -3057,9 +3083,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         };
       }),
     );
+    const pilotDamage = pilotDamageState();
+    const pilotCombat = combatState();
     pilotScreen.update({
       readout: pilotSession.readout(),
-      damage: pilotDamageState(),
+      damage: pilotDamage,
+      hud: hudLayerFor(pilotCombat, pilotDamage),
       view: stats
         ? {
             decals: stats.decals,
@@ -3073,7 +3102,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightMeters: localGroundHeight(pilotSession.pose.east, pilotSession.pose.north),
       headingErrorDeg: lastPilotHeadingError,
       blocked: lastPilotBlocked,
-      combat: combatState(),
+      combat: pilotCombat,
       squad: squadPanelState(),
     });
   };
@@ -4866,6 +4895,94 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       boosterPercent: Math.round((pose?.boosterHeat ?? 0) * 100),
       boosterRefusal: pose?.boosterRefusal ?? null,
     };
+  };
+
+  /**
+   * How the player wants to be shown things.
+   *
+   * Presentation only. Nothing here reaches a simulation value, which is why
+   * the same fight comes out the same however these are set.
+   */
+  let presentation: PresentationSettings = defaultPresentation();
+
+  /**
+   * What the HUD should say, worked out from the systems that are running.
+   *
+   * Built fresh every time the pilot screen refreshes and never cached, so an
+   * instrument cannot show a reading the machine has moved past.
+   */
+  const hudLayerFor = (combat: PilotCombatState | null, damage: PilotDamageState | null) => {
+    const flying = mission?.plan.jaegerId ?? null;
+    const record = flying ? roster.get(flying) : undefined;
+    const pose = pilotSession?.pose ?? null;
+    const sample = sampleEnvironment();
+    // Drift comes off the readiness report, which is where it is already
+    // derived, rather than being recomputed for the display.
+    const link = mission ? (readinessFor(mission.incidentId)?.driftStrength ?? 1) : 1;
+
+    const input: HudInput = {
+      machine: {
+        integrity: (damage?.integrityPercent ?? 100) / 100,
+        components: (damage?.components ?? []).map((component) => ({
+          id: component.name,
+          name: component.name,
+          fraction: component.percent / 100,
+          offline: component.percent <= 0,
+        })),
+        stamina: combat?.stamina ?? 100,
+        staminaMax: combat?.staminaMax ?? 100,
+        heat: combat?.heat ?? 0,
+        overheated: combat?.overheated ?? false,
+        // Reactor load is what the machine is drawing against what it makes,
+        // read off the chassis rather than invented for the display.
+        reactorLoad: record
+          ? Math.min(1, (combat?.heat ?? 0) / 100 + (1 - (damage?.integrityPercent ?? 100) / 100) * 0.4)
+          : 0,
+        driftStability: link,
+      },
+      target: combat
+        ? {
+            name: combat.targetName,
+            distanceMeters: combat.targetDistanceMeters,
+            lockedOn: combat.lockedOn,
+            aimZoneId: combat.aimZoneId,
+            zones: combat.zones,
+          }
+        : null,
+      weapons: (combat?.weapons ?? []).map((weapon) => ({
+        id: weapon.id,
+        displayName: weapon.displayName,
+        magazine: weapon.magazine,
+        magazineSize: weapon.magazineSize,
+        feed: weapon.feed,
+        reserve: weapon.reserve,
+        ready: weapon.ready,
+        reloading: weapon.reloading,
+      })),
+      navigation: {
+        headingDeg: pose?.yawDeg ?? 0,
+        speedMps: pose?.speedMps ?? 0,
+        depthMeters: Math.abs(pose?.up ?? 0),
+        submerged: (pose?.submergedFraction ?? 0) > 0.5,
+      },
+      conditions: {
+        weather: sample.weather.kind,
+        visibility: Math.max(0, 1 - sample.effects.rangedAccuracyPenalty),
+      },
+      // What the squad was last told, taken from the panel that already knows.
+      squadOrder: squadPanelState()?.members[0]?.order ?? null,
+      objective: missionResults?.summary ?? (mission ? "Sortie under way" : "No sortie running"),
+      citySafety: worldState.activeRegionId
+        ? (worldState.recordFor(worldState.activeRegionId)?.safetyRating ?? 1)
+        : 1,
+      abilities: [
+        { name: "Guard", state: combat?.guarding ? "up" : "down" },
+        { name: "Finisher", state: combat?.finisherOpen ? "open" : "closed" },
+      ],
+      radio: directorNotice,
+    };
+
+    return { model: buildHud(input), settings: presentation };
   };
 
   /** Signs for a machine. The refusal is the message, never a silent no-op. */

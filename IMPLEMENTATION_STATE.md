@@ -264,7 +264,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - the same encounter varying from twelve to twenty metres of slide, 0.62 to 1.1 hit chance, 950 to 2,880 metres of detection, and two of seven regions where nothing can submerge at all;
   - industry scaling contracts, salvage and research, and a trade web where wrecking one region costs the regions that trade with it;
   - places described by geography and infrastructure only, enforced by a test, with everything a stylised procedural approximation and no commercial map data anywhere.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1717 unit+integration), `smoke` (150 Playwright), `build` all pass.
+- **A cockpit that tells you things**, layered over the dense panel rather than replacing it:
+  - a token vocabulary where every severity carries a colour, a distinct glyph and a distinct border weight, so nothing ever depends on hue alone;
+  - a pure HUD model deriving component condition, target zones with the aimed one marked, ammunition by feed type, heat, reactor load, abilities, squad order, objective, city safety and a ranked warning list;
+  - warnings sorted by severity and saying what to do, never only what is wrong;
+  - eleven cockpit instruments reading heading, speed, depth, reactor, heat, drift, faults, targeting, weather, radio and the loadout, every one from authoritative state;
+  - a critical band that ignores opacity and text scale entirely, so no display setting can hide it;
+  - presentation settings for opacity with a floor, four text sizes, high contrast, four colour-vision presets, subtitles and reduced motion, clamped rather than refused on load;
+  - motion bounded to 900 ms with nothing looping, and every duration set to zero under reduced motion;
+  - safe-area padding and typography derived from the player's own scale;
+  - proven across six viewing conditions against eleven settings combinations, 60 of 60 keeping every critical alert intact.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1769 unit+integration), `smoke` (158 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

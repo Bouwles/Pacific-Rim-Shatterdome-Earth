@@ -626,3 +626,19 @@ See TECH_DECISIONS.md — deferred until real feature-module boundaries exist to
 Define actual Low/Medium/High/Cinematic presets and per-system budgets once there are real systems
 (particles, rigid bodies, AI agents, streamed sectors) to budget — no earlier than Phase 4 (world
 streaming) per ROADMAP.md, and likely finalized in Phase 9.
+
+## Interface budgets (Milestone 28)
+
+The HUD is DOM and CSS, so its cost is measured in nodes and reflows rather than
+draw calls.
+
+| Budget                | Ceiling | Why                                                           |
+| --------------------- | ------- | ------------------------------------------------------------- |
+| Animation duration    | 900 ms  | `MAX_MOTION_MS`. Nothing may loop; a critical pulse runs once |
+| HUD nodes per refresh | ~40     | Components, target zones, weapons, context and instruments    |
+| Instrument count      | 11      | Fixed. Adding one is a row in the model                       |
+| Critical band nodes   | 0 to ~6 | Empty when nothing is critical, which is most of the time     |
+
+Strips are rebuilt on refresh rather than diffed, which is affordable at this
+node count. If the instrument list grows substantially, the same signature
+comparison the world map's site list uses should be applied here.

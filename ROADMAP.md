@@ -678,6 +678,27 @@ lay each city out from its own profile, and the world screen with a region secti
 - `npm run typecheck`, `lint`, `format:check`, `test` (1717), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 28 - Cinematic minimal combat HUD and functional cockpit instruments
+
+**Depends on:** Milestone 11 to 13 (the combat state it reports), 20 (drift), 21 (squad orders).
+**Status:** done.
+**Scope:** a design token vocabulary carrying severity as colour, glyph and border weight so nothing
+depends on hue alone; a pure HUD model deriving component condition, target zones, ammunition, heat,
+reactor load, ability state, squad order, objective, city safety and ranked warnings from authoritative
+state; eleven cockpit instruments reading heading, speed, depth, reactor, heat, drift, faults, targeting,
+weather, radio and weapons; presentation settings for HUD opacity, text scale, high contrast, four
+colour-vision presets, subtitles and reduced motion, with a floor under opacity and a critical layer that
+ignores it entirely; and a HUD layer on the pilot screen with safe-area padding and scale-aware
+typography. Created `src/ui/hudTokens.ts`, `src/ui/hudModel.ts`, `src/ui/presentation.ts`,
+`src/debug/hudScenario.ts`. Extended `src/ui/pilotScreen.ts`, the bootstrap wiring and the stylesheet.
+**Acceptance tests:**
+
+- Critical state survives all six viewing conditions against every settings combination, 60 of 60.
+- One system changing moves exactly one instrument and leaves the other ten where they were.
+- The display controls are reachable and operable from the keyboard alone.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1769), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.
