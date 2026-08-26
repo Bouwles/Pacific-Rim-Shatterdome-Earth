@@ -172,6 +172,68 @@
       #uiRoot .world-header h2 {
         margin: 0;
       }
+      #uiRoot .world-site-list {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      #uiRoot .world-site {
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+        padding: 6px 8px;
+        background: rgba(10, 22, 32, 0.55);
+      }
+      #uiRoot .world-site[data-claimed="yes"] {
+        border-color: rgba(143, 220, 174, 0.35);
+      }
+      #uiRoot .world-site-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .world-site-name {
+        color: #d8ecf8;
+      }
+      #uiRoot .world-site-cost {
+        color: #7f9fb4;
+      }
+      #uiRoot .world-site-detail {
+        margin: 4px 0 6px;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #8fb0c4;
+      }
+      #uiRoot .world-site button {
+        font-size: 10px;
+        padding: 3px 8px;
+        margin-right: 4px;
+      }
+      #uiRoot .world-site-empty {
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .world-route {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.14);
+      }
+      #uiRoot .world-route-line {
+        font:
+          10px/1.6 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
       #uiRoot .world-readout {
         font-family: "Consolas", monospace;
         font-size: 12px;

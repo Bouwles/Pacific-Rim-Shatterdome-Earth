@@ -12,6 +12,7 @@ import type { SquadSnapshot } from "../allies/squad";
 import type { EconomySnapshot } from "../world/economy";
 import type { ResearchSnapshot } from "../research/program";
 import type { LibrarySnapshot } from "../custom/blueprintLibrary";
+import type { ExplorationSnapshot } from "../world/exploration";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -69,6 +70,7 @@ export class SaveController {
     economy?: EconomySnapshot,
     research?: ResearchSnapshot,
     library?: LibrarySnapshot,
+    exploration?: ExplorationSnapshot,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -85,6 +87,7 @@ export class SaveController {
       economy,
       research,
       library,
+      exploration,
     });
   }
 
@@ -101,6 +104,7 @@ export class SaveController {
     economy?: EconomySnapshot,
     research?: ResearchSnapshot,
     library?: LibrarySnapshot,
+    exploration?: ExplorationSnapshot,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
@@ -116,6 +120,7 @@ export class SaveController {
       economy,
       research,
       library,
+      exploration,
     });
   }
 

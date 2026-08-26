@@ -140,6 +140,15 @@ The project is built in numbered milestones. Everything listed here actually run
 - Old machines that stay worth flying. A Mark 1 is less than half the price of a Mark 5, cheaper to keep, slower, shorter ranged, and upgradeable nearly three times as far
 - Machines that arrive without money too, through milestone unlocks, research programmes, rebuilt wrecks and archive recoveries
 - Upkeep on everything on the pad, charged by the day, whether you are watching the clock or skipping it
+- A planet worth crossing. Salvage, landmarks, shipping incidents, military exercises, training gates, research anomalies, rescue calls and environmental hazards, out there to be found
+- Nothing scattered evenly. Every kind of site states where it belongs, and the game refuses one that would fit anywhere. A proving gate only exists at a Shatterdome, a research anomaly only somewhere nobody lives, a rescue call only in a city that has been hit, unstable ice only somewhere cold
+- Six ways to learn about a place: walking within range, a government contract, your own analysts, an allied government, something a carrier spotted on the way elsewhere, or infrastructure you repaired. Some places only ever turn up on a chart somebody hands you
+- A world that stays put. Sites come from your world seed, so the same world always has the same things in the same places, and nothing is generated while you are looking at it
+- Nothing pays twice. What you have worked is remembered by name and saved, so walking away and back, crossing a boundary or reloading changes nothing
+- Places you reach become places the carrier will drop you. Reach a standing span or a usable pad once and it is on the deployment list from then on
+- Travel time you can see, in kilometres and minutes, for everywhere you know about
+- A route assist that does not decide for you. Straight there, or by way of everything you know, with both times shown. Direct is always faster and stopping is how you find things
+- Thrusters that run hot. A burst costs more heat than a second of cooling gives back, so crossing broken ground in hops is a decision, and the refusal tells you whether it is charge or heat
 - One machine you build yourself, at the fabrication hall's own control. Every other Jaeger keeps its identity; this one is yours
 - Twelve slots: Conn-Pod, frame, arms, legs, reactor, armour, drive, weapons, abilities, paint, markings and an emblem, plus a name and whatever you want stencilled on the hull
 - Parts fit by fitting rather than by name. Sprint legs offer a light spine and nothing else, the deep magazine frame needs a heavy one, and the refusal names both sides

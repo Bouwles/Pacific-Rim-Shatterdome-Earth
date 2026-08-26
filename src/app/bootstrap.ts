@@ -26,6 +26,7 @@ import {
   type StreamingReadout,
   type WorldScreenHandle,
   type WorldViewMode,
+  type MapReadout,
 } from "../ui/worldScreen";
 import { GlobeView } from "../debug/globeView";
 import { WorldState } from "../world/worldState";
@@ -131,6 +132,8 @@ import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../da
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry, type JaegerDefinition } from "../data/jaegers";
 import { ContentRegistry } from "../data/registry";
+import { Exploration, planRoute, travelHoursBetween } from "../world/exploration";
+import { SITE_DEFINITIONS } from "../data/sites";
 import { ShatterdomeState } from "../shatterdome/facilityState";
 import { ShatterdomeSession } from "../shatterdome/session";
 import { CONN_POD_ROOM_ID } from "../shatterdome/interiorLayout";
@@ -487,6 +490,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               market.economy.snapshot(),
               research.snapshot(),
               blueprintLibrary.snapshot(),
+              exploration.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -510,6 +514,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               market.economy.snapshot(),
               research.snapshot(),
               blueprintLibrary.snapshot(),
+              exploration.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -549,6 +554,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             research.restore(result.document.research);
             // Blueprints and the one machine a campaign may hold.
             blueprintLibrary.restore(result.document.library);
+            // What was found and what was taken. The sites themselves are placed
+            // from the seed, so only the player's own doings have to come back.
+            exploration.restore(result.document.exploration);
             refreshCustomChassis();
             applyCountermeasures();
             marketDay = worldState.environment.clock.dayNumber;
@@ -3132,7 +3140,24 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     restoreBootStage();
   };
 
+  /**
+   * Looks around from wherever the machine is.
+   *
+   * Called as the world refreshes, so walking past something finds it without
+   * anything having to be pressed. Only sites a person could actually spot this
+   * way are found: the rest need a chart from somebody.
+   */
+  const lookAround = (): void => {
+    const found = exploration.discoverNear(worldState.playerPosition);
+    if (found.length === 0) return;
+    const names = found
+      .map((site) => SITE_DEFINITIONS.find((entry) => entry.id === site.siteId)?.displayName ?? site.siteId)
+      .join(", ");
+    mapNote = `Spotted ${names}.`;
+  };
+
   const refreshWorld = (): void => {
+    lookAround();
     if (!worldScreen) return;
     const environmentSample = sampleEnvironment();
     const local = floatingOrigin.toLocal(worldState.playerPosition);
@@ -3157,6 +3182,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       anchor: floatingOrigin.anchor,
       pilotNotice,
       war: warReadout(),
+      map: mapReadoutFor(),
     });
     globeView?.refresh();
   };
@@ -3637,6 +3663,70 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           const regionId = worldState.activeRegionId;
           if (!regionId) return;
           worldState.setRegionAlert(regionId, level as AlertLevel, kernel?.tick ?? 0);
+          refreshWorld();
+        },
+        onWorkSite: (siteId: string) => {
+          const here = worldState.playerPosition;
+          const result = exploration.claim(siteId, here);
+          mapNote = result.message;
+          if (result.ok && result.reward) {
+            const day = worldState.environment.clock.dayNumber;
+            // Paid through the one path that owns balances, and guarded by the
+            // site id so a second claim could never write a second line.
+            if (result.reward.funding > 0) {
+              market.economy.earn("funding", result.reward.funding, {
+                source: "exploration-find",
+                reason: `Worked ${siteId}.`,
+                day,
+                reference: `site.${siteId}`,
+              });
+            }
+            if (result.reward.alloy > 0) {
+              market.economy.earn("alloy", result.reward.alloy, {
+                source: "exploration-find",
+                reason: `Recovered at ${siteId}.`,
+                day,
+                reference: `site.alloy.${siteId}`,
+              });
+            }
+            if (result.reward.researchData > 0) {
+              market.economy.earn("researchData", result.reward.researchData, {
+                source: "exploration-find",
+                reason: `Studied at ${siteId}.`,
+                day,
+                reference: `site.data.${siteId}`,
+              });
+            }
+            if (result.reward.sampleIds.length > 0) {
+              research.addSamples(result.reward.sampleIds.map((id) => ({ sampleId: id, count: 1 })));
+            }
+            if (result.openedDeployPoint) mapNote = `${result.message} The carrier can drop you here now.`;
+          }
+          refreshWorld();
+        },
+        onPlanRoute: (siteId: string) => {
+          routeTargetId = siteId;
+          refreshWorld();
+        },
+        onTravelToSite: (siteId: string) => {
+          const point = exploration.deployPoints().find((entry) => entry.id === siteId);
+          if (!point) {
+            mapNote = "Reach it once before the carrier will drop you there.";
+            refreshWorld();
+            return;
+          }
+          // Travel costs the hours it costs, on the same clock everything else
+          // runs on, so fast travel is fast rather than free.
+          const hours = travelHoursBetween(worldState.playerPosition, point.position);
+          // Put down at the point itself rather than at the region it sits near:
+          // the whole reason it is a deployment point is that somebody went there.
+          worldState.moveTo(point.position, kernel?.tick ?? 0);
+          floatingOrigin.forceRebase(worldState.playerPosition);
+          const ticks = Math.max(1, Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24));
+          worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
+          advanceWar(ticks);
+          settleMarket();
+          mapNote = `Set down after ${Math.max(1, Math.round(hours * 60))} minutes in the air.`;
           refreshWorld();
         },
         onPilot: (jaegerId: string) => startPilot(jaegerId),
@@ -4605,6 +4695,107 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     paint: "Paint",
     markings: "Markings",
     emblem: "Emblem",
+  };
+
+  /**
+   * What is out there.
+   *
+   * Placed from the world seed, so the same world always has the same things in
+   * it, and nothing is ever generated at runtime. Discovery and claims are the
+   * only parts that go in the save, which is what stops a content change turning
+   * into free rewards.
+   */
+  const exploration = new Exploration();
+  exploration.place(
+    kernel?.seed ?? 0,
+    regionRegistry.all().map((region) => ({
+      id: region.id,
+      centre: region.centre,
+      traits: {
+        kind: region.kind,
+        climate: region.climate,
+        populationThousands: region.populationThousands,
+        damaged: (worldState.recordFor(region.id)?.integrity ?? 1) < 0.995,
+      },
+    })),
+  );
+  /** The last thing the map said. Shown under the site list. */
+  let mapNote: string | null = null;
+  /** The site a route was last planned to, so the box has something to show. */
+  let routeTargetId: string | null = null;
+
+  /**
+   * The map, read off the exploration state every time.
+   *
+   * Nothing is cached here, so what the map says about a site is what the world
+   * would do if the player went there.
+   */
+  const mapReadoutFor = (): MapReadout => {
+    const here = worldState.playerPosition;
+    const sites = exploration.readouts(here).map((site) => ({
+      id: site.id,
+      name: site.name,
+      kind: site.kind,
+      regionId: site.regionId,
+      description: site.description,
+      dangerText: site.dangerText,
+      distanceKm: Math.round(site.distanceMeters / 100) / 10,
+      travelMinutes: Math.max(1, Math.round(site.travelHours * 60)),
+      claimed: site.claimed,
+      deployPoint: site.deployPoint,
+      refusal: site.refusal,
+    }));
+
+    const deployPoints = exploration.deployPoints().map((point) => ({
+      id: point.id,
+      name: SITE_DEFINITIONS.find((entry) => entry.id === point.siteId)?.displayName ?? point.siteId,
+    }));
+
+    let route: MapReadout["route"] = null;
+    const target = routeTargetId ? exploration.placed().find((site) => site.id === routeTargetId) : undefined;
+    if (target) {
+      const name = SITE_DEFINITIONS.find((entry) => entry.id === target.siteId)?.displayName ?? target.siteId;
+      const plan = planRoute(
+        here,
+        target.position,
+        name,
+        exploration
+          .deployPoints()
+          .filter((point) => point.id !== target.id)
+          .map((point) => ({
+            id: point.id,
+            name: SITE_DEFINITIONS.find((entry) => entry.id === point.siteId)?.displayName ?? point.siteId,
+            position: point.position,
+          })),
+      );
+      route = {
+        directMinutes: Math.max(1, Math.round(plan.direct.totalHours * 60)),
+        assistedMinutes: Math.max(1, Math.round(plan.assisted.totalHours * 60)),
+        legs: plan.assisted.legs.map((leg) => ({
+          toName: leg.toName,
+          distanceKm: Math.round(leg.distanceMeters / 100) / 10,
+          travelMinutes: Math.max(1, Math.round(leg.travelHours * 60)),
+        })),
+        summary: plan.assisted.summary,
+      };
+    }
+
+    const ready = roster.all().filter((record) => record.status === "ready").length;
+    const allies = squad.all().filter((crew) => crew.machineId !== null).length;
+    const pose = pilotSession?.pose ?? null;
+
+    return {
+      sites,
+      totalPlaced: exploration.placed().length,
+      deployPoints,
+      route,
+      readiness:
+        `${ready} of ${roster.all().length} machines ready · ` +
+        `${allies} allied crew${allies === 1 ? "" : "s"} with a machine` +
+        (mapNote ? ` · ${mapNote}` : ""),
+      boosterPercent: Math.round((pose?.boosterHeat ?? 0) * 100),
+      boosterRefusal: pose?.boosterRefusal ?? null,
+    };
   };
 
   /** Signs for a machine. The refusal is the message, never a silent no-op. */

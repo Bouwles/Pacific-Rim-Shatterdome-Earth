@@ -16,7 +16,7 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 15`
+- `ROOT_SAVE_VERSION = 16`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
@@ -43,6 +43,7 @@ migration, or the reverse.
 | 13      | Adds the `economy` section                                      | Every resource held, the difficulty the campaign is being run at, and the ledger behind each balance, including the references that stop a settled reward being paid twice.                                                                              |
 | 14      | Adds the `research` section                                     | Programmes finished, experiments in the labs with the work already put into them, the samples on the shelf, and how familiar each kaiju category has become with giving each one up.                                                                     |
 | 15      | Adds the `library` section                                      | Saved blueprints, the one custom machine a campaign may hold, the serial counter that never goes backwards, and whether the library is a sandbox one.                                                                                                    |
+| 16      | Adds the `exploration` section                                  | Which sites have been found and how each was found, and which have already been worked. The sites themselves are placed from the world seed rather than stored.                                                                                          |
 
 ## Detection
 
@@ -224,6 +225,27 @@ Two rules the restore enforces rather than trusts. A project naming a facility
 this build no longer has is dropped. And a project that was active comes back
 queued, holding no crews: it is given crews again on the first tick after
 loading, so nothing is mid-tick across a save.
+
+## Version 15 to 16: exploration (Milestone 26)
+
+Version 16 adds an `exploration` section: which sites have been found, how each
+was found, and which have already been worked.
+
+A version 15 save has neither, because there was nothing out there. It comes
+back having found nothing and worked nothing, which is the honest reading of a
+file written before the world had anything in it.
+
+The sites themselves are deliberately **not** stored. They are placed from the
+world seed every time the game starts, so an old save gets exactly the world a
+new one would, and only what the player did with it has to survive. That is what
+lets sites be added, removed or rebalanced without a migration.
+
+Two rules the restore enforces rather than trusts. A discovery naming a site
+this build no longer places is dropped, because there is nothing left to have
+found. A **claim** is kept whether or not the site still exists: dropping it
+would turn a content change into free money the next time something similar was
+placed, and a claim is a record of what the player did rather than a property of
+the world.
 
 ## Version 14 to 15: the builder (Milestone 25)
 

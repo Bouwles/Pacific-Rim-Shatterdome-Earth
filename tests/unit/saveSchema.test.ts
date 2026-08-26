@@ -11,6 +11,7 @@ import { emptySquadSnapshot } from "../../src/allies/squad";
 import { emptyEconomySnapshot } from "../../src/world/economy";
 import { emptyResearchSnapshot } from "../../src/research/program";
 import { emptyLibrarySnapshot } from "../../src/custom/blueprintLibrary";
+import { emptyExplorationSnapshot } from "../../src/world/exploration";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -53,6 +54,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     economy: emptyEconomySnapshot(),
     research: emptyResearchSnapshot(),
     library: emptyLibrarySnapshot(),
+    exploration: emptyExplorationSnapshot(),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },

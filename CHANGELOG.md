@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-01, Milestone 26: A planet worth crossing
+
+The map stopped being a list of places you can already go.
+
+- Things to find, in eight kinds: salvage, landmarks, shipping incidents, military exercises, training gates, research anomalies, rescue calls and environmental hazards.
+- Nothing is scattered evenly. Every site states what kind of region it belongs in, and the validator refuses one that would fit anywhere. A proving gate only exists at a Shatterdome. A research anomaly only turns up somewhere nobody lives. A rescue call only happens in a city that has been hit. Unstable ice needs somewhere cold.
+- Six ways to learn about a place: walking within range of it, a government contract, your own analysts, an allied government, something a carrier spotted on the way somewhere else, or infrastructure you repaired. Some places only ever appear on a chart somebody hands you, which is what makes intelligence worth having.
+- A world that stays put. Sites are placed from your world seed, so the same world always has the same things in the same places, and nothing is generated while you are looking at it.
+- Nothing pays twice. What has been worked is remembered by name and saved, so walking away and back, crossing a sector boundary or reloading changes nothing at all.
+- Places you reach become places the carrier will drop you. A standing span, a ridge line, a wreck with a usable pad: reach it once and it is on the deployment list from then on.
+- Travel time you can see. Every found site shows how far it is in kilometres and how long the carrier takes in minutes.
+- A route assist that does not decide for you. It offers straight there and by way of everything you know about, with both times shown. Direct is always faster. Stopping is how you find things. That is the whole trade.
+- Thrusters that run hot. A burst costs more heat than a second of cooling gives back, so crossing broken ground in hops is a decision rather than a faster walk, and the refusal says which it is: not enough charge, or too hot.
+- A map that reports rather than decorates. How many places you have found against how many are still out there, how many machines are ready, how many allied crews have something to fly, and thruster heat, all on the same panel as the world it describes.
+
+An old save keeps everything. Version 15 files come back having found nothing, which is the honest reading of a file written before there was anything out there.
+
 ## 2026-08-31, Milestone 25: One machine you build yourself
 
 Every other Jaeger keeps its identity. This one is yours.

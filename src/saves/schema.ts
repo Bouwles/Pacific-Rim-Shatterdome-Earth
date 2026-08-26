@@ -11,12 +11,13 @@ import { validateSquadSnapshot, type SquadSnapshot } from "../allies/squad";
 import { validateEconomySnapshot, type EconomySnapshot } from "../world/economy";
 import { validateResearchSnapshot, type ResearchSnapshot } from "../research/program";
 import { validateLibrarySnapshot, type LibrarySnapshot } from "../custom/blueprintLibrary";
+import { validateExplorationSnapshot, type ExplorationSnapshot } from "../world/exploration";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 15;
+export const ROOT_SAVE_VERSION = 16;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -64,6 +65,8 @@ export interface RootSave {
   readonly research: ResearchSnapshot;
   /** Saved blueprints, and the one custom machine a campaign is allowed. */
   readonly library: LibrarySnapshot;
+  /** What has been found out there, and what has already been taken. */
+  readonly exploration: ExplorationSnapshot;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -218,6 +221,7 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateEconomySnapshot(document["economy"]));
   errors.push(...validateResearchSnapshot(document["research"]));
   errors.push(...validateLibrarySnapshot(document["library"]));
+  errors.push(...validateExplorationSnapshot(document["exploration"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

@@ -157,6 +157,7 @@ describe("round trip through a kernel", () => {
       "crew",
       "director",
       "economy",
+      "exploration",
       "library",
       "market",
       "metadata",

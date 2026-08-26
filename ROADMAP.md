@@ -628,6 +628,31 @@ board.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1599), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 26 - Global deployment map, discovery, fast travel and exploration activities
+
+**Depends on:** Milestone 04 (the globe and the regions), 18 and 23 (what a find is worth).
+**Status:** done.
+**Scope:** eleven sites across the eight kinds the milestone names, each declaring the region kind,
+climate, population band and damage state it belongs in, with a validator that refuses one that would fit
+everywhere; placement derived from the world seed and the region so a world is stable and nothing
+respawns; six discovery sources, with some places only a chart can reveal; a claim guard by site id that
+survives a save, so no reward can be taken twice by crossing a boundary or reloading; deployment points
+that only open after a place has actually been reached; travel time and a route planner that offers
+straight there and by way of what is known, with the direct route always faster so the assist is a
+choice; booster heat, a refusal reason carried on the pose, and a landing-slope helper; and a map section
+on the world screen reporting found against still out there, squad readiness, thruster heat, every found
+site with distance, travel time and danger, and a route box. Created `src/data/sites.ts`,
+`src/world/exploration.ts`, `src/debug/explorationScenario.ts`. Extended `src/jaegers/locomotion.ts`,
+`src/ui/worldScreen.ts`, the bootstrap wiring, and the save envelope to version 16.
+**Acceptance tests:**
+
+- A point is discovered by walking, saved, reloaded and still a deployment point afterwards.
+- The map and the world agree: every readout is measured from where the machine actually is, and a
+  damaged region carries things an untouched one cannot.
+- A second pass over every site in the world pays exactly zero, before and after a reload.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1662), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

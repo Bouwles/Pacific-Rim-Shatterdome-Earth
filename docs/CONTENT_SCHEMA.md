@@ -1206,3 +1206,30 @@ A blueprint is an id, a name, one array of part ids per slot, and free emblem
 text. Nothing derived is ever stored: the chassis, the stats and the silhouette
 are recomputed from the parts every time, so rebalancing a part reaches a saved
 design immediately.
+
+## Sites (Milestone 26)
+
+`src/data/sites.ts`. Registered through `ContentRegistry` with `validateSite`.
+
+| Field                                     | Type                                    | Notes                                                             |
+| ----------------------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| `id`                                      | string                                  | Must start with `site.` and name its own kind                     |
+| `kind`                                    | SiteKind                                | One of eight                                                      |
+| `requires.kinds`                          | RegionKind[]                            | Required and non-empty. All five kinds with no climate is refused |
+| `requires.climates`                       | ClimateZone[]                           | Empty means any climate                                           |
+| `requires.minPopulationThousands` / `max` | number                                  | The band the region has to sit in                                 |
+| `requires.requiresDamage`                 | boolean                                 | True for things that only happen where a city was hit             |
+| `weight`                                  | number                                  | Relative likelihood against other sites fitting the same region   |
+| `reward`                                  | funding, alloy, researchData, sampleIds | Taken once, ever                                                  |
+| `becomesDeployPoint`                      | boolean                                 | Whether reaching it opens somewhere the carrier will drop you     |
+| `discoveredBy`                            | DiscoverySource[]                       | Non-empty. Omitting `exploration` makes it chart-only             |
+| `danger`                                  | 0 to 1                                  | What standing there costs, shown in words                         |
+
+A site must be worth reaching: it either pays something or opens a deployment
+point, and the validator refuses one that does neither.
+
+## Exploration state (Milestone 26)
+
+Only two things are stored: which sites have been found and how, and which have
+been claimed. The sites themselves are placed from the world seed, so adding,
+removing or rebalancing them needs no migration.

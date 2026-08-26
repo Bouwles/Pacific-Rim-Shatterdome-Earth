@@ -329,6 +329,21 @@ export interface JaegerPose {
   /** 0 to 1. One is a full charge; a burst spends it. */
   readonly boosterCharge: number;
   readonly boosterSecondsLeft: number;
+  /**
+   * 0 to 1 of the thruster heat ceiling.
+   *
+   * A charge coming back is not the only thing that gates a burst. Boosting
+   * repeatedly puts heat into the thrusters faster than they shed it, so
+   * crossing ground in hops is a decision with a cost rather than a faster walk.
+   */
+  readonly boosterHeat: number;
+  /**
+   * Why a burst was refused on the last step, or null when nothing refused it.
+   *
+   * Carried on the pose so the reason reaches the player rather than the input
+   * silently doing nothing.
+   */
+  readonly boosterRefusal: string | null;
   /** True while a leg is out. Set by damage, read by the state resolver. */
   readonly legDisabled: boolean;
   readonly destroyed: boolean;
@@ -432,6 +447,8 @@ export function spawnPose(east: number, north: number, up: number, yawDeg = 0): 
     submergedFraction: 0,
     boosterCharge: 1,
     boosterSecondsLeft: 0,
+    boosterHeat: 0,
+    boosterRefusal: null,
     legDisabled: false,
     destroyed: false,
     speedMps: 0,
@@ -559,6 +576,51 @@ export function stepJaeger(
   };
 }
 
+/** Heat one burst puts into the thrusters, as a fraction of the ceiling. */
+export const BOOSTER_HEAT_PER_BURST = 0.34;
+/** Fraction of the ceiling shed each second while not boosting. */
+export const BOOSTER_COOLING_PER_SECOND = 0.12;
+/** Above this the thrusters will not fire until they have cooled. */
+export const BOOSTER_HEAT_CEILING = 0.95;
+/**
+ * Steepest ground a burst may end on, in degrees.
+ *
+ * Landing is where a booster stops being free movement: a machine that comes
+ * down on a slope it cannot stand on goes over, so hopping across broken ground
+ * means looking at where you are going to land.
+ */
+export const BOOSTER_LANDING_SLOPE_DEG = 26;
+
+/**
+ * Whether the ground under a point will take a landing.
+ *
+ * Samples the terrain around the point rather than at it, because a machine
+ * lands on an area. Returns the slope in degrees so a caller can say how bad it
+ * was rather than only that it was bad.
+ */
+export function landingSlopeDeg(
+  east: number,
+  north: number,
+  ground: (east: number, north: number) => number | null,
+  spanMeters = 24,
+): number {
+  const here = ground(east, north);
+  if (here === null) return 0;
+  let worst = 0;
+  for (const [dx, dz] of [
+    [spanMeters, 0],
+    [-spanMeters, 0],
+    [0, spanMeters],
+    [0, -spanMeters],
+  ] as const) {
+    const there = ground(east + dx, north + dz);
+    if (there === null) continue;
+    const slope = (Math.atan2(Math.abs(there - here), spanMeters) * 180) / Math.PI;
+    worst = Math.max(worst, slope);
+  }
+  return Math.round(worst * 10) / 10;
+}
+
 function advance(
   pose: JaegerPose,
   input: JaegerInput,
@@ -585,15 +647,35 @@ function advance(
   const definition = stateDefinition(pose.state);
   const locked = pose.stateSeconds < definition.minSeconds;
 
-  // Booster: a burst that spends the charge and runs on its own clock.
+  // Booster: a burst that spends the charge, puts heat into the thrusters, and
+  // runs on its own clock. Heat is the second gate: a charge coming back does
+  // not mean the thrusters are willing.
   let boosterSecondsLeft = Math.max(0, pose.boosterSecondsLeft - step);
   let boosterCharge = pose.boosterCharge;
-  if (startBooster && boosterCharge >= 1 && !definition.reaction) {
-    boosterSecondsLeft = profile.boosterSeconds;
-    boosterCharge = 0;
-    cameraImpulse = Math.max(cameraImpulse, 0.55);
-    events.push(makeEvent("booster", pose, 1, null, water.state));
-  } else if (boosterSecondsLeft <= 0) {
+  let boosterHeat = pose.boosterHeat;
+  let boosterRefusal: string | null = null;
+
+  if (boosterSecondsLeft <= 0) {
+    boosterHeat = Math.max(0, boosterHeat - BOOSTER_COOLING_PER_SECOND * step);
+  }
+
+  if (startBooster) {
+    if (definition.reaction) {
+      boosterRefusal = "Not while the machine is recovering.";
+    } else if (boosterCharge < 1) {
+      boosterRefusal = `Thrusters at ${Math.round(boosterCharge * 100)} percent charge.`;
+    } else if (boosterHeat >= BOOSTER_HEAT_CEILING) {
+      boosterRefusal = "Thrusters too hot. Give them a moment.";
+    } else {
+      boosterSecondsLeft = profile.boosterSeconds;
+      boosterCharge = 0;
+      boosterHeat = Math.min(1, boosterHeat + BOOSTER_HEAT_PER_BURST);
+      cameraImpulse = Math.max(cameraImpulse, 0.55);
+      events.push(makeEvent("booster", pose, 1, null, water.state));
+    }
+  }
+
+  if (boosterSecondsLeft <= 0 && !startBooster) {
     boosterCharge = Math.min(1, boosterCharge + step / profile.boosterRechargeSeconds);
   }
 
@@ -814,6 +896,8 @@ function advance(
       submergedFraction: water.submergedFraction,
       boosterCharge,
       boosterSecondsLeft,
+      boosterHeat: Math.round(boosterHeat * 1000) / 1000,
+      boosterRefusal,
       legDisabled: pose.legDisabled,
       destroyed: pose.destroyed,
       speedMps: Math.hypot(velocityEast, velocityNorth),

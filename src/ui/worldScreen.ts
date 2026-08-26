@@ -210,6 +210,58 @@ export interface WarReadout {
   } | null;
 }
 
+/**
+ * What the map knows about somewhere worth going.
+ *
+ * Everything here is read off the exploration state rather than kept by the
+ * screen, so the map and the world it describes cannot drift apart.
+ */
+export interface MapSiteRow {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly regionId: string;
+  readonly description: string;
+  readonly dangerText: string;
+  /** Kilometres from where the machine is standing. */
+  readonly distanceKm: number;
+  /** Minutes a carrier takes to get there. */
+  readonly travelMinutes: number;
+  readonly claimed: boolean;
+  /** True once reaching it has opened it as somewhere to deploy to. */
+  readonly deployPoint: boolean;
+  /** Null when it can be worked; otherwise exactly why not. */
+  readonly refusal: string | null;
+}
+
+/** One leg of a planned journey. */
+export interface RouteLegRow {
+  readonly toName: string;
+  readonly distanceKm: number;
+  readonly travelMinutes: number;
+}
+
+export interface MapReadout {
+  /** Found sites, nearest first. */
+  readonly sites: readonly MapSiteRow[];
+  /** How many exist in total, so the map can say what is still unknown. */
+  readonly totalPlaced: number;
+  /** Places the carrier can put a machine down, beyond the regions themselves. */
+  readonly deployPoints: readonly { readonly id: string; readonly name: string }[];
+  /** Straight there, and by way of what is known. Null with nowhere selected. */
+  readonly route: {
+    readonly directMinutes: number;
+    readonly assistedMinutes: number;
+    readonly legs: readonly RouteLegRow[];
+    readonly summary: string;
+  } | null;
+  /** What the squad can actually do right now. */
+  readonly readiness: string;
+  /** Thruster heat, 0 to 100, and why a burst was refused. */
+  readonly boosterPercent: number;
+  readonly boosterRefusal: string | null;
+}
+
 export interface WorldReadout {
   readonly viewMode: WorldViewMode;
   readonly environment: EnvironmentReadout;
@@ -230,6 +282,8 @@ export interface WorldReadout {
   readonly pilotNotice: string | null;
   /** The war. Null only before the director exists. */
   readonly war: WarReadout | null;
+  /** The map: what has been found, what it costs to reach, and how to get there. */
+  readonly map: MapReadout | null;
 }
 
 export interface WorldScreenCallbacks {
@@ -253,6 +307,12 @@ export interface WorldScreenCallbacks {
   onCrisisFrequency(value: number): void;
   /** Sends a machine to this incident. */
   onDeploy(incidentId: string): void;
+  /** Works a site the machine is standing at. */
+  onWorkSite(siteId: string): void;
+  /** Plans a route to a site, so the cost of stopping on the way is visible. */
+  onPlanRoute(siteId: string): void;
+  /** Puts the machine down at a discovered point. */
+  onTravelToSite(siteId: string): void;
   /** Skips the rest of the carrier run. */
   onSkipCarrier(): void;
   /** Ends the sortie early, keeping whatever was achieved. */
@@ -267,6 +327,88 @@ export interface WorldScreenCallbacks {
 export interface WorldScreenHandle {
   update(readout: WorldReadout): void;
   dispose(): void;
+}
+
+/** One line inside the route box. */
+function routeLine(text: string): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "world-route-line";
+  line.textContent = text;
+  return line;
+}
+
+function emptySiteLine(text: string): HTMLElement {
+  const line = document.createElement("li");
+  line.className = "world-site-empty";
+  line.textContent = text;
+  return line;
+}
+
+/**
+ * One place worth going to.
+ *
+ * Carries what it is, how far, how long, how dangerous, and the three things
+ * that can be done about it. A control that cannot act says why on itself.
+ */
+function buildSiteRow(site: MapSiteRow, callbacks: WorldScreenCallbacks): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "world-site";
+  item.dataset.site = site.id;
+  item.dataset.kind = site.kind;
+  if (site.claimed) item.dataset.claimed = "yes";
+
+  const head = document.createElement("div");
+  head.className = "world-site-head";
+  const name = document.createElement("span");
+  name.className = "world-site-name";
+  name.dataset.field = "site-name";
+  name.textContent = site.deployPoint ? `${site.name} (deployment point)` : site.name;
+  const cost = document.createElement("span");
+  cost.className = "world-site-cost";
+  cost.dataset.field = "site-cost";
+  cost.textContent = `${site.distanceKm} km · ${site.travelMinutes} min · ${site.dangerText}`;
+  head.append(name, cost);
+  item.appendChild(head);
+
+  const detail = document.createElement("p");
+  detail.className = "world-site-detail";
+  detail.dataset.field = "site-detail";
+  detail.textContent = site.description;
+  item.appendChild(detail);
+
+  const work = document.createElement("button");
+  work.type = "button";
+  work.className = "secondary-button";
+  work.dataset.action = "work-site";
+  work.textContent = site.claimed ? "Worked" : "Work it";
+  work.disabled = site.refusal !== null;
+  work.title = site.refusal ?? `Work ${site.name}`;
+  work.dataset.refusal = site.refusal ?? "";
+  work.addEventListener("click", () => callbacks.onWorkSite(site.id));
+
+  const route = document.createElement("button");
+  route.type = "button";
+  route.className = "secondary-button";
+  route.dataset.action = "plan-route";
+  route.textContent = "Route";
+  route.title = `Plan a way to ${site.name}`;
+  route.addEventListener("click", () => callbacks.onPlanRoute(site.id));
+
+  const travel = document.createElement("button");
+  travel.type = "button";
+  travel.className = "secondary-button";
+  travel.dataset.action = "travel-site";
+  travel.textContent = "Deploy here";
+  // Only somewhere already reached is somewhere the carrier will drop you.
+  travel.disabled = !site.deployPoint;
+  travel.title = site.deployPoint
+    ? `Put the machine down at ${site.name}`
+    : "Reach it once before the carrier will drop you here.";
+  travel.dataset.refusal = site.deployPoint ? "" : "Not yet a deployment point.";
+  travel.addEventListener("click", () => callbacks.onTravelToSite(site.id));
+
+  item.append(work, route, travel);
+  return item;
 }
 
 /** What separates one ledger line from the next inside a tooltip. */
@@ -521,6 +663,53 @@ export function renderWorldScreen(
   });
   rebuildRow.append(rebuildLabel, rebuildButton);
 
+  // The map. What has been found, what it costs to reach, and what the squad
+  // can do about it. Built once and refilled, like every other section here.
+  const mapSection = document.createElement("div");
+  mapSection.className = "world-readout world-map";
+  mapSection.dataset.section = "map";
+  mapSection.hidden = true;
+
+  const mapHeader = document.createElement("div");
+  mapHeader.className = "world-row";
+  const mapKey = document.createElement("span");
+  mapKey.className = "world-key";
+  mapKey.textContent = "Map";
+  const mapValue = document.createElement("span");
+  mapValue.className = "world-value";
+  mapValue.dataset.field = "map-state";
+  mapHeader.append(mapKey, mapValue);
+
+  const readinessRow = document.createElement("div");
+  readinessRow.className = "world-row";
+  const readinessKey = document.createElement("span");
+  readinessKey.className = "world-key";
+  readinessKey.textContent = "Squad";
+  const readinessValue = document.createElement("span");
+  readinessValue.className = "world-value";
+  readinessValue.dataset.field = "map-readiness";
+  readinessRow.append(readinessKey, readinessValue);
+
+  const boosterRow = document.createElement("div");
+  boosterRow.className = "world-row";
+  const boosterKey = document.createElement("span");
+  boosterKey.className = "world-key";
+  boosterKey.textContent = "Thrusters";
+  const boosterValue = document.createElement("span");
+  boosterValue.className = "world-value";
+  boosterValue.dataset.field = "map-booster";
+  boosterRow.append(boosterKey, boosterValue);
+
+  const siteList = document.createElement("ul");
+  siteList.className = "world-site-list";
+  siteList.dataset.field = "map-sites";
+
+  const routeBox = document.createElement("div");
+  routeBox.className = "world-route";
+  routeBox.dataset.field = "map-route";
+
+  mapSection.append(mapHeader, readinessRow, boosterRow, siteList, routeBox);
+
   // The alert board. One entry per incident, each with what is known, what it
   // costs to ignore, and the buttons that actually do those things.
   const warSection = document.createElement("div");
@@ -771,6 +960,7 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    mapSection,
     warSection,
     rebuildRow,
     pilotRow,
@@ -792,6 +982,15 @@ export function renderWorldScreen(
   // picking a destination and then pressing Teleport went nowhere. Follow the
   // world only when the world itself moves.
   let lastActiveRegionId: string | null = null;
+  /**
+   * What the site list currently shows.
+   *
+   * The ground view refreshes four times a second. Rebuilding the list every
+   * time detached the buttons under the pointer, so a click on Work or Route
+   * landed on a node that no longer existed and did nothing at all. The list is
+   * rebuilt only when what it says actually changes.
+   */
+  let lastSiteSignature = "";
 
   const set = (field: string, value: string): void => {
     const node = fields.get(field);
@@ -800,6 +999,58 @@ export function renderWorldScreen(
 
   return {
     update(state) {
+      // The map: everywhere known, what it costs to get there, and what can be
+      // done about it. Rebuilt from the readout rather than kept here, so the
+      // map cannot describe a world that has moved on.
+      const map = state.map;
+      mapSection.hidden = map === null;
+      if (map) {
+        const unknown = Math.max(0, map.totalPlaced - map.sites.length);
+        mapValue.textContent =
+          `${map.sites.length} found` +
+          (unknown > 0 ? `, ${unknown} still out there` : ", nothing left to find") +
+          ` · ${map.deployPoints.length} deployment point${map.deployPoints.length === 1 ? "" : "s"}`;
+        readinessValue.textContent = map.readiness;
+        boosterValue.textContent =
+          `${map.boosterPercent}% heat` + (map.boosterRefusal ? ` · ${map.boosterRefusal}` : "");
+
+        const signature = map.sites
+          .map((site) => `${site.id}|${site.claimed}|${site.deployPoint}|${site.refusal ?? ""}`)
+          .join(";");
+        if (signature !== lastSiteSignature) {
+          lastSiteSignature = signature;
+          siteList.replaceChildren(
+            ...(map.sites.length === 0
+              ? [emptySiteLine("Nothing found yet. Go and look.")]
+              : map.sites.map((site) => buildSiteRow(site, callbacks))),
+          );
+        } else {
+          // Same rows, moving numbers. Update in place so nothing under the
+          // pointer is replaced while somebody is clicking it.
+          for (const site of map.sites) {
+            const row = siteList.querySelector<HTMLElement>(`[data-site="${site.id}"]`);
+            if (!row) continue;
+            const cost = row.querySelector<HTMLElement>('[data-field="site-cost"]');
+            if (cost) {
+              cost.textContent = `${site.distanceKm} km · ${site.travelMinutes} min · ${site.dangerText}`;
+            }
+          }
+        }
+
+        if (map.route) {
+          routeBox.replaceChildren(
+            routeLine(
+              `Direct ${map.route.directMinutes} min · by way of what is known ${map.route.assistedMinutes} min`,
+            ),
+            routeLine(map.route.summary),
+            ...map.route.legs.map((leg) =>
+              routeLine(`${leg.toName}: ${leg.distanceKm} km, ${leg.travelMinutes} min`),
+            ),
+          );
+        } else {
+          routeBox.replaceChildren(routeLine("No route planned."));
+        }
+      }
       // The war, and the actions that answer it.
       const war = state.war;
       warSection.hidden = war === null;

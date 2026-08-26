@@ -288,6 +288,30 @@ cap, or bay work on a machine that is not in the bay.
 
 ## The contracts terminal (Milestone 18)
 
+### The map
+
+The world screen carries a Map section from the moment a world exists. It shows
+how many places have been found against how many are still out there, how many
+deployment points are open, what the squad can do, and how hot the thrusters are.
+
+| Control         | Effect                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------- |
+| **Work it**     | Takes what a site is worth. Once, ever. Shut with the distance on it when out of reach |
+| **Route**       | Plans a way there: straight, and by way of everything already known, with both times   |
+| **Deploy here** | Puts the machine down at a discovered point. Shut until the place has been reached     |
+
+Walking finds things by itself: come within four kilometres of a site that can
+be spotted that way and it appears on the map, with a line saying what was seen.
+Getting within six hundred metres is what lets it be worked.
+
+Not everything can be found by walking. Some places only ever appear on a chart
+from a contract, your own analysts, an allied government, a carrier, or a piece
+of infrastructure you repaired.
+
+Thruster bursts cost heat. One burst puts in more than a second of cooling takes
+out, so hopping across ground is a decision rather than a faster walk, and the
+readout says whether a refusal was charge or heat.
+
 ### The assembly bay
 
 The Fabrication Hall has to be built before it can be walked into. Its terminal

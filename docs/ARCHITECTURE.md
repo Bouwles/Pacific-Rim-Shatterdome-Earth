@@ -1274,6 +1274,45 @@ exists for definitions authored at runtime; `register` still refuses a duplicate
 so nothing shipped can be quietly overwritten and the shared table is never
 mutated.
 
+## Exploration: sites, discovery and getting there
+
+Two modules, neither of which Babylon or the DOM can see.
+
+`src/data/sites.ts` is the catalogue. Every entry declares a `RegionRequirement`:
+the region kinds it belongs in, the climates, the population band, and whether
+the region has to have been damaged. The validator refuses a site with no region
+kinds at all, and refuses one that fits every region kind in every climate. That
+is the whole defence against a uniform scatter of collectible icons, and it is
+enforced at registration rather than remembered.
+
+`src/world/exploration.ts` places, finds and claims. Placement is derived from
+the world seed and the region id, so a world is stable and nothing is generated
+at runtime; that is also why sites are not stored in the save at all. Discovery
+checks the site's own `discoveredBy`, so a source cannot quietly hand over
+something it could not have found. Claims are kept by site id and go in the save,
+which is the same guard the ledger uses for mission pay and for the same reason:
+crossing a boundary, walking away and back, or reloading must change nothing.
+
+Deployment points are derived rather than stored: a site is one once it has been
+claimed and its definition says it becomes one. Nothing is unlocked by being
+told about it.
+
+`planRoute` returns two answers and picks neither. Direct is always at least as
+fast; the assisted route only includes waypoints that add under a fifth to the
+journey, so it is a route rather than a detour, and its summary says in minutes
+what stopping costs. The player chooses, which is what keeps exploring a decision
+about how to spend a trip.
+
+Travel time is deliberately unrounded where it is computed and rounded where it
+is read: the globe is scaled, so rounding at the source flattened every nearby
+journey to zero.
+
+Boosters gained a second gate. `boosterHeat` rises per burst by more than a
+second of cooling returns, so hopping is not a faster walk, and `boosterRefusal`
+is carried on the pose so the reason reaches the player rather than the input
+silently doing nothing. `landingSlopeDeg` samples the ground around a point
+rather than at it, because a machine lands on an area.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads

@@ -295,6 +295,28 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Sites (Milestone 26)
+
+Eleven in `src/data/sites.ts` across eight kinds. Every entry declares the region
+kinds, climates, population band and damage state it belongs in, and the
+validator refuses one that fits every region kind in every climate.
+
+| Kind              | Belongs in                                          | Opens a deployment point |
+| ----------------- | --------------------------------------------------- | ------------------------ |
+| salvage           | coasts, oceans, and damaged cities for a wreck      | the Jaeger wreck does    |
+| landmark          | coastal cities, and wilderness ridges               | both do                  |
+| shipping-incident | oceans and coasts                                   | no                       |
+| military-exercise | wilderness and small inland cities                  | yes                      |
+| training-gate     | a Shatterdome, and nowhere else                     | yes                      |
+| research-anomaly  | wilderness and ocean, cold or tropical, unpopulated | no                       |
+| rescue-call       | a city that has actually been hit                   | no                       |
+| hazard            | coasts, oceans, wilderness; the ice one polar only  | no                       |
+
+Discovery sources, in `DISCOVERY_SOURCES`: `exploration`, `contract`,
+`intelligence`, `allied-government`, `carrier`, `repaired-infrastructure`. Some
+sites deliberately omit `exploration`, so walking alone can never find
+everything.
+
 ## Jaeger parts (Milestone 25)
 
 Twenty nine in `src/data/parts.ts` across twelve slots. Every structural part

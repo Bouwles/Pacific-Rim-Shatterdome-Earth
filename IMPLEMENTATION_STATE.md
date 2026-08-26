@@ -245,7 +245,17 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - one active custom serial per campaign, freed only by scrapping, with serials never reused and an explicit sandbox exception;
   - a procedural silhouette derived from the chosen parts, preserving the existing sockets for later GLB replacement;
   - one shared chassis registry the roster and the market both read, so an assembled machine is owned, repaired and fought by exactly the code that handles a bought one.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1599 unit+integration), `smoke` (140 Playwright), `build` all pass.
+- **A planet worth crossing**, read from the world map:
+  - eleven sites across eight kinds, each declaring the region kind, climate, population band and damage state it belongs in;
+  - a validator that refuses a site fitting every region kind in every climate, and one that nothing can discover;
+  - placement derived from the world seed and the region id, so a world is stable and nothing is generated at runtime;
+  - six discovery sources, with some places reachable only through a chart somebody hands you;
+  - a claim guard by site id, carried in the save, so no reward can be taken twice by a boundary crossing or a reload;
+  - deployment points that open only after a place has been reached, and are then somewhere the carrier will drop a machine;
+  - travel time from real distance, and a route planner offering straight there and by way of what is known, with the direct route always faster so the assist stays a choice;
+  - booster heat that costs more per burst than a second of cooling returns, a refusal reason carried on the pose, and a landing-slope helper;
+  - a map section reporting found against still out there, deployment points, squad readiness, thruster heat, and every found site with distance, travel time, danger and a stated reason on any control that cannot act.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1662 unit+integration), `smoke` (145 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

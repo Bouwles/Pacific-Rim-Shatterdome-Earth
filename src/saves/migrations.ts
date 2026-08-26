@@ -17,6 +17,7 @@ import { emptySquadSnapshot } from "../allies/squad";
 import { emptyEconomySnapshot } from "../world/economy";
 import { emptyResearchSnapshot } from "../research/program";
 import { emptyLibrarySnapshot } from "../custom/blueprintLibrary";
+import { emptyExplorationSnapshot } from "../world/exploration";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -438,6 +439,27 @@ const addBlueprintLibrary: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 15, library: emptyLibrarySnapshot() }),
 };
 
+/**
+ * Version 15 to 16: exploration.
+ *
+ * Adds an `exploration` section: which sites have been found, how each was
+ * found, and which have already been worked.
+ *
+ * A version 15 save has none of it, because there was nothing out there to
+ * find. It comes back with nothing discovered and nothing claimed, which is the
+ * honest reading of a file written before the world had anything in it. The
+ * sites themselves are not stored at all: they are placed from the world seed
+ * every time, so an old save gets the same world a new one would and the claims
+ * are the only thing that has to survive.
+ */
+const addExplorationSection: MigrationStep = {
+  id: "15",
+  fromVersion: 15,
+  toVersion: 16,
+  description: "Add exploration: discovered sites, how each was found, and what has been worked.",
+  apply: (document) => ({ ...document, schemaVersion: 16, exploration: emptyExplorationSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -467,6 +489,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addEconomySection);
   registry.register(addResearchSection);
   registry.register(addBlueprintLibrary);
+  registry.register(addExplorationSection);
   return registry;
 }
 

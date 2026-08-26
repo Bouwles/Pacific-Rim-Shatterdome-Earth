@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-1599 unit and integration tests, plus 140 Playwright browser tests.
+1662 unit and integration tests, plus 145 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,33 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 26 acceptance evidence
+
+Measured at seed 20260901, in the browser by hand and in the unit, integration
+and scenario suites.
+
+| Acceptance item                                            | Evidence                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A point can be discovered, saved, reloaded and deployed to | Live: walked from 3.5 km to 0.3 km, worked the Proving gate, deployment points went 0 to 1 and the Deploy here control opened. Round-tripped through a real save file in the integration suite |
+| The map and the world agree                                | Every readout is measured from the machine's actual position, the region on a row is the region the site was placed in, and travel time follows distance                                       |
+| ...on region damage                                        | A world where every region has been hit produces rescue calls; one where none has cannot                                                                                                       |
+| Rewards do not respawn on a boundary or a reload           | A second pass over all 21 sites paid 0. After a save and reload the same claim is still refused and returns no reward                                                                          |
+| ...and cannot be double-paid into the books                | Four claim attempts against the economy produced one ledger line                                                                                                                               |
+| No generic icons scattered uniformly                       | Site kinds are exclusive per region kind: training gates only at a Shatterdome, research anomalies only at sea, landmarks and rescue calls only in coastal cities                              |
+| Seamless Earth does not mean hours of walking              | Farthest pair 369 km: 0.6 hours by carrier against 7.3 on foot, and reaching a discovered point is one control                                                                                 |
+| Boosters cost something                                    | One burst adds 0.34 heat against 0.12 shed per second, refuses above 0.95, and says whether it was charge or heat                                                                              |
+| The route assist leaves a decision                         | Direct is always at least as fast; the assisted route lists its stops and says in minutes what they cost                                                                                       |
+| Some places need more than walking                         | Several sites omit `exploration` entirely, so contracts, analysts and allied governments are the only way to them                                                                              |
+
+Three defects found while building it. Site offsets were computed on Earth's
+radius while the world uses a scaled one, so a site stated as five kilometres
+away was a few hundred metres away in the world anybody walks through. Travel
+time was rounded at the point it was computed, which flattened every nearby
+journey to zero on that same scaled globe. And a new campaign could see nothing
+at all: the only site near the start was a proving gate that walking could not
+discover, and the nearest findable one was twenty kilometres away, so the first
+thing a player did was stare at an empty map.
 
 ## Milestone 25 acceptance evidence
 
