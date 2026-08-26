@@ -1233,3 +1233,28 @@ point, and the validator refuses one that does neither.
 Only two things are stored: which sites have been found and how, and which have
 been claimed. The sites themselves are placed from the world seed, so adding,
 removing or rebalancing them needs no migration.
+
+## Region profiles (Milestone 27)
+
+`src/data/regionProfiles.ts`. Registered with `validateRegionProfile`. The `id`
+matches a region id exactly, and `cityPlanId` on the region names it.
+
+| Field                 | Type                | Notes                                                         |
+| --------------------- | ------------------- | ------------------------------------------------------------- |
+| `skyline`             | SkylineLanguage     | Height, coverage, towers, irregularity, neon and palette tint |
+| `shoreline`           | ShorelineProfile    | Shelf depth, enclosure, relief                                |
+| `traffic`             | TrafficMix          | Harbour and air movements an hour, road scale                 |
+| `defence`             | DefencePosture      | Batteries, interceptors, response minutes                     |
+| `industry`            | IndustryProfile     | Contract, salvage and research scales                         |
+| `plan`                | DistrictPlacement[] | At least four wedges, from the shared district registry       |
+| `landmarks`           | LandmarkSlotSpec[]  | At least one. Slots, never buildings                          |
+| `ambience`            | string[]            | At least one tag. Weather and machinery, never music          |
+| `rebuildRate`         | number              | One is ordinary                                               |
+| `approachBearingsDeg` | number[]            | At least one, degrees from the seaward bearing                |
+| `modifiers`           | MissionModifierId[] | The conditions that apply here                                |
+
+## Mission modifiers (Milestone 27)
+
+`src/data/missionModifiers.ts`. Every scale must be above zero and at or below
+two; anything larger is refused as "not a modifier, a different game". A
+modifier that leaves every value at its neutral is refused as a label.

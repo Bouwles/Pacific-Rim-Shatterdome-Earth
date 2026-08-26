@@ -295,6 +295,42 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Region profiles (Milestone 27)
+
+Seven in `src/data/regionProfiles.ts`, one per land region. Each carries a
+skyline language, a shoreline, a traffic mix, a defence posture, an industry, a
+district plan, landmark slots, ambience tags, a rebuild rate, approach bearings
+and its mission modifiers. The validator refuses a profile whose identity is
+only a name and a colour.
+
+| Region      | Skyline                                  | Shelf | Approaches | Conditions                               |
+| ----------- | ---------------------------------------- | ----- | ---------- | ---------------------------------------- |
+| hong-kong   | Towers out of deep water, hills behind   | 34 m  | 3          | dense harbour, typhoon                   |
+| tokyo       | Capped low by seismic code, very dense   | 18 m  | 2          | shallow bay, shipping congestion         |
+| sydney      | Small tight core, drowned river valley   | 46 m  | 2          | dense harbour                            |
+| manila      | Vast low sprawl, a few towers            | 22 m  | 3          | typhoon, volcanic, shipping congestion   |
+| anchorage   | Single storey under very large mountains | 12 m  | 1          | ice, shallow bay, mountainous approach   |
+| lima        | Pale render on a desert terrace          | 64 m  | 3          | mountainous approach                     |
+| vladivostok | Blocks stepped up a narrow frozen inlet  | 28 m  | 1          | ice, dense harbour, mountainous approach |
+
+Approaches shown are the authored bearings before narrowing; conditions cut them
+down, which is why Anchorage and Vladivostok end up with one.
+
+## Mission modifiers (Milestone 27)
+
+Seven in `src/data/missionModifiers.ts`. Every one moves numbers the simulation
+already reads, and one that changes nothing is refused.
+
+| Modifier             | Footing | Accuracy | Visibility | Depth | Collateral | Narrowing |
+| -------------------- | ------- | -------- | ---------- | ----- | ---------- | --------- |
+| ice                  | 0.72    | 0.94     | 0.88       | 1.00  | 0.90       | 0.20      |
+| typhoon              | 0.88    | 0.70     | 0.55       | 1.15  | 1.20       | 0.00      |
+| dense-harbour        | 0.95    | 0.90     | 0.85       | 0.80  | 1.35       | 0.35      |
+| volcanic-risk        | 0.90    | 1.00     | 0.80       | 1.00  | 1.10       | 0.45      |
+| shallow-bay          | 1.00    | 1.05     | 1.10       | 0.45  | 0.90       | 0.55      |
+| shipping-congestion  | 1.00    | 0.88     | 0.90       | 1.00  | 1.45       | 0.25      |
+| mountainous-approach | 0.85    | 1.10     | 1.20       | 1.00  | 0.80       | 0.75      |
+
 ## Sites (Milestone 26)
 
 Eleven in `src/data/sites.ts` across eight kinds. Every entry declares the region

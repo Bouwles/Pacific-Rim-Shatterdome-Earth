@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-1662 unit and integration tests, plus 145 Playwright browser tests.
+1717 unit and integration tests, plus 150 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,27 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 27 acceptance evidence
+
+Measured at seed 20260902, in the browser by hand and in the unit, integration
+and scenario suites.
+
+| Acceptance item                                             | Evidence                                                                                                                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Screenshots without interface are distinguishable by region | Live at midday with the interface hidden: Anchorage reads cold grey, low and scattered against hills; Manila reads warm tan, packed, on tropical green |
+| ...by silhouette                                            | 256 blocks and 354 towers in Anchorage against 711 and 3,976 in Manila, live in the ground view                                                        |
+| ...by climate, palette and activity                         | Every region has a distinct palette and activity figure, asserted over all seven; the closest pair sit 0.26 apart on the silhouette metric             |
+| The same kaiju encounter plays differently                  | Slide 12 m in Tokyo against 20.7 m in Vladivostok; hit chance 0.62 to 1.1; detection 950 m to 2,880 m; two of seven regions where nothing can dive     |
+| ...because of terrain and city structure                    | Approach counts differ, and Anchorage and Vladivostok narrow to a single corridor because of their ground                                              |
+| All regions use shared streaming and destruction            | Every city built by one `generateCityLayout` call and damaged by one `RegionDestruction`; asserted for all seven, and all four stream live             |
+| Identity is not flags and labels                            | The validator refuses a profile that changes no geometry, no palette and no conditions, and a modifier that changes nothing                            |
+| No copyrighted map data                                     | Every layout is procedural from wedges, bearings and radii. No dataset is imported anywhere in the project                                             |
+| No cultural stereotyping                                    | Places are described by geography and infrastructure only, asserted by a test scanning every profile's text                                            |
+
+No defects found in this milestone's own code. One test needed correcting: it
+called a destruction API that does not exist, and was rewritten against the real
+`RegionDestruction` class.
 
 ## Milestone 26 acceptance evidence
 

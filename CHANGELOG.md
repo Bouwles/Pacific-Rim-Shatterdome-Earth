@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-02, Milestone 27: Seven places that are actually different
+
+Hong Kong stopped being the only city with a city in it.
+
+- Every land region now has a real city: Tokyo, Sydney, Manila, Anchorage, Lima and Vladivostok as well as Hong Kong. None of them is a record on a map any more.
+- Each one is built differently rather than recoloured. Tokyo is capped low by seismic code and packed almost solid. Anchorage is single storey and spread thin under enormous mountains. Manila is a vast low sprawl with a handful of towers standing out of it. Vladivostok steps up hillsides around a narrow frozen inlet. Lima sits on a desert terrace a hundred metres above the sea.
+- The numbers bear it out: 256 blocks and 354 towers in Anchorage against 711 blocks and 3,976 towers in Manila, out of the same generator with nothing bespoke anywhere.
+- Seven conditions that change how a fight goes: ice, typhoon, dense harbour, volcanic ground, shallow bay, shipping congestion and mountainous approaches. Each moves footing, gunnery, sight, water depth, clutter, collateral and rebuilding, and a modifier that changes nothing is refused outright.
+- The same creature is a different fight in each place. It slides twelve metres in Tokyo and twenty in Vladivostok. Ranged fire is worth ninety percent in Sydney and sixty in Manila. You hold a contact at 2,880 metres off Lima and 950 in a Manila storm. In Tokyo and Anchorage the water is too shallow to dive at all, so everything happens on the surface. In Anchorage there is exactly one way in.
+- Shorelines that matter. Tokyo is eighteen metres deep and Sydney forty-six, and that decides whether either side can open a fight from under the water.
+- Defence postures that differ. Tokyo has eight batteries and six interceptor flights six minutes out; Manila has three batteries and sixteen minutes over a much longer shore.
+- Industry that pays. A container port and finance centre pays more for the same contract; a shipyard returns better salvage; a staging post is worth more for research than for money.
+- A trade web between places. Wreck Hong Kong and six other regions see their own contract income fall, because the shipping that made them worth defending was going somewhere.
+- A region panel that says all of it: the skyline, the shore, the water and whether anything can hide in it, how many approaches there are, the industry, the defences, the traffic and what the local conditions actually mean for the crew.
+
+Places here are described by geography and infrastructure only, never by the people who live in them, and a test enforces it. Everything is a stylised approximation composed procedurally; no commercial map data is used anywhere.
+
 ## 2026-09-01, Milestone 26: A planet worth crossing
 
 The map stopped being a list of places you can already go.

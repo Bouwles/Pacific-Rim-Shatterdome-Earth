@@ -288,6 +288,22 @@ cap, or bay work on a machine that is not in the bay.
 
 ## The contracts terminal (Milestone 18)
 
+### The region panel
+
+The world screen carries a Region section reporting where you are standing: the
+skyline, the shore and the ground behind it, how deep the water is and whether
+anything can hide in it, how many directions a creature can arrive from, what
+the place makes and what that is worth, the local batteries and how long they
+take to respond, the traffic through the region, and how fast it rebuilds.
+
+Underneath it, the conditions in plain sentences rather than a list of names.
+"Footing is poor and everything takes longer to put right afterwards." "There is
+one way in. Hold it and the fight is yours to shape." "The water is too shallow
+to dive. Everything happens on the surface."
+
+Teleporting to another region changes all of it, because the panel is read off
+that region's profile rather than kept anywhere.
+
 ### The map
 
 The world screen carries a Map section from the moment a world exists. It shows

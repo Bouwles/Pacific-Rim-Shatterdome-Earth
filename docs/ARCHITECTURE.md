@@ -1313,6 +1313,44 @@ is carried on the pose so the reason reaches the player rather than the input
 silently doing nothing. `landingSlopeDeg` samples the ground around a point
 rather than at it, because a machine lands on an area.
 
+## Regional identity: profiles, modifiers and the shared city grammar
+
+Three modules, none of which Babylon or the DOM can see.
+
+`src/data/regionProfiles.ts` is what makes a place that place: a skyline
+language, a shoreline and relief, a traffic mix, a defence posture, an industry,
+a district plan, landmark slots, ambience, a rebuild rate and the bearings
+creatures arrive on. The validator refuses a profile that changes no geometry,
+no palette and no conditions, because that is a label rather than a place.
+
+`src/data/missionModifiers.ts` is what the ground, the water and the weather do
+to a fight. Every modifier moves values the simulation already reads, and one
+that changes nothing is refused. Scales multiply; approach narrowing takes the
+strongest rather than adding, because two reasons a creature can only come one
+way is still one way.
+
+`src/world/regionIdentity.ts` is the whole integration, and it is pure.
+`districtsFor` reshapes the **shared** district table for a region: same seven
+districts everywhere, built differently. That is the seam that makes a new city
+a data row rather than a scene, because `generateCityLayout` already takes an
+injected district map and a plan. Nothing in the layout generator, the
+destruction system or the streaming system knows a region profile exists.
+
+`silhouetteOf` reduces a place to the numbers a screenshot would show, so an
+automated test can fail when two cities have become the same city — something a
+screenshot cannot do on its own. `conditionsFor` derives the fight: effective
+water depth, whether anything can submerge, how many approaches survive the
+narrowing, what the local guns are worth, and the briefing lines.
+
+`economicsFor`, `relationshipsFor` and `knockOnEffect` are the strategic layer.
+Relationships are derived from shipping volume and whether two places make
+different things, so a link is a trade route rather than an opinion; wrecking one
+end costs the other end part of its contract income.
+
+Regions are described by geography and infrastructure only. A test asserts that
+no profile text characterises the people who live anywhere, and every layout is
+a stylised procedural approximation with no commercial map data involved.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads

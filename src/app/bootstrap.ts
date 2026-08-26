@@ -27,6 +27,7 @@ import {
   type WorldScreenHandle,
   type WorldViewMode,
   type MapReadout,
+  type RegionIdentityReadout,
 } from "../ui/worldScreen";
 import { GlobeView } from "../debug/globeView";
 import { WorldState } from "../world/worldState";
@@ -60,7 +61,9 @@ import { WeatherView } from "../engine/weatherView";
 import { AmbientAudio } from "../engine/ambientAudio";
 import { resolveFeetHeight, sampleWaveHeight, waveFieldCoordinates } from "../world/ocean";
 import type { EnvironmentSample } from "../world/environment";
-import { createDistrictRegistry, HONG_KONG_DISTRICT_PLAN, type DistrictKind } from "../data/districts";
+import { createDistrictRegistry, type DistrictKind } from "../data/districts";
+import { createRegionProfileRegistry } from "../data/regionProfiles";
+import { conditionsFor, districtsFor, economicsFor } from "../world/regionIdentity";
 import { generateCityLayout, type CityLayout } from "../world/cityLayout";
 import {
   ALERT_LEVELS,
@@ -1008,7 +1011,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }
     // The sortie pays into the same treasury the market spends from, once,
     // from the mission's own ledger.
-    market.credit(results.funding, results.salvageTons, results.samples, `sortie.${active.id}`);
+    // What a place is worth defending, and what comes back from it, follow the
+    // region's industry. A port with smelters returns more usable alloy; a
+    // financial centre pays more for the same fight. Both are properties of the
+    // infrastructure, not of anybody living there.
+    const localEconomics = regionConditionsFor(active.regionId)?.economics;
+    market.credit(
+      results.funding * (localEconomics?.contractScale ?? 1),
+      results.salvageTons * (localEconomics?.salvageScale ?? 1),
+      results.samples * (localEconomics?.researchScale ?? 1),
+      `sortie.${active.id}`,
+    );
 
     // And the allied crews, guarded by the same mission id everything else uses.
     for (const line of squad.completeSortie({
@@ -1356,6 +1369,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   };
 
   const districtRegistry = createDistrictRegistry();
+  const regionProfiles = createRegionProfileRegistry();
   const districtsById = new Map<DistrictKind, ReturnType<typeof districtRegistry.getOrThrow>>(
     districtRegistry.all().map((district) => [district.id, district]),
   );
@@ -1474,22 +1488,77 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     worldState.setRegionDamage(regionId, destruction.snapshot(), destruction.report(), kernel?.tick ?? 0);
   };
 
+  /**
+   * The city for a region, laid out from that region's own profile.
+   *
+   * One generator, one district registry, one destruction system. What differs
+   * between cities is the plan and the reshaped district rules going in, which
+   * is why adding a region is a data row rather than a scene.
+   */
   const layoutFor = (regionId: string): CityLayout | null => {
     const region = regionRegistry.get(regionId);
     if (!region || region.cityPlanId === null) return null;
     const existing = cityLayouts.get(regionId);
     if (existing) return existing;
+    const profile = regionProfiles.get(region.cityPlanId);
+    if (!profile) return null;
     const layout = generateCityLayout({
       regionId: region.id,
       seed: kernel?.seed ?? 0,
       radiusMeters: region.radiusMeters,
       seawardBearingDeg: region.seawardBearingDeg,
-      plan: HONG_KONG_DISTRICT_PLAN,
-      districts: districtsById,
+      plan: profile.plan,
+      districts: districtsFor(profile, districtsById),
       maxBlocks: 1_400,
     });
     cityLayouts.set(regionId, layout);
     return layout;
+  };
+
+  /** What fighting in a region is like, and what defending it is worth. */
+  const regionConditionsFor = (regionId: string) => {
+    const region = regionRegistry.get(regionId);
+    const profile = region?.cityPlanId ? regionProfiles.get(region.cityPlanId) : undefined;
+    if (!profile) return null;
+    return { conditions: conditionsFor(profile), economics: economicsFor(profile), profile };
+  };
+
+  /**
+   * What makes the region the player is in that region.
+   *
+   * Every line is derived from the profile, so nothing on screen can describe a
+   * place the fight there would not match.
+   */
+  const identityReadoutFor = (regionId: string | null): RegionIdentityReadout | null => {
+    if (!regionId) return null;
+    const local = regionConditionsFor(regionId);
+    if (!local) return null;
+    const { conditions, economics, profile } = local;
+    const modifierNames = profile.modifiers.map((id) =>
+      id
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" "),
+    );
+
+    return {
+      regionId,
+      skyline: profile.skyline.notes,
+      shoreline: profile.shoreline.notes,
+      industry: `${economics.industry}: contracts ${Math.round(economics.contractScale * 100)}%, salvage ${Math.round(economics.salvageScale * 100)}%, research ${Math.round(economics.researchScale * 100)}%.`,
+      defence: `${profile.defence.batteries} batteries, ${profile.defence.interceptors} interceptor flights, ${profile.defence.responseMinutes} minutes to respond.`,
+      traffic: `${profile.traffic.harbourPerHour} shipping and ${profile.traffic.airPerHour} air movements an hour.`,
+      modifiers: modifierNames,
+      briefings: conditions.briefings,
+      water: conditions.divingPossible
+        ? `${conditions.effectiveDepthMeters} m of water. Deep enough to dive.`
+        : `${conditions.effectiveDepthMeters} m of water. Nothing can submerge here.`,
+      approaches:
+        conditions.approachBearingsDeg.length === 1
+          ? "One approach. It has to come in that way."
+          : `${conditions.approachBearingsDeg.length} approaches to cover.`,
+      rebuild: `Rebuilds at ${Math.round(conditions.rebuildRate * 100)} percent of the ordinary rate.`,
+    };
   };
 
   /**
@@ -3183,6 +3252,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       pilotNotice,
       war: warReadout(),
       map: mapReadoutFor(),
+      identity: identityReadoutFor(worldState.activeRegionId),
     });
     globeView?.refresh();
   };

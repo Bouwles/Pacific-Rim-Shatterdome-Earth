@@ -255,7 +255,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - travel time from real distance, and a route planner offering straight there and by way of what is known, with the direct route always faster so the assist stays a choice;
   - booster heat that costs more per burst than a second of cooling returns, a refusal reason carried on the pose, and a landing-slope helper;
   - a map section reporting found against still out there, deployment points, squad readiness, thruster heat, and every found site with distance, travel time, danger and a stated reason on any control that cannot act.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1662 unit+integration), `smoke` (145 Playwright), `build` all pass.
+- **Seven cities that are actually different places**, all through the shared systems:
+  - a profile per region carrying a skyline language, shoreline and relief, traffic mix, defence posture, landmark slots, ambience, industry, rebuild rate and the bearings creatures arrive on;
+  - a validator that refuses a profile whose identity is only a name and a colour, one with no landmark slots, and one with a plan too thin to read as a city;
+  - a pure identity layer that reshapes the shared district table per region, so a city is different data rather than different code;
+  - seven mission modifiers moving footing, gunnery, sight, water depth, clutter, collateral, rebuilding and how many directions a creature can arrive from, with a modifier that changes nothing refused;
+  - measured distinctiveness: every region has its own silhouette, palette and conditions, and the closest pair are still clearly apart;
+  - the same encounter varying from twelve to twenty metres of slide, 0.62 to 1.1 hit chance, 950 to 2,880 metres of detection, and two of seven regions where nothing can submerge at all;
+  - industry scaling contracts, salvage and research, and a trade web where wrecking one region costs the regions that trade with it;
+  - places described by geography and infrastructure only, enforced by a test, with everything a stylised procedural approximation and no commercial map data anywhere.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1717 unit+integration), `smoke` (150 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

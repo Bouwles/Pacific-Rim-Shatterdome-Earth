@@ -653,6 +653,31 @@ site with distance, travel time and danger, and a route box. Created `src/data/s
 - `npm run typecheck`, `lint`, `format:check`, `test` (1662), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 27 - Additional global cities, climates, landmarks and regional identity
+
+**Depends on:** Milestone 04 (regions), 07 and 14 (the city grammar and destruction), 26 (the map).
+**Status:** done.
+**Scope:** seven region profiles giving each place a skyline language, shoreline and terrain relief,
+traffic mix, defence posture, landmark slots, ambience, industry, rebuilding capability and the bearings
+creatures actually arrive on; seven mission modifiers covering ice, typhoon, dense harbour, volcanic
+risk, shallow bay, shipping congestion and mountainous approaches, each changing numbers the simulation
+already reads; a pure identity layer that reshapes the shared district table per region rather than
+adding content; city plans for every land region, so none is a strategic record any more; strategic
+economics where industry scales contracts, salvage and research, and a trade web where wrecking one
+region costs the regions that trade with it; and a region panel on the world screen reporting all of it.
+Created `src/data/regionProfiles.ts`, `src/data/missionModifiers.ts`, `src/world/regionIdentity.ts`,
+`src/debug/regionScenario.ts`. Extended `src/data/regions.ts` with a plan per region, the bootstrap to
+lay each city out from its own profile, and the world screen with a region section.
+**Acceptance tests:**
+
+- Every region has a distinct silhouette, palette and set of fight conditions, measured rather than
+  assumed, with the closest pair still clearly apart.
+- The same encounter varies in slide distance, hit chance, detection range, whether it can open
+  underwater and how many directions it can come from.
+- Every city is laid out by the one generator and damaged by the one destruction system.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1717), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

@@ -241,6 +241,36 @@ export interface RouteLegRow {
   readonly travelMinutes: number;
 }
 
+/**
+ * What makes the region the player is in that region.
+ *
+ * Read off the profile rather than kept here, so what the panel says about a
+ * place is what the fight there will actually do.
+ */
+export interface RegionIdentityReadout {
+  readonly regionId: string;
+  /** The skyline in words: what it looks like from the water. */
+  readonly skyline: string;
+  /** The shore and the ground behind it. */
+  readonly shoreline: string;
+  /** What the place makes, and what that is worth. */
+  readonly industry: string;
+  /** What the local guns manage on their own. */
+  readonly defence: string;
+  /** Movements per hour through the region. */
+  readonly traffic: string;
+  /** The conditions, named. */
+  readonly modifiers: readonly string[];
+  /** What the conditions mean, in the order they matter. */
+  readonly briefings: readonly string[];
+  /** How deep the water is, and whether anything can hide in it. */
+  readonly water: string;
+  /** How many directions a creature can arrive from. */
+  readonly approaches: string;
+  /** How fast the place puts itself back together. */
+  readonly rebuild: string;
+}
+
 export interface MapReadout {
   /** Found sites, nearest first. */
   readonly sites: readonly MapSiteRow[];
@@ -284,6 +314,8 @@ export interface WorldReadout {
   readonly war: WarReadout | null;
   /** The map: what has been found, what it costs to reach, and how to get there. */
   readonly map: MapReadout | null;
+  /** What makes this region itself. Null outside a region with a profile. */
+  readonly identity: RegionIdentityReadout | null;
 }
 
 export interface WorldScreenCallbacks {
@@ -663,6 +695,31 @@ export function renderWorldScreen(
   });
   rebuildRow.append(rebuildLabel, rebuildButton);
 
+  // What makes this place this place. Built once and refilled, like the rest.
+  const identitySection = document.createElement("div");
+  identitySection.className = "world-readout world-identity";
+  identitySection.dataset.section = "identity";
+  identitySection.hidden = true;
+  const identityHeader = document.createElement("div");
+  identityHeader.className = "world-row";
+  const identityKey = document.createElement("span");
+  identityKey.className = "world-key";
+  identityKey.textContent = "Region";
+  const identityValue = document.createElement("span");
+  identityValue.className = "world-value";
+  identityValue.dataset.field = "identity-skyline";
+  identityHeader.append(identityKey, identityValue);
+
+  const identityList = document.createElement("ul");
+  identityList.className = "world-identity-list";
+  identityList.dataset.field = "identity-lines";
+
+  const briefingList = document.createElement("ul");
+  briefingList.className = "world-identity-list";
+  briefingList.dataset.field = "identity-briefings";
+
+  identitySection.append(identityHeader, identityList, briefingList);
+
   // The map. What has been found, what it costs to reach, and what the squad
   // can do about it. Built once and refilled, like every other section here.
   const mapSection = document.createElement("div");
@@ -960,6 +1017,7 @@ export function renderWorldScreen(
     timeRow,
     waterRow,
     routeRow,
+    identitySection,
     mapSection,
     warSection,
     rebuildRow,
@@ -999,6 +1057,43 @@ export function renderWorldScreen(
 
   return {
     update(state) {
+      // What makes this region itself: the shape of it, what it makes, what it
+      // can do about a creature, and what the conditions there mean.
+      const identity = state.identity;
+      identitySection.hidden = identity === null;
+      if (identity) {
+        identityValue.textContent = identity.skyline;
+        identityList.replaceChildren(
+          ...[
+            identity.shoreline,
+            identity.water,
+            identity.approaches,
+            identity.industry,
+            identity.defence,
+            identity.traffic,
+            identity.rebuild,
+            identity.modifiers.length > 0
+              ? `Conditions: ${identity.modifiers.join(", ")}`
+              : "No local conditions.",
+          ].map((text) => {
+            const line = document.createElement("li");
+            line.textContent = text;
+            return line;
+          }),
+        );
+        briefingList.replaceChildren(
+          ...(identity.briefings.length === 0
+            ? ["Nothing unusual about fighting here."]
+            : identity.briefings
+          ).map((text) => {
+            const line = document.createElement("li");
+            line.className = "world-identity-briefing";
+            line.textContent = text;
+            return line;
+          }),
+        );
+      }
+
       // The map: everywhere known, what it costs to get there, and what can be
       // done about it. Rebuilt from the readout rather than kept here, so the
       // map cannot describe a world that has moved on.

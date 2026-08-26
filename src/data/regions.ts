@@ -10,7 +10,7 @@ import { LAND_MASK_TARGET, OCEAN_MASK_TARGET, type TerrainAnchor } from "../worl
  * generator has no notion of which way a coast faces; the city plan rotates with
  * this so a harbour district ends up on the water.
  *
- * `cityPlanId` is null everywhere except Hong Kong. Only a region with a plan
+ * `cityPlanId` names the region profile the city is laid out from. Only a region with a plan
  * gets blocks, roads, lanes and evacuation zones; the rest remain strategic
  * records, which is the honest state for a region nobody has built yet.
  *
@@ -49,7 +49,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 13_900,
     deploymentPoint: true,
     seawardBearingDeg: 150,
-    cityPlanId: null,
+    cityPlanId: "tokyo",
     notes: "Dense bay-side sprawl; heavy civilian pressure in any breach.",
   },
   {
@@ -62,7 +62,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 5_300,
     deploymentPoint: true,
     seawardBearingDeg: 110,
-    cityPlanId: null,
+    cityPlanId: "sydney",
     notes: "Harbour approach gives kaiju a sheltered run at the centre.",
   },
   {
@@ -75,7 +75,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 13_500,
     deploymentPoint: true,
     seawardBearingDeg: 250,
-    cityPlanId: null,
+    cityPlanId: "manila",
     notes: "Closest major population centre to the Breach approach lanes.",
   },
   {
@@ -88,7 +88,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 290,
     deploymentPoint: true,
     seawardBearingDeg: 200,
-    cityPlanId: null,
+    cityPlanId: "anchorage",
     notes: "Cold-weather operations and the northern Pacific watch line.",
   },
   {
@@ -101,7 +101,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 9_700,
     deploymentPoint: true,
     seawardBearingDeg: 240,
-    cityPlanId: null,
+    cityPlanId: "lima",
     notes: "Eastern Pacific coverage.",
   },
   {
@@ -114,7 +114,7 @@ const REGIONS: readonly RegionDefinition[] = [
     populationThousands: 600,
     deploymentPoint: true,
     seawardBearingDeg: 140,
-    cityPlanId: null,
+    cityPlanId: "vladivostok",
     notes: "Northwest Pacific watch line.",
   },
   {
