@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-04, Milestone 29: Something to listen to
+
+The game stopped being silent apart from a noise bed.
+
+- Ten mixing buses with a fader each: master, music, ambience, destruction, Jaeger, kaiju, interface, dialogue, radio and accessibility cues. Every one says what lives on it, and a bus that does not say is refused at registration.
+- Ducking with a priority order behind it. A radio call pulls the music down and leaves the accessibility cues exactly where they were, because a cue that stands in for something you cannot perceive must not be the thing that goes quiet when somebody talks.
+- Volumes that are remembered. They live beside the display settings rather than in a save, so loading an old campaign does not reset them and starting a new one does not lose them.
+- Layered sound instead of one impact for everything. A standing machine sounds three layers; the same machine sprinting on rubble with a torn shoulder and a hot reactor sounds nine. Plate rattles once the frame is damaged and armour tears only past the point where plate is actually failing.
+- Twenty eight layers across three profiles: hip and shoulder servos, footfall mass and plate, reactor idle and strain, weapon charge, armour strain and tear, cockpit hum and alarm, water and rubble contact, and two creature categories built from calls, breath, footsteps, drag, plate, organs and abilities.
+- A coastal creature and a deep one that do not sound alike from the same state, and a creature that goes under water loses its plate and gains its organs.
+- Eleven music states that follow what is happening: the complex, exploring, a warning, deployment, ordinary combat, heavy combat, a final phase, victory, loss and recovery. Urgent changes cut in quickly and calm ones take four seconds, and layers common to both states are held rather than faded out and back in.
+- Twenty two written radio lines from seven speakers, each with a priority, a cooldown, a duration and its own text. LOCCENT, the Marshal, the chief engineer, K-Science, an allied ranger, the cockpit itself and the copilot beside you, who is in the room rather than on a radio and is filtered accordingly.
+- One voice at a time. Something more important cuts an interruptible line off, a critical line is never cut, chatter is dropped rather than queued, and the queue is bounded at four with the least important thing waiting the first to go. Push forty two lines at the channel at once and no warning is ever the thing thrown away.
+- A conversation record that saves. A player who was busy fighting can read back what was said afterwards, and the cooldown clocks come back with it so loading a save does not fire every line in the game again at once.
+- Subtitles in the HUD with the speaker's callsign on them, so every line is readable with the sound off or absent.
+- Voices are synthesised, not recorded. A band-limited burst on each speaker's own frequency range, so LOCCENT and the person beside you are told apart without a single audio file, and the written line carries the meaning.
+
+Nothing here bundles film audio, film dialogue or a commercial soundtrack, and nothing ever will. Every sound is a synthesis recipe with a clearly named slot a real recording could be dropped into later, and a missing recording plays the placeholder without a word of complaint.
+
 ## 2026-09-03, Milestone 28: A cockpit that tells you things
 
 The interface stopped being a debug readout and became something you can fly with.

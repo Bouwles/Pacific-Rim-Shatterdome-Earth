@@ -642,3 +642,39 @@ draw calls.
 Strips are rebuilt on refresh rather than diffed, which is affordable at this
 node count. If the instrument list grows substantially, the same signature
 comparison the world map's site list uses should be applied here.
+
+## Sound
+
+**Sustained voices: 48.** A sustained voice is an oscillator or looping buffer
+that stays alive across frames: a machine layer, a creature layer or a music
+layer. The measured worst case in the deterministic scenario is 24, in a storm
+fight with a damaged machine and a creature on screen, so the cap is double the
+observed peak. Past it, `SoundStage` refuses to build the next layer and counts
+it, and the count is shown in the audio readout rather than being swallowed.
+
+**Why a cap at all.** Layer counts are driven by state, and state can be
+pathological: several machines, several creatures and a boss phase at once. A
+cap converts that from a frame rate cliff into a documented, visible omission.
+
+**Node churn.** Layers that were already sounding are ramped rather than
+restarted, so a machine changing speed does not rebuild its graph. Only layers
+that genuinely started or stopped create or destroy nodes. Every one-shot node,
+a spoken line included, disconnects itself in `onended`, so a long session cannot
+accumulate a graph of finished sounds.
+
+**Ramps: 120 ms.** Every gain change is ramped rather than set. An instant change
+is an audible click, which costs nothing to avoid and is impossible to fix later
+by turning something down.
+
+**Crossfades: 260 ms to 4 s.** Urgent music changes take the short end and calm
+ones the long end. Layers common to both states are held through the change
+rather than faded out and immediately back in, which is what stops a transition
+sounding like a cut and also avoids rebuilding those voices.
+
+**The conversation record: 200 entries.** Bounded, oldest dropped first, because
+it is written to the save file and a campaign that runs for weeks must not
+accumulate an unbounded log inside it.
+
+**The radio queue: 4.** One line speaks at a time and at most four wait. A fight
+that generates more traffic than that is generating traffic nobody could listen
+to anyway, so the excess is dropped by priority rather than queued.

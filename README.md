@@ -300,11 +300,22 @@ src/engine       Babylon engine selection and the boot scene
 src/app          bootstrap, application state machine, config
 src/debug        developer overlay, asset gallery, deterministic scenario runner
 src/data         typed content registries and asset manifests
+src/audio        buses, mixing, ducking, the adaptive score, the radio queue
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
 docs             architecture, content schema, controls, world coordinates, save migrations, performance budgets
 ```
+
+### Sound
+
+Ten buses with a fader each, from the pilot panel: master, music, ambience, destruction, Jaeger, kaiju, interface, dialogue, radio and accessibility cues. Every fader says what it controls. Your levels are stored in the browser beside the display settings, not in a save, so they follow you between campaigns.
+
+A radio call ducks the music and the ambience under it. It never ducks the accessibility cues, and it never ducks another radio call: one voice speaks at a time, something more important cuts an interruptible line off, a critical warning is never cut, and idle chatter is dropped rather than made to wait. Everything said is written to a conversation record you can open from the same panel and read back afterwards, and that record is saved with the campaign.
+
+Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
+
+If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
 
 ### Saves
 

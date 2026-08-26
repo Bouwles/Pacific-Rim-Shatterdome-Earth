@@ -829,3 +829,76 @@ are entirely in the data.
 | prop.bridge-section | bridge | 4,200 t  | 2.4x         | 14              | 2      | 80 m      |
 | prop.fuel-tanker    | tanker | 600 t    | 1.5x         | 4               | 1      | 30 m      |
 | prop.rubble-slab    | debris | 180 t    | 1.2x         | 2               | 2      | 20 m      |
+
+## Audio buses (Milestone 29)
+
+Ten rows in `src/data/audioBuses.ts`. Every sound in the game belongs to exactly
+one of them, and every one has a fader.
+
+| id            | Default | Duck depth | Duck priority | Carries                                       |
+| ------------- | ------- | ---------- | ------------- | --------------------------------------------- |
+| master        | 0.80    | 0          | 0             | Everything                                    |
+| music         | 0.55    | 0.60       | 1             | The adaptive score                            |
+| ambience      | 0.70    | 0.45       | 2             | Wind, water, rain, city hum, the room         |
+| ui            | 0.60    | 0.30       | 4             | Panels, confirmations, refusals               |
+| destruction   | 0.85    | 0.25       | 5             | Buildings coming down, debris                 |
+| jaeger        | 0.90    | 0.20       | 6             | Servos, footfalls, reactor, weapons, cockpit  |
+| kaiju         | 0.90    | 0.20       | 7             | Calls, breath, movement, plate, organs        |
+| dialogue      | 1.00    | 0          | 9             | Anybody speaking to you in the room           |
+| radio         | 1.00    | 0          | 10            | LOCCENT, allies, and every warning            |
+| accessibility | 1.00    | 0          | 11            | Cues that replace something a player may miss |
+
+A bus is only ducked by a bus with a higher priority, and a duck depth of zero
+means never. The validator refuses a bus that does not state what it carries.
+
+## Sound profiles (Milestone 29)
+
+Three rows in `src/data/soundProfiles.ts`, twenty eight layers between them.
+Every layer is a synthesis recipe with a named slot for a real recording, and
+the validator refuses a profile with fewer than four layers or fewer than three
+kinds of layer.
+
+| id                    | Subject | Layers | Identity                                        |
+| --------------------- | ------- | ------ | ----------------------------------------------- |
+| sound.jaeger.standard | jaeger  | 13     | Heavy hydraulics over a steady reactor hum      |
+| sound.kaiju.coastal   | kaiju   | 9      | Low, wet and organic; breath and mass           |
+| sound.kaiju.deep      | kaiju   | 6      | Pressure and infrasound, quieter and much lower |
+
+## Music states (Milestone 29)
+
+Eleven rows in `src/audio/musicDirector.ts`, built from eight instrument roles.
+
+| id          | Tempo | Urgency | What it is for                              |
+| ----------- | ----- | ------- | ------------------------------------------- |
+| silent      | 0     | 0       | Menus, and anywhere the score is in the way |
+| shatterdome | 62    | 1       | A working building, nothing urgent          |
+| exploration | 58    | 1       | Somewhere large and mostly empty            |
+| warning     | 84    | 4       | Something inbound, nobody launched          |
+| deployment  | 96    | 3       | On the way, committed, not yet in it        |
+| combat-low  | 112   | 5       | A fight going roughly as expected           |
+| combat-high | 132   | 7       | It is going badly and everybody knows it    |
+| boss-phase  | 140   | 9       | The thing has stopped holding back          |
+| victory     | 76    | 6       | It is over and the city is still there      |
+| loss        | 48    | 6       | It is over and the city is not              |
+| recovery    | 66    | 2       | Back at the complex, putting things right   |
+
+## Radio lines and speakers (Milestone 29)
+
+Seven speakers and twenty two written lines in `src/data/radioLines.ts`, plus the
+crew's own dialogue registered at runtime from the pilot definitions.
+
+| Speaker        | Callsign | Band, Hz    | Bus      |
+| -------------- | -------- | ----------- | -------- |
+| loccent        | LOCCENT  | 420 - 3,100 | radio    |
+| marshal        | MARSHAL  | 300 - 3,400 | radio    |
+| chief-engineer | ENG      | 380 - 3,000 | radio    |
+| ally-ranger    | ALLY     | 450 - 2,900 | radio    |
+| science        | K-SCI    | 400 - 3,200 | radio    |
+| system         | SYS      | 600 - 4,000 | radio    |
+| copilot        | COPILOT  | 90 - 8,000  | dialogue |
+
+The copilot is in the pod with you rather than on a radio, which is why their
+band is not narrowed and why they duck the dialogue bus rather than the radio one.
+
+Priorities, highest first: critical, high, normal, low, chatter. A critical line
+may not be marked interruptible, and the validator refuses one that is.

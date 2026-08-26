@@ -12,12 +12,13 @@ import { validateEconomySnapshot, type EconomySnapshot } from "../world/economy"
 import { validateResearchSnapshot, type ResearchSnapshot } from "../research/program";
 import { validateLibrarySnapshot, type LibrarySnapshot } from "../custom/blueprintLibrary";
 import { validateExplorationSnapshot, type ExplorationSnapshot } from "../world/exploration";
+import { validateRadioSave, type RadioSaveState } from "../audio/radioDirector";
 
 /**
  * Version of the save envelope, versioned separately from SIM_SCHEMA_VERSION so
  * the wrapper and the simulation snapshot can evolve independently.
  */
-export const ROOT_SAVE_VERSION = 16;
+export const ROOT_SAVE_VERSION = 17;
 
 /** Version reported for a bare kernel snapshot with no envelope around it. */
 export const LEGACY_UNWRAPPED_VERSION = 0;
@@ -67,6 +68,15 @@ export interface RootSave {
   readonly library: LibrarySnapshot;
   /** What has been found out there, and what has already been taken. */
   readonly exploration: ExplorationSnapshot;
+  /**
+   * Everything that has been said to the player, and when.
+   *
+   * Authoritative because it is readable: a player who was busy fighting can
+   * open the record afterwards and find out what LOCCENT was shouting. It also
+   * carries the cooldown clocks, so loading a save does not let every line in
+   * the game fire again at once.
+   */
+  readonly radio: RadioSaveState;
 }
 
 /** What the repository persists: the document plus an integrity digest of it. */
@@ -222,6 +232,7 @@ export function validateRootSave(document: unknown): string[] {
   errors.push(...validateResearchSnapshot(document["research"]));
   errors.push(...validateLibrarySnapshot(document["library"]));
   errors.push(...validateExplorationSnapshot(document["exploration"]));
+  errors.push(...validateRadioSave(document["radio"]));
 
   if (errors.length === 0) {
     // Engine objects, functions and undefined all throw here, which is the guard

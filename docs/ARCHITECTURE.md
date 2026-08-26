@@ -1445,3 +1445,61 @@ determinism broke.
 table must use: `register()` runs an injected validator and throws an actionable message on invalid or
 duplicate entries; lookups are `get`/`getOrThrow`/`has`/`all`. `data/jaegers.ts` is the first (placeholder)
 consumer. Gameplay code must key behavior off registry data, never off a switch statement on an id string.
+
+## Sound
+
+Sound is split the same way everything else in this project is split: the
+decisions are pure and the realisation is not.
+
+**Pure, in `src/audio/`.** `mixer.ts` turns levels and ducking requests into a
+level per bus. `musicDirector.ts` is a state machine over eleven named states
+with a crossfade whose length comes from how urgent the change is.
+`layerModel.ts` decides which layers of a sound profile are audible given
+movement and damage. `radioDirector.ts` is a priority queue with cooldowns,
+interruption and a conversation record. `soundscape.ts` owns all four and hands
+out one snapshot per frame. None of them touches WebAudio, reads a clock or uses
+RNG: time arrives as a delta in seconds, which is what lets the entire journey
+from the complex to under water be asserted in a unit test.
+
+**Realised, in `src/engine/soundStage.ts`.** One class, and the only place in
+the project that creates an audio node from any of this. It hangs off the
+ambience context rather than making its own, because browsers cap how many
+contexts a page may have and two contexts would mean two clocks.
+
+**Buses.** Ten, declared in `src/data/audioBuses.ts`, each with a default level,
+a duck depth, a duck priority and a statement of what lives on it. A bus is only
+ducked by a bus with a higher priority, and a bus with a duck depth of zero is
+never ducked at all. Dialogue, radio and the accessibility cues are all zero.
+That is the rule the whole ducking design exists to serve: a cue that stands in
+for something a player cannot perceive must not be the thing that goes quiet
+when somebody talks.
+
+**Nothing is a file.** Every sound is a synthesis recipe: a shape, a centre
+frequency, a bandwidth, an envelope and a level, plus a clearly named slot a real
+recording could be dropped into later. A missing recording plays the placeholder.
+This is not a limitation being worked around, it is the legal boundary the
+project is built inside: no film audio, no film dialogue, no commercial score,
+ever.
+
+**One sound for everything is the failure.** A footfall is a mass thump, a plate
+rattle and a servo settle, and which of the three is audible depends on how fast
+the machine is moving and how badly it is damaged. `cueDistance` puts a number on
+how different two states sound, which is how a test asserts that a damaged
+machine is not the same sound with a smaller bar next to it.
+
+**One voice at a time.** The radio director holds exactly one active line by
+construction, so overlapping speech is not a bug that can be introduced by a
+caller. Something more important cuts an interruptible line off, a critical line
+is never cut, chatter is dropped rather than queued, and the queue is bounded at
+four with the least important thing waiting the first to be dropped.
+
+**The crew go through the same queue.** Pilot dialogue lives in the pilot
+definitions and is turned into radio lines by `crewVoice.ts`, registered at
+runtime through `ContentRegistry.replace`. That means the crew cannot talk over
+a warning, because they are in the same queue as the warning rather than in a
+second voice system beside it.
+
+**What is saved and what is not.** The conversation record and the per-line
+cooldowns are authoritative and go in the save. Volumes are a property of the
+person and the room they are in rather than of a campaign, so they live in
+`localStorage` beside the display settings.

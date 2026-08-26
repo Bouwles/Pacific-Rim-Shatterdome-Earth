@@ -735,3 +735,26 @@ typography. Created `src/ui/hudTokens.ts`, `src/ui/hudModel.ts`, `src/ui/present
 **Depends on:** all prior phases.
 **Status:** not-started.
 **Next action:** not started.
+
+## Phase 3 / Milestone 29 - Audio identity, adaptive music, radio and dialogue
+
+**Depends on:** Milestone 28.
+**Status:** complete.
+
+Ten mixing buses with saved faders and a ducking order that can never quieten
+the accessibility cues. Twenty eight sound layers across three profiles, chosen
+by movement and damage state so one impact sound is never played for everything.
+Eleven adaptive music states covering exploration, warning, deployment, combat
+intensity, a boss phase, victory, loss and recovery, with urgency-scaled
+crossfades. A radio queue with priorities, cooldowns, interruption, subtitles,
+speaker identity and a saved conversation record, which the crew's own authored
+dialogue now goes through as well.
+
+Everything is synthesised in the browser from recipes with named asset slots. No
+film audio, no film dialogue and no commercial score is bundled, and the
+validators refuse content that would have no placeholder to fall back on.
+
+**Next action:** give the simulation real events for the things the radio
+currently notices by watching a counter, so a line is fired by what happened
+rather than by a difference between two frames, and give a pilot with several
+lines for a moment a rotation rather than always the first.

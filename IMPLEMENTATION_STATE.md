@@ -274,7 +274,19 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - motion bounded to 900 ms with nothing looping, and every duration set to zero under reduced motion;
   - safe-area padding and typography derived from the player's own scale;
   - proven across six viewing conditions against eleven settings combinations, 60 of 60 keeping every critical alert intact.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1769 unit+integration), `smoke` (158 Playwright), `build` all pass.
+- **Sound that is actually a system**, built on the ambience bed rather than replacing it:
+  - ten mixing buses with a fader each, a stated purpose each, and a ducking rule where a bus is only pulled down by a bus above it and a duck depth of zero means never;
+  - dialogue, radio and the accessibility cues at zero depth, so no amount of traffic can quieten a cue that stands in for something a player cannot perceive;
+  - volumes stored in the browser beside the display settings rather than in a save, clamped rather than refused on load;
+  - twenty eight sound layers across three profiles, chosen per frame by speed, damage, heat, reactor load, footing, weapon state and what is faulted, so a calm machine sounds five layers and a wrecked one nine;
+  - a coastal creature and a deep one that do not sound alike from the same state, and a creature under water that loses its plate and gains its organs;
+  - eleven music states with crossfades from 260 ms to four seconds depending on urgency, holding the layers both states share so a change is not a cut;
+  - a radio queue that holds exactly one active line, cuts an interruptible line off for something more important, never cuts a critical one, drops chatter rather than queuing it, and bounds the queue at four;
+  - twenty two written lines from seven speakers, plus the crew's own authored dialogue registered at runtime so pilots go through the same queue as the warnings;
+  - a saved conversation record with per-line cooldowns, at save version 17, readable in the pilot panel;
+  - subtitles inside the HUD, never faded, carrying the speaker's callsign;
+  - everything synthesised: no file is ever loaded, so a missing recording is a placeholder that plays rather than a console full of errors.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1910 unit+integration), `smoke` (163 Playwright: 157 pass, 3 blocked behind a pre-existing builder-suite timeout, 3 lost to CPU contention and passing on their own), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -335,12 +347,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- `tests/e2e/builder.spec.ts` "shows a build with every number it is made of" times out waiting for an ordered facility to become operational, and the three tests after it in that file do not run. Verified failing the same way on a clean checkout of the previous commit, so it is a pre-existing problem with that test's construction wait rather than anything Milestone 29 did.
+- Sound has been verified in Chromium under automation and by the deterministic scenario. It has not been listened to by a person on real speakers, and the placeholder synthesis is tuned by frequency and envelope rather than by ear. Anybody replacing the placeholders with real recordings should expect to retune the layer levels.
+- Radio triggers are evaluated once per frame from the current situation rather than fired from the events they describe. Every one of the twenty two lines has a trigger, but there is no event bus entry for "a sample was recovered", so the ones that are about something happening rather than something being true are noticed by holding the previous count and watching it move. That works and is honest, but it means a change that happens and reverses inside one frame is not noticed, and the counters are reset rather than restored on load, so the first frame after a load does not announce a backlog.
 - `hashState` is a 64-bit non-cryptographic digest. Fine as a divergence detector; not tamper-resistant, which matters if save integrity ever needs to resist editing.
 
 ## Key file paths
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- Sound: [src/audio/mixer.ts](src/audio/mixer.ts), [musicDirector.ts](src/audio/musicDirector.ts), [radioDirector.ts](src/audio/radioDirector.ts), [layerModel.ts](src/audio/layerModel.ts), [soundscape.ts](src/audio/soundscape.ts), [crewVoice.ts](src/audio/crewVoice.ts), realised in [src/engine/soundStage.ts](src/engine/soundStage.ts)
 - Engine adapter / boot scene: [src/engine/engineAdapter.ts](src/engine/engineAdapter.ts), [src/engine/scene.ts](src/engine/scene.ts)
 - Simulation kernel: [src/simulation/kernel.ts](src/simulation/kernel.ts), [loop.ts](src/simulation/loop.ts), [clock.ts](src/simulation/clock.ts), [commands.ts](src/simulation/commands.ts), [events.ts](src/simulation/events.ts), [rng.ts](src/simulation/rng.ts), [hash.ts](src/simulation/hash.ts)
 - Entities: [src/entities/entity.ts](src/entities/entity.ts)
@@ -391,7 +407,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - Civilian positions are not fed to ally scoring yet, so protect civilians and escort behave as though the evacuation is always far away. The situation field exists and is wired to Infinity.
 - Copilot conversations, treatment and stand-downs all happen at the berth panel, because that is where the machine and its crew are already shown together. The Crew Quarters and the medical bay exist as rooms but have no terminals of their own yet.
 - The `marksman` chassis role is in the vocabulary and two pilots prefer it, but no shipped chassis uses it, so that half of their preference cannot apply until one does.
-- Dialogue is off-duty lines only. `onDeploy`, `onDamage` and `onVictory` are authored and validated but nothing plays them yet, because there is no radio system in a fight.
+- Crew dialogue now plays: `onDeploy`, `onDamage`, `onVictory` and `offDuty` are registered with the radio when a sortie is planned and go through the same queue as every warning. What is still missing is rotation: a pilot with three lines for a moment says the first one, and the cooldown is what stops it repeating rather than a second line taking its turn.
 - Manufacturer standing only moves when you buy. Missions produce a reputation figure that the war reads, but nothing yet connects a good sortie to a better price.
 
 ## Exact next task

@@ -16,6 +16,7 @@ import { emptyEconomySnapshot, type EconomySnapshot } from "../world/economy";
 import { emptyResearchSnapshot, type ResearchSnapshot } from "../research/program";
 import { emptyLibrarySnapshot, type LibrarySnapshot } from "../custom/blueprintLibrary";
 import { emptyExplorationSnapshot, type ExplorationSnapshot } from "../world/exploration";
+import { emptyRadioSnapshot, type RadioSaveState } from "../audio/radioDirector";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -75,6 +76,8 @@ export interface SaveRequest {
   readonly library?: LibrarySnapshot;
   /** Discovered and worked sites. Omitted by callers with no world. */
   readonly exploration?: ExplorationSnapshot;
+  /** What has been said, and the cooldowns. Omitted by callers with no radio. */
+  readonly radio?: RadioSaveState;
 }
 
 /**
@@ -146,6 +149,7 @@ export class SaveService {
     const research = request.research ?? emptyResearchSnapshot();
     const library = request.library ?? emptyLibrarySnapshot();
     const exploration = request.exploration ?? emptyExplorationSnapshot();
+    const radio = request.radio ?? emptyRadioSnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -172,6 +176,7 @@ export class SaveService {
       research,
       library,
       exploration,
+      radio,
     };
   }
 

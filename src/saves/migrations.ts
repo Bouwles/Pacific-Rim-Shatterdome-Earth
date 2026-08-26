@@ -18,6 +18,7 @@ import { emptyEconomySnapshot } from "../world/economy";
 import { emptyResearchSnapshot } from "../research/program";
 import { emptyLibrarySnapshot } from "../custom/blueprintLibrary";
 import { emptyExplorationSnapshot } from "../world/exploration";
+import { emptyRadioSnapshot } from "../audio/radioDirector";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -460,6 +461,26 @@ const addExplorationSection: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 16, exploration: emptyExplorationSnapshot() }),
 };
 
+/**
+ * Version 16 to 17: the radio.
+ *
+ * Adds a `radio` section: the conversation record, and the cooldown clock for
+ * every line that has been said.
+ *
+ * A version 16 save has neither, because nobody was talking yet. It comes back
+ * with an empty record and no cooldowns, which is the honest reading: the
+ * campaign genuinely has no history of anything being said, and starting every
+ * line off cooldown is correct rather than merely convenient, since none of
+ * them have ever been heard.
+ */
+const addRadioSection: MigrationStep = {
+  id: "16",
+  fromVersion: 16,
+  toVersion: 17,
+  description: "Add the radio: the conversation record and the per-line cooldown clocks.",
+  apply: (document) => ({ ...document, schemaVersion: 17, radio: emptyRadioSnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -490,6 +511,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addResearchSection);
   registry.register(addBlueprintLibrary);
   registry.register(addExplorationSection);
+  registry.register(addRadioSection);
   return registry;
 }
 

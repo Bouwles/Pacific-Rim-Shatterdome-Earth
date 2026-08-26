@@ -13,6 +13,7 @@ import type { EconomySnapshot } from "../world/economy";
 import type { ResearchSnapshot } from "../research/program";
 import type { LibrarySnapshot } from "../custom/blueprintLibrary";
 import type { ExplorationSnapshot } from "../world/exploration";
+import type { RadioSaveState } from "../audio/radioDirector";
 
 /**
  * Everything about saving that needs the browser: thumbnails from the canvas,
@@ -71,6 +72,7 @@ export class SaveController {
     research?: ResearchSnapshot,
     library?: LibrarySnapshot,
     exploration?: ExplorationSnapshot,
+    radio?: RadioSaveState,
   ): Promise<void> {
     await this.service.save(slotId, kernel, {
       name,
@@ -88,6 +90,7 @@ export class SaveController {
       research,
       library,
       exploration,
+      radio,
     });
   }
 
@@ -105,6 +108,7 @@ export class SaveController {
     research?: ResearchSnapshot,
     library?: LibrarySnapshot,
     exploration?: ExplorationSnapshot,
+    radio?: RadioSaveState,
   ): Promise<string> {
     return this.service.autosave(kernel, {
       playTimeMs: this.playTimeMs,
@@ -121,6 +125,7 @@ export class SaveController {
       research,
       library,
       exploration,
+      radio,
     });
   }
 

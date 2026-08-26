@@ -492,3 +492,36 @@ sortie is not saved.
 in the air and running status effects are all live state belonging to the fight
 they happened in, and a fight is not saved. Damage that outlives a battle is the
 subject of the next milestone, and that is what will move the version.
+
+## Version 16 to 17: the radio (Milestone 29)
+
+Version 17 adds a `radio` section: the conversation record, and the cooldown
+clock for every line that has been said.
+
+The record is one entry per line: which line, who said it, the text itself, the
+priority, the second it happened on, and whether it was spoken, interrupted or
+dropped. It is authoritative because it is readable. A player who spent a sortie
+being shot at can open the record afterwards and find out what LOCCENT was
+shouting, which is not something that can be recomputed from anything else.
+
+It is bounded at two hundred entries, oldest first. A campaign that runs for
+weeks does not accumulate an unbounded log inside its own save file.
+
+The cooldown clocks are saved with it, and that is deliberate. Without them,
+loading a save would put every line in the game back off cooldown at once, and
+the first frame after a load would fire a breach warning, a reactor warning and
+a funding warning together.
+
+A version 16 save has neither, because nobody was talking yet. It comes back
+with an empty record and no cooldowns, which is the honest reading of a file
+written before there was a radio: the campaign genuinely has no history of
+anything being said, and every line genuinely has never been heard.
+
+On load, a record naming a line this build no longer has is skipped rather than
+resurrected or refused. Renaming a line is a content change, and a content
+change must not stop an old campaign from opening.
+
+Volumes are deliberately **not** in the save. How loud somebody wants the music
+is a property of the person and the room they are in, not of a campaign, so the
+mixing desk lives in `localStorage` beside the display settings. Loading an old
+save must not reset it and starting a new campaign must not lose it.

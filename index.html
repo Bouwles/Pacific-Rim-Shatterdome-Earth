@@ -208,6 +208,52 @@
           calc(12px * var(--hud-text-scale)) / 1.4 "Consolas",
           monospace;
       }
+      /* The subtitle band. Sits under the critical alerts and above the
+         instruments, because it is read at the same glance as both, and it is
+         never faded: a line you cannot read is a line that was not said. */
+      #uiRoot .pilot-subtitle {
+        padding: 5px 10px;
+        border-left: 3px solid rgba(127, 214, 255, 0.7);
+        border-radius: 3px;
+        background: rgba(4, 10, 16, 0.72);
+        opacity: 1;
+        font:
+          calc(13px * var(--hud-text-scale)) / 1.45 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-subtitle[data-priority="critical"] {
+        border-left-color: rgb(255, 128, 106);
+      }
+      #uiRoot .pilot-faders {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 2px 10px;
+      }
+      #uiRoot .pilot-faders label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        justify-content: space-between;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-faders input[type="range"] {
+        flex: 1 1 70px;
+        min-width: 60px;
+      }
+      #uiRoot .pilot-transcript {
+        flex-basis: 100%;
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        max-height: 140px;
+        overflow-y: auto;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        opacity: 0.85;
+      }
       #uiRoot .pilot-hud-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

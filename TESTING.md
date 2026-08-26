@@ -685,3 +685,41 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | A dodge does not erase weight                                            | Costs stamina, invulnerable only in the middle, keeps its recovery, and cancels out of nothing but moves that list an evade                                                                               |
 | Move list has no jargon                                                  | Six groups read live in the browser, coaching lines only, and a test asserts the panel text never contains tick or frame                                                                                  |
 | Live browser fight                                                       | Jab, cross and forward heavy chained for "3 in a row"; the seize was refused in words while the heavy was recovering, then took hold and reported "60% loose" before the creature fought free             |
+
+## Milestone 29 acceptance evidence
+
+The soundscape is asserted by the deterministic scenario in
+`src/debug/audioScenario.ts` rather than by listening, because "it sounds right"
+is not something a test can hold. Two runs of it produce the same digest.
+
+| Acceptance item                                               | Evidence                                                                                                                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Audio transitions cleanly through all four states             | The scenario walks complex, carrier, storm combat and under water, settling on shatterdome, deployment, combat-high and boss-phase. Every crossfade finishes |
+| No gap where nothing is playing                               | Every step of every leg has at least one voice or a subtitle; the scenario reports `continuous` per leg and the test requires all four                       |
+| Voice lines do not overlap uncontrollably                     | One active line by construction. Forty two lines pushed at the channel twice over: ten spoken, thirty one dropped, queue never past four, zero overlaps      |
+| Critical warnings win priority                                | Zero critical lines dropped in both the journey and the pressure run. A critical line is never cut, and cannot be marked interruptible                       |
+| Missing optional audio is silence or a documented placeholder | Nothing loads a file at all. Every layer synthesises from its recipe, and every line carries its own text, so a missing recording costs a subtitle nothing   |
+| Not one impact sound for everything                           | A calm machine sounds five layers, a wrecked one nine, at a cue distance of 0.401. Plate rattle and armour tear appear only with damage                      |
+| A creature under water is a different sound                   | Plate drops to 0.15 and the organ layers rise to 0.9; the coastal and deep profiles produce different cue sets from identical state                          |
+| The mix is under the player's control and remembered          | Ten faders in the pilot panel, stored in `localStorage`, asserted across a browser reload in `tests/e2e/audio.spec.ts`                                       |
+| Accessibility cues are never ducked                           | Every bus pushed at full strength at once leaves the accessibility bus exactly where the player set it                                                       |
+| The conversation record survives a save                       | Save version 17. Records and cooldown clocks round trip; a record naming a deleted line is skipped rather than refusing the load                             |
+| Voice budget                                                  | Peak 24 sustained voices in the worst leg, against a cap of 48, reported live in the audio readout                                                           |
+
+### Browser suite result
+
+157 passed, 3 failed, 3 did not run, in 25.9 minutes on one worker.
+
+`tests/e2e/builder.spec.ts` "shows a build with every number it is made of"
+times out waiting up to 420 seconds for an ordered facility to become
+operational, and the three tests after it in that file do not run. It fails the
+same way on a clean checkout of the previous commit with none of this
+milestone's code present, so it is a pre-existing problem with that test's
+construction wait rather than a regression here.
+
+The other two, `city.spec.ts` "shows no city where none has been built" and
+`destruction.spec.ts` "a building-scale fight visibly changes the district",
+were run while the machine was also running the unit suite, a production build
+and a live browser session. Both pass on their own, together, in 2.1 minutes.
+They join `combat.spec.ts` "spends stamina and heat on an attack" as tests whose
+timeouts are tight enough to lose to CPU contention rather than to a defect.

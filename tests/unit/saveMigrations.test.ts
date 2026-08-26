@@ -52,6 +52,7 @@ describe("migrateSave from the version 0 fixture", () => {
       "13",
       "14",
       "15",
+      "16",
     ]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRootSave(result.document)).toEqual([]);

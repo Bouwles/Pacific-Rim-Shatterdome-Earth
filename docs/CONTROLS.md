@@ -718,3 +718,29 @@ visibly, when there is nothing to do.
 
 No squad-command or menu-navigation keys exist yet. See
 [../ROADMAP.md](../ROADMAP.md).
+
+## Sound
+
+The mixing desk is in the pilot panel, under the display settings. Ten faders,
+one per bus, each labelled with what it controls: master, music, ambience,
+destruction, Jaeger, kaiju, interface, dialogue, radio and accessibility cues.
+Hovering a fader says what lives on that bus.
+
+Volumes are stored in the browser and not in a save, so they follow you between
+campaigns. If the browser refuses to store site data the panel says so rather
+than quietly forgetting.
+
+The **Record** button opens the conversation record: everything that has been
+said this session, newest first, with the time and the speaker. It is there for
+a sortie you were too busy to listen to. A campaign that has heard nothing says
+so rather than showing an empty box.
+
+Subtitles are on by default and are switched off with the existing subtitle
+control. The subtitle band sits inside the HUD, above the instruments and below
+the critical warnings, and it is never faded by the HUD opacity setting: a line
+you cannot read is a line that was not said.
+
+Browsers refuse to start audio before you have clicked something. Entering the
+ground view is the first click the game gets, so that is where audio starts. The
+panel reports whether it is running, idle, blocked or unsupported, and everything
+else, subtitles and the conversation record included, works either way.

@@ -138,6 +138,43 @@ export interface PilotScreenState {
   readonly combat: PilotCombatState | null;
   /** The squad and the quick command, or null when nobody came with you. */
   readonly squad: SquadPanelState | null;
+  /** The mixing desk, the subtitle band and the conversation record. */
+  readonly audio: AudioPanelState | null;
+}
+
+/** One fader on the mixing desk. */
+export interface AudioBusRow {
+  readonly id: string;
+  readonly label: string;
+  /** 0 to 1, as the player set it. */
+  readonly level: number;
+  /** What lives on this bus, so nothing is a mystery slider. */
+  readonly carries: string;
+}
+
+/** What is being said, if anything. */
+export interface SubtitleRow {
+  readonly callsign: string;
+  readonly speakerName: string;
+  readonly text: string;
+  readonly priority: string;
+  /** True when this line came in over the top of another one. */
+  readonly interrupting: boolean;
+}
+
+/** Sound, as the player controls and reads it. */
+export interface AudioPanelState {
+  readonly buses: readonly AudioBusRow[];
+  /** Whether volumes will actually be remembered, in words. */
+  readonly note: string;
+  /** Whether the browser let audio start at all. */
+  readonly status: string;
+  /** Null when nobody is speaking. */
+  readonly subtitle: SubtitleRow | null;
+  /** What the score is doing, for anybody who wants to know. */
+  readonly music: string;
+  /** What has been said, newest first. */
+  readonly transcript: readonly string[];
 }
 
 /** One ally, as the squad readout shows them. */
@@ -195,6 +232,10 @@ export interface PilotScreenCallbacks {
   readonly onHighContrast: (enabled: boolean) => void;
   readonly onColourVision: (preset: string) => void;
   readonly onSubtitles: (enabled: boolean) => void;
+  /** Moves one fader. The mixer decides what that means for every other bus. */
+  readonly onAudioLevel: (busId: string, level: number) => void;
+  /** Opens or closes the conversation record. */
+  readonly onTranscript: (open: boolean) => void;
   readonly onExit: () => void;
 }
 
@@ -667,7 +708,14 @@ export function renderPilotScreen(
   cockpit.className = "pilot-cockpit";
   cockpit.dataset["field"] = "hud-instruments";
 
-  hud.append(criticalBand, hudGrid, cockpit);
+  // The subtitle band. Part of the HUD rather than a settings panel, because a
+  // line nobody can hear is only useful where the player is already looking.
+  const subtitleBand = document.createElement("div");
+  subtitleBand.className = "pilot-subtitle";
+  subtitleBand.dataset["field"] = "subtitle";
+  subtitleBand.hidden = true;
+
+  hud.append(criticalBand, subtitleBand, hudGrid, cockpit);
 
   // Display settings, next to the comfort ones because they answer the same
   // question: how do you want to be shown this.
@@ -736,11 +784,44 @@ export function renderPilotScreen(
 
   displayRow.append(opacityLabel, textLabel, contrastLabel, visionLabel, subtitleLabel, displayNote);
 
+  // The mixing desk. One fader per bus, built from the bus list rather than
+  // hand-written, so a bus added later cannot arrive without a control.
+  const audioRow = document.createElement("div");
+  audioRow.className = "pilot-controls";
+  audioRow.dataset["section"] = "audio";
+
+  const faders = document.createElement("div");
+  faders.className = "pilot-faders";
+  faders.dataset["field"] = "audio-buses";
+
+  const audioNote = document.createElement("span");
+  audioNote.className = "pilot-display-note";
+  audioNote.dataset["field"] = "audio-note";
+
+  const transcriptList = document.createElement("ol");
+  transcriptList.className = "pilot-transcript";
+  transcriptList.dataset["field"] = "transcript";
+  transcriptList.hidden = true;
+
+  const transcriptToggle = document.createElement("button");
+  transcriptToggle.type = "button";
+  transcriptToggle.dataset["action"] = "transcript";
+  transcriptToggle.textContent = "Record";
+  let transcriptOpen = false;
+  transcriptToggle.addEventListener("click", () => {
+    transcriptOpen = !transcriptOpen;
+    callbacks.onTranscript(transcriptOpen);
+    transcriptList.hidden = !transcriptOpen;
+  });
+
+  audioRow.append(faders, transcriptToggle, audioNote, transcriptList);
+
   panel.append(
     header,
     hud,
     cameraRow,
     displayRow,
+    audioRow,
     rosterRow,
     comfortRow,
     combatRow,
@@ -756,6 +837,56 @@ export function renderPilotScreen(
 
   return {
     update(state: PilotScreenState): void {
+      // Sound first, because the subtitle band belongs to the HUD and has to be
+      // drawn whether or not there is a machine out.
+      const audio = state.audio;
+      audioRow.hidden = audio === null;
+      if (audio) {
+        audioNote.textContent = `${audio.note} ${audio.status} · ${audio.music}`;
+        // Rebuilt only when the set of buses changes, so a pointer is never
+        // dragged out from under somebody mid-slide.
+        const signature = audio.buses.map((bus) => bus.id).join("|");
+        if (faders.dataset["signature"] !== signature) {
+          faders.dataset["signature"] = signature;
+          faders.replaceChildren(
+            ...audio.buses.map((bus) => {
+              const label = document.createElement("label");
+              label.title = bus.carries;
+              label.append(document.createTextNode(`${bus.label} `));
+              const slider = document.createElement("input");
+              slider.type = "range";
+              slider.min = "0";
+              slider.max = "100";
+              slider.dataset["action"] = "audio-level";
+              slider.dataset["bus"] = bus.id;
+              slider.value = String(Math.round(bus.level * 100));
+              slider.addEventListener("input", () =>
+                callbacks.onAudioLevel(bus.id, Number(slider.value) / 100),
+              );
+              label.appendChild(slider);
+              return label;
+            }),
+          );
+        } else {
+          for (const bus of audio.buses) {
+            const slider = faders.querySelector<HTMLInputElement>(`input[data-bus="${bus.id}"]`);
+            // Not while it is being dragged: writing to a slider under the
+            // pointer fights the person holding it.
+            if (slider && document.activeElement !== slider) {
+              slider.value = String(Math.round(bus.level * 100));
+            }
+          }
+        }
+
+        transcriptList.replaceChildren(
+          ...audio.transcript.map((line) => {
+            const item = document.createElement("li");
+            item.textContent = line;
+            return item;
+          }),
+        );
+      }
+
       // The HUD first, because it is the part that has to be right under
       // pressure. Everything below it is for somebody who has time to read.
       const layer = state.hud;
@@ -773,6 +904,20 @@ export function renderPilotScreen(
         contrast.checked = settings.highContrast;
         visionSelect.value = settings.colourVision;
         subtitles.checked = settings.subtitles;
+
+        // The subtitle. Shown when somebody is speaking and the player has not
+        // turned subtitles off, and never faded below the readable floor.
+        const spoken = audio?.subtitle ?? null;
+        subtitleBand.hidden = spoken === null || !settings.subtitles;
+        if (spoken && settings.subtitles) {
+          subtitleBand.dataset["priority"] = spoken.priority;
+          subtitleBand.textContent = (spoken.interrupting ? "* " : "") + `${spoken.callsign}: ${spoken.text}`;
+        } else {
+          // Cleared as well as hidden. A hidden band still holding the last
+          // thing anybody said is a finished line pretending it is not, and it
+          // would flash back for a frame the next time the band is shown.
+          subtitleBand.textContent = "";
+        }
 
         // The critical band. Never faded, never hidden, and empty when there is
         // genuinely nothing critical rather than as a stylistic choice.

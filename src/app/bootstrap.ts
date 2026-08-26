@@ -59,6 +59,14 @@ import {
 import { SkyView } from "../engine/skyView";
 import { WeatherView } from "../engine/weatherView";
 import { AmbientAudio } from "../engine/ambientAudio";
+import { SoundStage } from "../engine/soundStage";
+import { Soundscape } from "../audio/soundscape";
+import { busRows, type MixerLevels } from "../audio/mixer";
+import { loadLevels, mixerStorage, saveLevels } from "../audio/mixerStore";
+import { SOUND_PROFILES } from "../data/soundProfiles";
+import type { SoundscapeInput } from "../audio/soundscape";
+import { crewLineId, crewLines } from "../audio/crewVoice";
+import type { AudioBusId } from "../data/audioBuses";
 import { resolveFeetHeight, sampleWaveHeight, waveFieldCoordinates } from "../world/ocean";
 import type { EnvironmentSample } from "../world/environment";
 import { createDistrictRegistry, type DistrictKind } from "../data/districts";
@@ -112,7 +120,12 @@ import { EARTH_SCALE, geoToLocal, localToGeo, surfaceDistanceMeters } from "../w
 import { PilotSession } from "../jaegers/pilotSession";
 import { JaegerView } from "../engine/jaegerView";
 import { PilotInputSource } from "../engine/pilotInput";
-import { renderPilotScreen, type PilotScreenHandle, type SquadPanelState } from "../ui/pilotScreen";
+import {
+  renderPilotScreen,
+  type AudioPanelState,
+  type PilotScreenHandle,
+  type SquadPanelState,
+} from "../ui/pilotScreen";
 import type { CameraMode } from "../jaegers/camera";
 import { COMBAT_TICK_SECONDS, createMoveRegistry } from "../data/moves";
 import { createKaijuRegistry } from "../data/kaiju";
@@ -498,6 +511,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               research.snapshot(),
               blueprintLibrary.snapshot(),
               exploration.snapshot(),
+              soundscape.radio.toSave(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -522,6 +536,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               research.snapshot(),
               blueprintLibrary.snapshot(),
               exploration.snapshot(),
+              soundscape.radio.toSave(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -564,6 +579,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             // What was found and what was taken. The sites themselves are placed
             // from the seed, so only the player's own doings have to come back.
             exploration.restore(result.document.exploration);
+            // What was said, and when. Restored last because it is a record of
+            // everything above rather than a system anything else reads.
+            soundscape.radio.restore(result.document.radio);
             refreshCustomChassis();
             applyCountermeasures();
             marketDay = worldState.environment.clock.dayNumber;
@@ -913,6 +931,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     missionSeq += 1;
     missionResults = null;
+    // The crew going out are the crew who can be heard. Registered here rather
+    // than at startup because this is the first moment the game knows who is
+    // flying, and re-registering the same pilot replaces their lines rather
+    // than adding a second copy.
+    teachCrewVoices(plan.pilotIds);
     mission = new Mission({
       id: `mission.${missionSeq}`,
       incidentId: incident.id,
@@ -1210,6 +1233,34 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let skyView: SkyView | undefined;
   let weatherView: WeatherView | undefined;
   let ambientAudio: AmbientAudio | undefined;
+  let soundStage: SoundStage | undefined;
+
+  /**
+   * What the game sounds like.
+   *
+   * Built once and kept for the whole session, because the conversation record
+   * and the cooldown clocks outlive any one screen: walking out of the complex
+   * must not make LOCCENT forget it has already told you about the breach.
+   *
+   * The levels come back from storage rather than the defaults, and every
+   * change goes back to storage through one path, so a volume can never be
+   * changed without being remembered.
+   */
+  const audioStorage = mixerStorage();
+  const restoredLevels = loadLevels(audioStorage);
+  let mixerLevels: MixerLevels = restoredLevels.levels;
+  let mixerNote = restoredLevels.note;
+  let transcriptOpen = false;
+  const machineSoundProfile = SOUND_PROFILES.find((profile) => profile.id === "sound.jaeger.standard");
+  const creatureSoundProfile = SOUND_PROFILES.find((profile) => profile.id === "sound.kaiju.coastal");
+  const soundscape = new Soundscape({
+    levels: mixerLevels,
+    ...(machineSoundProfile ? { machineProfile: machineSoundProfile } : {}),
+    ...(creatureSoundProfile ? { creatureProfile: creatureSoundProfile } : {}),
+  });
+  let lastMusicState = "silent";
+  /** The line that already has a voice, so it is not started again every frame. */
+  let lastSpokenLineId: string | null = null;
   let cityView: CityView | undefined;
   let cityRegionId: string | null = null;
   let diving = false;
@@ -1707,6 +1758,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // still reading them must be gone first.
     skyView?.dispose();
     skyView = undefined;
+    // The stage first: it hangs off the ambience context, so it has to let go
+    // of its nodes before the context is closed underneath it.
+    soundStage?.dispose();
+    soundStage = undefined;
     ambientAudio?.dispose();
     ambientAudio = undefined;
   };
@@ -1728,7 +1783,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     ambientAudio = new AmbientAudio(kernel?.seed ?? 0);
     // Browsers refuse audio outside a user gesture. Entering the ground view is
     // one, so this is the earliest honest place to try.
-    void ambientAudio.start();
+    const bed = ambientAudio;
+    void bed.start().then(() => {
+      // The stage hangs off the ambience context rather than making its own, so
+      // there is one clock for the whole game. A browser that refused audio
+      // leaves this unattached and everything upstream keeps working silently.
+      soundStage = new SoundStage(bed);
+      if (!soundStage.attach()) soundStage = undefined;
+      soundStage?.applyMix(mixerLevels, soundscape.radio.duckRequests());
+    });
     streamer = new SectorStreamer({
       service: WorkerTerrainService.create(),
       sink: sectorRenderer,
@@ -2953,6 +3016,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onHighContrast: (enabled: boolean) => applyPresentation({ highContrast: enabled }),
         onColourVision: (preset: string) => applyPresentation({ colourVision: preset as ColourVisionPreset }),
         onSubtitles: (enabled: boolean) => applyPresentation({ subtitles: enabled }),
+        onAudioLevel: (busId: string, level: number) => applyAudioLevel(busId, level),
+        onTranscript: (open: boolean) => {
+          transcriptOpen = open;
+          refreshPilot();
+        },
         onSkipSequences: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
         },
@@ -3053,6 +3121,314 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
   };
 
+  /**
+   * What the world sounds like right now, in the terms the soundscape uses.
+   *
+   * Read off the systems that are already running rather than tracked
+   * separately, so the score cannot disagree with the fight it is scoring.
+   */
+  const audioSituation = (): SoundscapeInput => {
+    const combat = combatState();
+    const damage = pilotDamageState();
+    const pose = pilotSession?.pose ?? null;
+    const arena = combatArena?.snapshot();
+    const kaijuView = arena?.fighters.find((fighter) => fighter.id === "kaiju");
+
+    const place = combat
+      ? ("combat" as const)
+      : pilotSession
+        ? ("world" as const)
+        : stateMachine.state === AppState.Shatterdome
+          ? ("shatterdome" as const)
+          : ("world" as const);
+
+    // How badly it is going, not how far along it is: a fight at full health
+    // with a full stamina bar is not the same music as one at a third of both.
+    const integrity = (damage?.integrityPercent ?? 100) / 100;
+    const intensity = combat
+      ? Math.max(1 - integrity, combat.heat / 100, 1 - combat.stamina / Math.max(1, combat.staminaMax))
+      : 0;
+
+    return {
+      situation: {
+        place,
+        alertRaised: attackDirector.snapshot().incidents.length > 0 && !combat,
+        combatIntensity: intensity,
+        bossPhase: combat !== null && (kaijuView?.finisherOpen ?? false),
+        outcome: missionResults ? (missionResults.outcome === "success" ? "victory" : "loss") : null,
+        repairing: roster
+          .all()
+          .some((entry) => entry.status === "repairing" || entry.status === "rebuilding"),
+      },
+      machine: pilotSession
+        ? {
+            speedMps: pose?.speedMps ?? 0,
+            damage: 1 - integrity,
+            reactorLoad: Math.min(1, (combat?.heat ?? 0) / 100 + (1 - integrity) * 0.4),
+            heat: (combat?.heat ?? 0) / 100,
+            weaponActive: combat?.activeMove !== null && combat?.activeMove !== undefined,
+            footing:
+              (pose?.submergedFraction ?? 0) > 0.5
+                ? "water"
+                : (pose?.grounded ?? true)
+                  ? "ground"
+                  : "airborne",
+            cockpitAlarm: integrity < 0.3 || (combat?.overheated ?? false),
+          }
+        : null,
+      creature: kaijuView
+        ? {
+            speedMps: 6,
+            damage:
+              1 -
+              kaijuView.zones.reduce((sum, zone) => sum + zone.health / zone.maxHealth, 0) /
+                Math.max(1, kaijuView.zones.length),
+            calling: kaijuView.finisherOpen,
+            abilityCharging: kaijuView.activeMove !== null,
+            exertion: 0.6,
+            submerged: (pose?.submergedFraction ?? 0) > 0.5,
+          }
+        : null,
+    };
+  };
+
+  /**
+   * What causes somebody to say something.
+   *
+   * An ordered list of conditions rather than calls scattered through the
+   * codebase, so every line has one place it can come from and adding a line is
+   * a row. Repetition is not guarded here: the radio director already refuses a
+   * line that is still on cooldown or already waiting.
+   */
+  /**
+   * Counters the trigger table compares against.
+   *
+   * Some lines are about something *happening* rather than something being
+   * true: a sample was recovered, a site was found, a machine came out of the
+   * bay. There is no event bus entry for any of those, so the honest way to
+   * notice them is to hold the last count and watch it move. Held here rather
+   * than inside the table so the table stays a list of conditions.
+   */
+  let lastDiscoveredCount = 0;
+  let lastSampleCount = 0;
+  let lastIncidentCount = 0;
+  let lastAlliesDown = 0;
+  let lastMachinesInWork = 0;
+
+  const sampleTotal = (): number => Object.values(research.samples()).reduce((sum, count) => sum + count, 0);
+  const alliesDown = (): number =>
+    squad.all().filter((ally) => {
+      const record = ally.machineId ? roster.get(ally.machineId) : undefined;
+      return record !== undefined && structuralIntegrity(record.damage) <= 0;
+    }).length;
+  const machinesInWork = (): number =>
+    roster.all().filter((entry) => entry.status === "repairing" || entry.status === "rebuilding").length;
+
+  /** Notices a counter going up, and leaves it where it is. */
+  const rose = (now: number, last: number): boolean => now > last;
+
+  const audioTriggers: readonly {
+    readonly lineId: string;
+    readonly when: (input: SoundscapeInput) => boolean;
+  }[] = [
+    // ----------------------------- critical ------------------------------
+    { lineId: "radio.conn.pod.failing", when: (input) => (input.machine?.damage ?? 0) > 0.75 },
+    { lineId: "radio.reactor.critical", when: (input) => (input.machine?.heat ?? 0) > 0.9 },
+    {
+      lineId: "radio.breach.detected",
+      when: () => rose(attackDirector.snapshot().incidents.length, lastIncidentCount),
+    },
+    {
+      lineId: "radio.civilians.in.path",
+      when: (input) =>
+        input.situation.place === "combat" &&
+        worldState.activeRegionId !== null &&
+        (worldState.recordFor(worldState.activeRegionId)?.safetyRating ?? 1) < 0.7,
+    },
+    // ------------------------------- high --------------------------------
+    { lineId: "radio.contact.inbound", when: (input) => input.situation.place === "combat" },
+    { lineId: "radio.phase.shift", when: (input) => input.situation.bossPhase },
+    {
+      lineId: "radio.ally.engaged",
+      when: (input) => input.situation.place === "combat" && squad.all().length > 0,
+    },
+    { lineId: "radio.ally.down", when: () => rose(alliesDown(), lastAlliesDown) },
+    {
+      lineId: "radio.weak.point",
+      when: (input) => input.situation.place === "combat" && combatArena !== undefined && telegraphed(),
+    },
+    {
+      lineId: "radio.drift.slipping",
+      when: () => mission !== undefined && (readinessFor(mission.incidentId)?.driftStrength ?? 1) < 0.5,
+    },
+    // ------------------------------ normal -------------------------------
+    { lineId: "radio.deploy.launch", when: () => mission?.phase === "carrier" },
+    { lineId: "radio.carrier.approach", when: (input) => input.situation.place === "carrier" },
+    { lineId: "radio.victory", when: (input) => input.situation.outcome === "victory" },
+    { lineId: "radio.loss", when: (input) => input.situation.outcome === "loss" },
+    {
+      // The count going *down* is a machine leaving the bay, which is the one
+      // worth telling somebody about.
+      lineId: "radio.repair.complete",
+      when: () => machinesInWork() < lastMachinesInWork,
+    },
+    { lineId: "radio.funds.low", when: () => market.economy.balance("funding") < 100_000 },
+    // -------------------------------- low --------------------------------
+    { lineId: "radio.sample.recovered", when: () => rose(sampleTotal(), lastSampleCount) },
+    {
+      lineId: "radio.site.discovered",
+      when: () => rose(exploration.discoveredCount(), lastDiscoveredCount),
+    },
+    // ------------------------------ chatter ------------------------------
+    { lineId: "radio.chatter.dome", when: (input) => input.situation.place === "shatterdome" },
+    {
+      lineId: "radio.chatter.weather",
+      when: (input) => input.situation.place === "world" && sampleEnvironment().weather.kind !== "clear",
+    },
+  ];
+
+  /** Whether research has actually revealed a weak point on what is being fought. */
+  const telegraphed = (): boolean => (combatArena?.telegraphs().length ? true : false);
+
+  /** Moves every counter to where it is now, after the table has read them. */
+  const settleAudioCounters = (): void => {
+    lastDiscoveredCount = exploration.discoveredCount();
+    lastSampleCount = sampleTotal();
+    lastIncidentCount = attackDirector.snapshot().incidents.length;
+    lastAlliesDown = alliesDown();
+    lastMachinesInWork = machinesInWork();
+  };
+
+  /**
+   * One frame of sound.
+   *
+   * Pure decisions upstream, one application downstream: the soundscape works
+   * out what should be heard and the stage realises it. A browser that refused
+   * audio simply has no stage, and everything above it keeps running, which is
+   * what makes the subtitles and the conversation record work in silence.
+   */
+  const advanceSoundscape = (deltaSeconds: number): void => {
+    const input = audioSituation();
+    for (const trigger of audioTriggers) {
+      if (trigger.when(input)) soundscape.say(trigger.lineId);
+    }
+    settleAudioCounters();
+    // The crew speak for the same reasons, through the same queue. Their lines
+    // are chatter or ordinary traffic, so a warning always wins.
+    if (input.situation.outcome === "victory") sayCrewLine("onVictory");
+    else if ((input.machine?.damage ?? 0) > 0.4) sayCrewLine("onDamage");
+    else if (input.situation.place === "combat" || input.situation.place === "carrier") {
+      sayCrewLine("onDeploy");
+    } else if (input.situation.place === "shatterdome") sayCrewLine("offDuty");
+    const snapshot = soundscape.update(deltaSeconds, input);
+    lastMusicState = snapshot.musicState;
+    if (!soundStage) return;
+
+    // A line that has just started gets a voice. Comparing the id rather than
+    // the object is what stops the same line being spoken again on every frame
+    // it is still running, and a line that cut another off silences the old one
+    // first so two bursts can never overlap.
+    const speaking = soundscape.radio.speaking;
+    const speakingId = speaking?.line.id ?? null;
+    if (speakingId !== lastSpokenLineId) {
+      if (lastSpokenLineId !== null) soundStage.stopSpeech();
+      if (speaking) soundStage.speak(speaking.line, speaking.speaker);
+      lastSpokenLineId = speakingId;
+    }
+
+    soundStage.applyMix(mixerLevels, snapshot.ducking);
+    soundStage.setMusic(snapshot.music);
+    if (machineSoundProfile) soundStage.setLayers(machineSoundProfile, snapshot.machineCues);
+    if (creatureSoundProfile) soundStage.setLayers(creatureSoundProfile, snapshot.creatureCues);
+  };
+
+  /**
+   * Teaches the radio what the crew aboard actually say.
+   *
+   * Called when a sortie is planned, because that is the first moment the game
+   * knows who is flying. Registering is idempotent: the same pilot registered
+   * twice replaces their own lines rather than adding a second copy, and the
+   * cooldown clock is keyed on the line id, so it survives the re-registration
+   * and a save.
+   */
+  const teachCrewVoices = (pilotIds: readonly string[]): void => {
+    for (const pilotId of pilotIds) {
+      const pilot = pilotRegistry.get(pilotId);
+      if (!pilot) continue;
+      for (const line of crewLines(pilot)) soundscape.define(line);
+    }
+  };
+
+  /** Which crew line, if any, the moment calls for. */
+  const sayCrewLine = (moment: "onDeploy" | "onDamage" | "onVictory" | "offDuty"): void => {
+    const pilotIds = mission?.plan.pilotIds ?? [];
+    for (const pilotId of pilotIds) {
+      const pilot = pilotRegistry.get(pilotId);
+      if (!pilot || pilot.dialogue[moment].length === 0) continue;
+      // The first line they have for the moment. The radio's own cooldown is
+      // what stops it being said again straight away, so there is no need for a
+      // second rotation scheme here.
+      const decision = soundscape.say(crewLineId(pilotId, moment, 0));
+      if (decision.outcome === "spoken" || decision.outcome === "queued") return;
+    }
+  };
+
+  /** Takes a fader change, applies it, and remembers it. One path, always. */
+  const applyAudioLevel = (busId: string, level: number): void => {
+    soundscape.setLevel(busId as AudioBusId, level);
+    mixerLevels = soundscape.mixerLevels;
+    mixerNote = saveLevels(audioStorage, mixerLevels).note;
+    soundStage?.applyMix(mixerLevels, soundscape.radio.duckRequests());
+    refreshPilot();
+  };
+
+  /**
+   * The conversation record, in words.
+   *
+   * A campaign that has heard nothing says so rather than showing an empty box:
+   * an empty list and a broken list look identical, and only one of them is
+   * worth telling somebody about.
+   */
+  const transcriptLines = (): readonly string[] => {
+    const records = soundscape.radio.transcript(30);
+    if (records.length === 0) return ["Nothing has been said yet."];
+    return records.map((record) => `${record.atSeconds.toFixed(0)}s ${record.speaker}: ${record.text}`);
+  };
+
+  /** The mixing desk, the subtitle and the record, as the panel shows them. */
+  const audioPanelState = (): AudioPanelState => {
+    const subtitle = soundscape.radio.subtitle();
+    return {
+      buses: busRows(mixerLevels).map((row) => ({
+        id: row.id,
+        label: row.label,
+        level: row.level,
+        carries: row.carries,
+      })),
+      note: mixerNote,
+      status: (() => {
+        const stage = soundStage?.stats();
+        const state = ambientAudio?.currentStatus ?? "idle";
+        if (!stage) return `Audio ${state}`;
+        const dropped = stage.droppedForBudget > 0 ? `, ${stage.droppedForBudget} over budget` : "";
+        return `Audio ${state} · ${stage.voices + stage.musicVoices} voices${dropped}`;
+      })(),
+      subtitle: subtitle
+        ? {
+            callsign: subtitle.callsign,
+            speakerName: subtitle.speakerName,
+            text: subtitle.text,
+            priority: subtitle.priority,
+            interrupting: subtitle.interrupting,
+          }
+        : null,
+      music: `Score: ${lastMusicState}`,
+      // Only built when somebody has asked to read it, because the record can
+      // run to two hundred lines and nobody needs that every frame.
+      transcript: transcriptOpen ? transcriptLines() : [],
+    };
+  };
+
   /** Pushes the machine's own numbers at the panel. Throttled like every other readout. */
   const refreshPilot = (): void => {
     if (!pilotScreen || !pilotSession) return;
@@ -3094,6 +3470,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       blocked: lastPilotBlocked,
       combat: pilotCombat,
       squad: squadPanelState(),
+      audio: audioPanelState(),
     });
   };
 
@@ -3867,6 +4244,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       weatherView?.update(sample, bootScene.scene.activeCamera);
       sectorRenderer.updateWater(sample, local);
       ambientAudio?.update(sample.audio);
+      // Sound advances on the same frame delta as everything else, clamped the
+      // same way, so a stalled tab cannot make the score jump a whole state.
+      advanceSoundscape(Math.min(0.1, deltaMs / 1000));
 
       // Walking into or out of a region swaps the city under the player.
       if (cityRegionId !== worldState.activeRegionId) rebuildCityView();
@@ -5718,6 +6098,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       cityView?.dispose();
       weatherView?.dispose();
       skyView?.dispose();
+      soundStage?.dispose();
       ambientAudio?.dispose();
       globeView?.dispose();
       worldScreen?.dispose();

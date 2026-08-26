@@ -83,6 +83,14 @@ export class AmbientAudio {
   private lowPass: BiquadFilterNode | null = null;
   private readonly sources: AudioBufferSourceNode[] = [];
   private status: AmbientAudioStatus = "idle";
+  /**
+   * The ambience bus level, from the mixer.
+   *
+   * The bed is still generated here; how loud it ends up is the mixer's
+   * decision, so a player turning ambience down reaches this rather than being
+   * a second, separate volume control.
+   */
+  private busScale = 1;
   private lastStats: AmbientAudioStats = { status: "idle", lowPassHz: 0, level: 0, waterMix: 0 };
   private disposed = false;
 
@@ -92,6 +100,31 @@ export class AmbientAudio {
 
   get currentStatus(): AmbientAudioStatus {
     return this.status;
+  }
+
+  /**
+   * The running context, for the sound stage to hang its own graph from.
+   *
+   * One context for the whole game: browsers limit how many can exist, and two
+   * would mean two clocks and no way to schedule a warning against a footfall.
+   */
+  get audioContext(): AudioContext | null {
+    return this.context;
+  }
+
+  /** Sets the ambience bus level. Applied on the next update(). */
+  setBusLevel(level: number): void {
+    this.busScale = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
+    if (this.status === "running") this.update(this.environmentFromStats());
+  }
+
+  private environmentFromStats(): AudioEnvironment {
+    return {
+      state: this.lastStats.waterMix > 0.5 ? "underwater" : "surface",
+      lowPassHz: this.lastStats.lowPassHz,
+      ambientLevel: this.lastStats.level,
+      waterMix: this.lastStats.waterMix,
+    };
   }
 
   /**
@@ -181,7 +214,10 @@ export class AmbientAudio {
     // Ramped rather than set: a step change in cutoff or gain is an audible click.
     this.lowPass.frequency.linearRampToValueAtTime(Math.max(60, environment.lowPassHz), at);
     // Held well below unity on purpose. This is a bed, not a soundtrack.
-    this.masterGain.gain.linearRampToValueAtTime(Math.min(0.28, environment.ambientLevel * 0.28), at);
+    this.masterGain.gain.linearRampToValueAtTime(
+      Math.min(0.28, environment.ambientLevel * 0.28) * this.busScale,
+      at,
+    );
     this.airGain.gain.linearRampToValueAtTime(1 - environment.waterMix, at);
     this.waterGain.gain.linearRampToValueAtTime(environment.waterMix, at);
   }

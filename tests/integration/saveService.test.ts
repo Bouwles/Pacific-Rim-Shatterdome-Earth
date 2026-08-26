@@ -162,6 +162,7 @@ describe("round trip through a kernel", () => {
       "market",
       "metadata",
       "mission",
+      "radio",
       "research",
       "roster",
       "savedAt",

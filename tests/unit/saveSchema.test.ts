@@ -12,6 +12,7 @@ import { emptyEconomySnapshot } from "../../src/world/economy";
 import { emptyResearchSnapshot } from "../../src/research/program";
 import { emptyLibrarySnapshot } from "../../src/custom/blueprintLibrary";
 import { emptyExplorationSnapshot } from "../../src/world/exploration";
+import { emptyRadioSnapshot } from "../../src/audio/radioDirector";
 import {
   ROOT_SAVE_VERSION,
   autosaveSlotId,
@@ -55,6 +56,7 @@ function goodSave(overrides: Partial<RootSave> = {}): RootSave {
     research: emptyResearchSnapshot(),
     library: emptyLibrarySnapshot(),
     exploration: emptyExplorationSnapshot(),
+    radio: emptyRadioSnapshot(),
     world: {
       schemaVersion: WORLD_SCHEMA_VERSION,
       playerPosition: { latitudeDeg: 22.3193, longitudeDeg: 114.1694, altitudeMeters: 0 },
