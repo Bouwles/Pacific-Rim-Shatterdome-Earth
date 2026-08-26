@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FACILITY_EFFECTS } from "../../src/data/facilities";
+import { FACILITY_EFFECTS, FACILITY_KINDS } from "../../src/data/facilities";
 import { jaegerRegistry } from "../../src/data/jaegers";
 import {
   RESEARCH_BRANCHES,
@@ -56,7 +56,7 @@ function fullCapacity() {
     researchRate: 1,
     facilityTiers: {
       research: 3,
-      manufacturing: 3,
+      manufacture: 3,
       reactor: 3,
       defense: 3,
       logistics: 3,
@@ -120,6 +120,16 @@ describe("the research table", () => {
       samples: [{ sampleId: "sample.hide", count: 20 }],
     };
     expect(validateResearchNode(greedy).join(" ")).toMatch(/grind/);
+  });
+
+  it("only names facilities the complex actually has", () => {
+    // A node requiring a facility that does not exist can never be started, and
+    // nothing would have said so: the refusal would have named a tier of a room
+    // nobody could build.
+    for (const node of RESEARCH_NODES) {
+      if (!node.requiresFacility) continue;
+      expect(FACILITY_KINDS as readonly string[], node.id).toContain(node.requiresFacility.facilityId);
+    }
   });
 
   it("only names facility effects the complex actually has", () => {
@@ -622,6 +632,14 @@ describe("manufacturing something nobody sells", () => {
     expect(createManufactureRegistry().all().length).toBe(MANUFACTURE_RECIPES.length);
   });
 
+  it("only names facilities the complex actually has", () => {
+    for (const recipe of MANUFACTURE_RECIPES) {
+      expect(FACILITY_KINDS as readonly string[], recipe.chassisId).toContain(
+        recipe.requiresFacility.facilityId,
+      );
+    }
+  });
+
   it("refuses a recipe for something that can just be bought", () => {
     expect(validateRecipe({ ...MANUFACTURE_RECIPES[0]!, components: {} }).join(" ")).toMatch(
       /researched component/,
@@ -635,7 +653,7 @@ describe("manufacturing something nobody sells", () => {
       alloy: 1e6,
       reactorMaterial: 1e6,
       funding: 1e9,
-      facilityTiers: { manufacturing: 3 },
+      facilityTiers: { manufacture: 3 },
       ownedChassisIds: [],
     });
     expect(quote.refusal).toMatch(/programme behind it/);
@@ -648,7 +666,7 @@ describe("manufacturing something nobody sells", () => {
       alloy: 1e6,
       reactorMaterial: 1e6,
       funding: 1e9,
-      facilityTiers: { manufacturing: 3 },
+      facilityTiers: { manufacture: 3 },
       ownedChassisIds: [],
     });
     expect(quote.refusal).toMatch(/Short 3 laminate hull/);
@@ -677,7 +695,7 @@ describe("manufacturing something nobody sells", () => {
       alloy: recipe.alloy,
       reactorMaterial: recipe.reactorMaterial,
       funding: recipe.funding,
-      facilityTiers: { manufacturing: 3 },
+      facilityTiers: { manufacture: 3 },
       ownedChassisIds: [],
     });
     expect(quote.refusal).toBeNull();

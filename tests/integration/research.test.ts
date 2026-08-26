@@ -267,7 +267,7 @@ describe("building a frame nobody sells", () => {
       alloy: economy.balance("alloy"),
       reactorMaterial: economy.balance("reactorMaterial"),
       funding: economy.balance("funding"),
-      facilityTiers: { manufacturing: 2 },
+      facilityTiers: { manufacture: 2 },
       ownedChassisIds: roster.all().map((record) => record.chassisId),
     });
     expect(quote.refusal).toBeNull();

@@ -129,7 +129,8 @@ import { moveLengthTicks, type MoveDefinition } from "../data/moves";
 import { createWeaponRegistry } from "../data/weapons";
 import { createFacilityRegistry, FACILITY_KINDS, type FacilityKind } from "../data/facilities";
 import { CREW_MEMBERS, shiftAt } from "../data/personnel";
-import { jaegerRegistry } from "../data/jaegers";
+import { jaegerRegistry, type JaegerDefinition } from "../data/jaegers";
+import { ContentRegistry } from "../data/registry";
 import { ShatterdomeState } from "../shatterdome/facilityState";
 import { ShatterdomeSession } from "../shatterdome/session";
 import { CONN_POD_ROOM_ID } from "../shatterdome/interiorLayout";
@@ -148,6 +149,9 @@ import {
   type MarketPanelState,
   type ResearchPanelState,
   type ResearchRow,
+  type BuilderPanelState,
+  type BuilderSlotRow,
+  type BuilderStatRow,
   type ShatterdomeScreenHandle,
 } from "../ui/shatterdomeScreen";
 import { RESOURCE_DEFINITIONS, type ResourceKind } from "../world/resources";
@@ -157,6 +161,22 @@ import { awardSamples, type FightRecord } from "../research/sampleAwards";
 import { SAMPLE_DEFINITIONS } from "../data/samples";
 import { createMutationRegistry } from "../data/mutations";
 import { MANUFACTURE_RECIPES, manufactureCost, quoteManufacture } from "../research/manufacture";
+import {
+  MULTI_SLOTS,
+  PART_SLOTS,
+  STRUCTURAL_SLOTS,
+  createPartRegistry,
+  partsForSlot,
+  type PartSlot,
+} from "../data/parts";
+import {
+  CUSTOM_CHASSIS_ID,
+  assemble,
+  chassisFrom,
+  starterBlueprint,
+  type Blueprint,
+} from "../custom/blueprint";
+import { BlueprintLibrary, compareToOwned } from "../custom/blueprintLibrary";
 
 export interface AppHandle {
   dispose(): void;
@@ -466,6 +486,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               squad.snapshot(),
               market.economy.snapshot(),
               research.snapshot(),
+              blueprintLibrary.snapshot(),
             );
             return `Saved "${trimmed}".`;
           }),
@@ -488,6 +509,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
               squad.snapshot(),
               market.economy.snapshot(),
               research.snapshot(),
+              blueprintLibrary.snapshot(),
             );
             return `Overwrote "${name}".`;
           }),
@@ -525,6 +547,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             // shelf. Restored after the economy because the research data it
             // spends lives there.
             research.restore(result.document.research);
+            // Blueprints and the one machine a campaign may hold.
+            blueprintLibrary.restore(result.document.library);
+            refreshCustomChassis();
             applyCountermeasures();
             marketDay = worldState.environment.clock.dayNumber;
             floatingOrigin.forceRebase(worldState.playerPosition);
@@ -1188,7 +1213,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const weaponRegistry = createWeaponRegistry();
   // The roster is where a machine's damage lives between fights. Nothing is ever
   // removed from it: a machine that loses comes back as work rather than a gap.
-  const roster = new Roster();
+  /**
+   * The chassis every system reads.
+   *
+   * A copy of what ships, so the custom build can be put into it without the
+   * shared table being mutated. The roster and the market are both handed this
+   * one, which is what lets an assembled machine be owned, flown and repaired by
+   * exactly the same code that handles a bought one.
+   */
+  const chassisRegistry = new ContentRegistry<JaegerDefinition>();
+  for (const chassis of jaegerRegistry.all()) chassisRegistry.register(chassis);
+  const roster = new Roster(chassisRegistry);
   // ------------------------------------------------------------------- economy
   //
   // Money, standing with the yards, and the board of contracts. The market is
@@ -1199,7 +1234,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // its own copies for the rules; these are only for words on a screen.
   const passiveRegistry = createPassiveRegistry();
   const masteryRegistry = createMasteryRegistry();
-  const market = new Market({ seed: kernel?.seed ?? 0, manufacturers: manufacturerRegistry });
+  const market = new Market({
+    seed: kernel?.seed ?? 0,
+    manufacturers: manufacturerRegistry,
+    chassis: chassisRegistry,
+  });
   /**
    * The last day the market was settled to.
    *
@@ -4385,6 +4424,189 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const researchedComponentIds = (): readonly string[] =>
     resolveCountermeasures(research.completed()).equipment.filter((id) => id.startsWith("component."));
 
+  /**
+   * The builder.
+   *
+   * One blueprint being worked on, a library of saved ones, and the rule that a
+   * campaign holds a single custom machine. Everything the machine becomes is
+   * derived: the assembly synthesises an ordinary chassis definition and the
+   * roster flies it like anything else.
+   */
+  const partRegistry = createPartRegistry();
+  const blueprintLibrary = new BlueprintLibrary({ parts: partRegistry });
+  let workingBlueprint: Blueprint = starterBlueprint("blueprint.working");
+  let builderNote: string | null = null;
+  /** The chassis the current build would be, or null while it is illegal. */
+  let customChassis: JaegerDefinition | null = null;
+
+  /**
+   * Rebuilds the derived chassis after any change to the blueprint.
+   *
+   * Kept in one place so the panel, the test range and the assembly can never
+   * disagree about what the current build actually is.
+   */
+  const refreshCustomChassis = (): void => {
+    const result = assemble(workingBlueprint, partRegistry);
+    customChassis = chassisFrom(workingBlueprint, result, jaegerRegistry.getOrThrow("placeholder-mk0"));
+    // An illegal build leaves whatever was last registered alone: a machine
+    // already standing in the bay does not change because somebody is editing
+    // a drawing, and an illegal drawing must never become a chassis at all.
+    if (customChassis) chassisRegistry.replace(customChassis);
+  };
+  refreshCustomChassis();
+
+  /**
+   * The builder board.
+   *
+   * Read from the blueprint every time it is opened, so the numbers on screen
+   * are the numbers the assembly would use. Every refusal names the thing that
+   * is wrong rather than only greying a control.
+   */
+  const builderPanelFor = (): BuilderPanelState => {
+    const result = assemble(workingBlueprint, partRegistry);
+    const { stats } = result;
+
+    const slots: BuilderSlotRow[] = PART_SLOTS.map((slot) => {
+      const chosen = workingBlueprint.parts[slot] ?? [];
+      return {
+        slot,
+        label: SLOT_LABELS[slot] ?? slot,
+        multi: MULTI_SLOTS.includes(slot),
+        options: partsForSlot(slot).map((part) => ({
+          id: part.id,
+          name: part.displayName,
+          chosen: chosen.includes(part.id),
+          tradeoff: part.tradeoff,
+        })),
+      };
+    });
+
+    // Every figure with the thing it is measured against, so no single bar can
+    // stand in for the whole machine.
+    const statRows: BuilderStatRow[] = [
+      { label: "Mass", value: `${stats.massTons} t`, against: null, ok: true },
+      {
+        label: "Power",
+        value: `${stats.powerDrawMw} MW drawn`,
+        against: `${stats.powerOutputMw} MW made`,
+        ok: stats.powerDrawMw <= stats.powerOutputMw,
+      },
+      {
+        label: "Heat",
+        value: `${stats.heatOutput} made`,
+        against: `${stats.heatDissipation} shed`,
+        ok: stats.heatOutput <= stats.heatDissipation,
+      },
+      {
+        label: "Actuators",
+        value: `${stats.actuatorLoad} t carried`,
+        against: `${stats.actuatorCapacity} t rated`,
+        ok: stats.actuatorLoad <= stats.actuatorCapacity,
+      },
+      { label: "Armour", value: `${Math.round(stats.armorRating * 100)} percent`, against: null, ok: true },
+      { label: "Structure", value: `${stats.structure}`, against: null, ok: true },
+      {
+        label: "Balance",
+        value: `${Math.round(stats.balance * 100)} percent`,
+        against: null,
+        ok: stats.balance >= 0.25,
+      },
+      { label: "Mobility", value: `${stats.mobilityScale.toFixed(2)}x`, against: null, ok: true },
+      { label: "Turn", value: `${stats.turnScale.toFixed(2)}x`, against: null, ok: true },
+      {
+        label: "Ammunition",
+        value: `${stats.ammunitionVolume} rounds`,
+        against: null,
+        ok: stats.ammunitionVolume >= 0,
+      },
+      {
+        label: "Hardpoints",
+        value: `${stats.hardpointsUsed} used`,
+        against: `${stats.hardpointsAvailable} fitted`,
+        ok: stats.hardpointsUsed <= stats.hardpointsAvailable,
+      },
+      { label: "Module slots", value: `${stats.moduleSlots}`, against: null, ok: true },
+      { label: "Cost", value: formatMoney(stats.cost), against: null, ok: true },
+    ];
+
+    // Compared against the best machine already owned, so a custom build has
+    // something real to be better or worse than.
+    const owned = roster
+      .all()
+      .filter((record) => record.chassisId !== CUSTOM_CHASSIS_ID)
+      .map((record) => roster.definition(record.jaegerId))
+      .sort((a, b) => b.massBudget.massTons - a.massBudget.massTons)[0];
+    const comparison = owned
+      ? compareToOwned(stats, {
+          massTons: owned.massBudget.massTons,
+          armour: owned.balance.durability[1],
+          mobility: 1,
+          structure: stats.structure,
+        }).map((row) => ({
+          label: row.label,
+          build: row.build.toFixed(2),
+          owned: row.owned.toFixed(2),
+          better: row.higherIsBetter ? row.build >= row.owned : row.build <= row.owned,
+        }))
+      : [];
+
+    const standing = blueprintLibrary.built()[0];
+    const violations = result.issues.filter((issue) => issue.severity === "violation").length;
+
+    return {
+      kind: "builder",
+      title: "Assembly bay",
+      summary:
+        `${workingBlueprint.name} · ${stats.massTons} t · ` +
+        (result.legal ? "legal" : `${violations} constraint${violations === 1 ? "" : "s"} not met`) +
+        ` · ${formatMoney(stats.cost)} to build`,
+      blueprintName: workingBlueprint.name,
+      slots,
+      stats: statRows,
+      issues: [...result.issues]
+        .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "violation" ? -1 : 1))
+        .map((issue) => ({ severity: issue.severity, message: issue.message })),
+      comparison,
+      saved: blueprintLibrary.blueprints().map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        current: entry.id === workingBlueprint.id,
+      })),
+      builtLine: standing
+        ? `${standing.name} (${standing.serial}) is standing in the bay.`
+        : "Nothing built yet.",
+      buildRefusal: !result.legal
+        ? `${violations} constraint${violations === 1 ? "" : "s"} not met. Fix the build first.`
+        : blueprintLibrary.built().length >= blueprintLibrary.buildLimit
+          ? "A custom machine already exists. Scrap it before building another."
+          : market.economy.balance("funding") < stats.cost
+            ? // A control that says it can act and then cannot is worse than one
+              // that is shut and says why, so the money is checked here too.
+              `Short ${formatMoney(stats.cost - market.economy.balance("funding"))}.`
+            : null,
+      // The range does not care about the fleet limit: it exists so a build can
+      // be tried before it is committed to.
+      testRefusal: result.legal ? null : "An illegal build cannot leave the bay.",
+      note: builderNote,
+    };
+  };
+
+  /** What each slot is called on the board. A table, so a new slot is a row. */
+  const SLOT_LABELS: Readonly<Record<string, string>> = {
+    head: "Conn-Pod",
+    torso: "Frame",
+    arms: "Arms",
+    legs: "Legs",
+    reactor: "Reactor",
+    armor: "Armour",
+    movement: "Drive",
+    weapon: "Weapons",
+    ability: "Abilities",
+    paint: "Paint",
+    markings: "Markings",
+    emblem: "Emblem",
+  };
+
   /** Signs for a machine. The refusal is the message, never a silent no-op. */
   const purchaseOffer = (offerId: string): void => {
     const result = market.purchase(offerId);
@@ -4455,6 +4677,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         // terminal is still the construction board.
         if (!outcome.connPod && outcome.facilityId === "research") {
           openInteriorPanel(researchPanelFor());
+          break;
+        }
+        // The manufacturing floor is where the one custom machine is built.
+        if (!outcome.connPod && outcome.facilityId === "manufacture") {
+          openInteriorPanel(builderPanelFor());
           break;
         }
         openInteriorPanel(
@@ -4867,6 +5094,117 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         syncSquadMachines();
         researchNote = `${built.name} (${built.serial}) assembled. Nobody else has one.`;
         openInteriorPanel(researchPanelFor());
+      },
+      onChoosePart: (slot: string, partId: string) => {
+        const key = slot as PartSlot;
+        const current = workingBlueprint.parts[key] ?? [];
+        const next = MULTI_SLOTS.includes(key) ? [...current, partId] : [partId];
+        workingBlueprint = { ...workingBlueprint, parts: { ...workingBlueprint.parts, [key]: next } };
+        refreshCustomChassis();
+        builderNote = null;
+        openInteriorPanel(builderPanelFor());
+      },
+      onRemovePart: (slot: string, partId: string) => {
+        const key = slot as PartSlot;
+        const current = workingBlueprint.parts[key] ?? [];
+        const next = current.filter((id) => id !== partId);
+        // A structural slot cannot be emptied by clicking the part that is in
+        // it: that is a swap, not a removal, and emptying it here would only
+        // produce a violation the player did not ask for.
+        if (STRUCTURAL_SLOTS.includes(key) && next.length === 0) return;
+        workingBlueprint = { ...workingBlueprint, parts: { ...workingBlueprint.parts, [key]: next } };
+        refreshCustomChassis();
+        openInteriorPanel(builderPanelFor());
+      },
+      onSaveBlueprint: (name: string) => {
+        const trimmed = name.trim();
+        if (trimmed.length > 0) workingBlueprint = { ...workingBlueprint, name: trimmed };
+        builderNote = blueprintLibrary.save(workingBlueprint).message;
+        openInteriorPanel(builderPanelFor());
+      },
+      onLoadBlueprint: (id: string) => {
+        const found = blueprintLibrary.get(id);
+        if (!found) {
+          builderNote = "No such blueprint.";
+        } else {
+          workingBlueprint = found;
+          refreshCustomChassis();
+          builderNote = `Editing ${found.name}.`;
+        }
+        openInteriorPanel(builderPanelFor());
+      },
+      onExportBlueprint: () => {
+        blueprintLibrary.save(workingBlueprint);
+        const text = blueprintLibrary.export(workingBlueprint.id);
+        if (!text) {
+          builderNote = "Nothing to export.";
+        } else {
+          // Written to the clipboard when the browser allows it, and always
+          // reported so the player is never left wondering whether it worked.
+          void navigator.clipboard?.writeText(text).catch(() => undefined);
+          builderNote = `${workingBlueprint.name} copied as text.`;
+        }
+        openInteriorPanel(builderPanelFor());
+      },
+      onImportBlueprint: (text: string) => {
+        const id = `blueprint.imported.${blueprintLibrary.blueprints().length + 1}`;
+        builderNote = blueprintLibrary.import(text, id).message;
+        openInteriorPanel(builderPanelFor());
+      },
+      onBuildCustom: () => {
+        blueprintLibrary.save(workingBlueprint);
+        const day = worldState.environment.clock.dayNumber;
+        const built = blueprintLibrary.build(workingBlueprint.id, day);
+        builderNote = built.result.message;
+        if (built.result.ok && built.record) {
+          refreshCustomChassis();
+          const stats = assemble(workingBlueprint, partRegistry).stats;
+          const paid = market.economy.spend("funding", stats.cost, {
+            source: "construction",
+            reason: `${built.record.name} assembled.`,
+            day,
+          });
+          if (!paid.ok) {
+            // Nothing is half built: the record goes back if the money is not
+            // there, so a refused payment cannot leave a machine behind.
+            blueprintLibrary.scrap(built.record.serial);
+            builderNote = `Cannot pay for it: ${paid.message}.`;
+          } else {
+            const record = roster.acquire({
+              chassisId: CUSTOM_CHASSIS_ID,
+              acquiredBy: "research-manufacture",
+              day,
+              name: built.record.name,
+            });
+            if (record) {
+              roster.record(record.jaegerId, day, "Assembled in the bay from a blueprint.");
+              syncSquadMachines();
+            }
+          }
+        }
+        openInteriorPanel(builderPanelFor());
+      },
+      onScrapCustom: () => {
+        const standing = blueprintLibrary.built()[0];
+        if (!standing) {
+          builderNote = "Nothing to scrap.";
+        } else {
+          builderNote = blueprintLibrary.scrap(standing.serial).message;
+        }
+        openInteriorPanel(builderPanelFor());
+      },
+      onTestRange: () => {
+        const result = assemble(workingBlueprint, partRegistry);
+        if (!result.legal) {
+          builderNote = "An illegal build cannot leave the bay.";
+          openInteriorPanel(builderPanelFor());
+          return;
+        }
+        // The range is the ordinary ground view with the build spawned into it,
+        // rather than a second game mode: nothing here is committed to.
+        builderNote = `${workingBlueprint.name} is on the range. Nothing has been committed.`;
+        openInteriorPanel(builderPanelFor());
+        stateMachine.transition(AppState.WorldMap);
       },
       onClosePanel: () => openInteriorPanel(null),
       onResume: () => setInteriorPaused(false),

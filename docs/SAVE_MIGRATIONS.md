@@ -16,7 +16,7 @@ migration, or the reverse.
 
 ## Current versions
 
-- `ROOT_SAVE_VERSION = 14`
+- `ROOT_SAVE_VERSION = 15`
 - `SIM_SCHEMA_VERSION = 1`
 - `WORLD_SCHEMA_VERSION = 4`
 - `MARKET_SCHEMA_VERSION = 1`
@@ -42,6 +42,7 @@ migration, or the reverse.
 | 12      | Adds the `squad` section                                        | Per allied crew: the machine they fly, sorties flown beside the player, confidence, standing order, perks learned, and the sorties already settled.                                                                                                      |
 | 13      | Adds the `economy` section                                      | Every resource held, the difficulty the campaign is being run at, and the ledger behind each balance, including the references that stop a settled reward being paid twice.                                                                              |
 | 14      | Adds the `research` section                                     | Programmes finished, experiments in the labs with the work already put into them, the samples on the shelf, and how familiar each kaiju category has become with giving each one up.                                                                     |
+| 15      | Adds the `library` section                                      | Saved blueprints, the one custom machine a campaign may hold, the serial counter that never goes backwards, and whether the library is a sandbox one.                                                                                                    |
 
 ## Detection
 
@@ -223,6 +224,30 @@ Two rules the restore enforces rather than trusts. A project naming a facility
 this build no longer has is dropped. And a project that was active comes back
 queued, holding no crews: it is given crews again on the first tick after
 loading, so nothing is mid-tick across a save.
+
+## Version 14 to 15: the builder (Milestone 25)
+
+Version 15 adds a `library` section: saved blueprints, the record of the one
+custom machine a campaign is allowed to have standing, the serial counter, and
+whether this library is a sandbox one.
+
+A version 14 save has none of it, because there was no builder. It comes back
+with an empty library rather than a starter design: handing every existing
+campaign a blueprint it did not draw would be putting words in the player's
+mouth, and the builder offers a starting point of its own when it is opened.
+
+Three rules the restore enforces rather than trusts. A blueprint naming a part
+this build no longer has keeps the design and drops the part, because the design
+is the player's work and losing all of it because one part was retired would be
+worse than showing them a build that now needs a new arm; it simply fails
+validation and says so. A built record whose blueprint is gone is dropped, since
+there is nothing left to have built it from. And the serial counter only ever
+goes up, so scrapping and rebuilding across a save produces a different machine
+rather than the same one back.
+
+The custom chassis definition itself is never stored. It is derived from the
+blueprint every time, so rebalancing a part reaches an old save immediately
+rather than leaving it flying the numbers it was saved with.
 
 ## Version 13 to 14: research (Milestone 24)
 

@@ -205,7 +205,7 @@ describe("the saved record", () => {
       shatterdome: { marker: "untouched" },
     };
     const result = migrateSave(legacy);
-    expect(result.applied).toEqual(["5", "6", "7", "8", "9", "10", "11", "12", "13"]);
+    expect(result.applied).toEqual(["5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]);
     expect(result.document.schemaVersion).toBe(ROOT_SAVE_VERSION);
     expect(validateRosterSnapshot(result.document.roster)).toEqual([]);
     // One record per machine a campaign actually starts with. A research frame

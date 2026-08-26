@@ -288,6 +288,31 @@ cap, or bay work on a machine that is not in the bay.
 
 ## The contracts terminal (Milestone 18)
 
+### The assembly bay
+
+The Fabrication Hall has to be built before it can be walked into. Its terminal
+is the builder; the machine posts beside it are staff posts and do nothing.
+
+| Control              | Effect                                                                        |
+| -------------------- | ----------------------------------------------------------------------------- |
+| **E** at the control | Open the builder                                                              |
+| A part in a slot     | Fits it. In a structural slot this swaps whatever was there                   |
+| A fitted weapon      | Takes it off again, since weapons and abilities allow more than one           |
+| **Test range**       | Takes the build out without committing to it. Shut while the build is illegal |
+| **Assemble**         | Builds it. Charges the cost and puts the machine on the roster                |
+| **Scrap**            | Breaks up the machine standing in the bay, freeing the campaign's one slot    |
+| **Export**           | Copies the blueprint to the clipboard as text                                 |
+| **E** or **Close**   | Leave the builder                                                             |
+
+Every figure is shown with what it is measured against: power drawn against
+power made, heat made against heat shed, tons carried against tons the actuators
+are rated for, hardpoints used against hardpoints fitted. Everything wrong with
+a build is listed at once, with the numbers that make it wrong. A warning does
+not stop a launch; a refusal does, and both the Assemble and Test range controls
+carry the reason.
+
+A campaign holds one custom machine. Blueprints are unlimited.
+
 ### The research board
 
 Kaiju Research has to be built before it can be walked into, the same way the

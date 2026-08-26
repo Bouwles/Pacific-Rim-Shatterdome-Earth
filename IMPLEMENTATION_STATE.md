@@ -233,7 +233,19 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - an experiment queue with priorities, pause, resume and cancellation at a fixed half refund, sharing the researchers out fresh every tick;
   - two research-exclusive chassis assembled from several branches and rare components, with an itemised bill that refuses and names exactly what is short;
   - a deterministic 60-sortie scenario over three ways of playing, proving that grinding one fight finishes less of the tree than varying it and never unlocks a frame.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1519 unit+integration), `smoke` (136 Playwright), `build` all pass.
+- **One machine you build yourself**, from the fabrication hall's own control:
+  - twelve slots across structure, weapons, abilities and cosmetics, with a name and free emblem text;
+  - compatibility by fitting rather than by name, so a part added later works with whatever already provides the right one;
+  - mass and where it sits, power made against drawn, heat made against shed, load against actuator rating, armour, structure, balance, mobility, turn, ammunition, hardpoints and module slots, every one derived and shown separately;
+  - a catalogue where no part dominates another in its slot, asserted over every pair;
+  - validation that reports every violated constraint at once with the numbers behind it, and warnings that never stop a launch;
+  - comparison against the largest machine already owned, on several axes rather than one score;
+  - a test range an illegal build cannot reach, and no route by which one can become a chassis, enter the roster or reach the arena;
+  - blueprints that can be renamed, recoloured, exported and imported, where importing never produces a machine;
+  - one active custom serial per campaign, freed only by scrapping, with serials never reused and an explicit sandbox exception;
+  - a procedural silhouette derived from the chosen parts, preserving the existing sockets for later GLB replacement;
+  - one shared chassis registry the roster and the market both read, so an assembled machine is owned, repaired and fought by exactly the code that handles a bought one.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1599 unit+integration), `smoke` (140 Playwright), `build` all pass.
 
 ## What is stubbed / placeholder
 

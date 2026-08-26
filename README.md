@@ -140,6 +140,18 @@ The project is built in numbered milestones. Everything listed here actually run
 - Old machines that stay worth flying. A Mark 1 is less than half the price of a Mark 5, cheaper to keep, slower, shorter ranged, and upgradeable nearly three times as far
 - Machines that arrive without money too, through milestone unlocks, research programmes, rebuilt wrecks and archive recoveries
 - Upkeep on everything on the pad, charged by the day, whether you are watching the clock or skipping it
+- One machine you build yourself, at the fabrication hall's own control. Every other Jaeger keeps its identity; this one is yours
+- Twelve slots: Conn-Pod, frame, arms, legs, reactor, armour, drive, weapons, abilities, paint, markings and an emblem, plus a name and whatever you want stencilled on the hull
+- Parts fit by fitting rather than by name. Sprint legs offer a light spine and nothing else, the deep magazine frame needs a heavy one, and the refusal names both sides
+- Nothing collapses into one bar. Mass, where that mass sits, power made against power drawn, heat made against heat shed, tons carried against tons the actuators are rated for, armour, structure, balance, mobility, turn, rounds aboard, hardpoints and module slots are all separate figures on screen at once
+- No part is simply better than another. A heavier frame carries three times the ammunition and unbalances the machine, a bigger reactor powers anything and cooks it, and radiator skin sheds enormous heat and stops almost nothing
+- Balance is its own axis. A machine can be quick and unstable or slow and planted, and a badly balanced one takes visibly longer to get up after it goes down
+- Refusals list everything wrong at once with the numbers behind it, rather than one problem at a time
+- Warnings that do not stop you. Eight megawatts of headroom, actuators at their limit, sixty rounds aboard: worth knowing, and your decision
+- A test range an illegal build cannot leave the bay to reach
+- Blueprints are free. Keep as many as you like, rename them, repaint them, export one as text and import somebody else's. Importing a design never hands you a machine
+- Building is not. A campaign holds one custom machine at a time and the only way to get another is to break the one you have. The serial is never reused
+- A silhouette that comes from the parts, with every socket a real model would attach to still there for later
 - Research that changes how a fight goes. Twenty three programmes across nine branches: weapons, materials, reactor, mobility, sensors, kaiju biology, Shatterdome defense, logistics and exclusive chassis
 - Nothing in the tree makes you hit harder. A programme tells you what is coming, blunts something that was hurting you, holds a contact you would have lost, or opens equipment. Finish all of it and you do exactly the damage you always did, and you understand what you are fighting
 - Telegraphs you can read. Map the nervous system and the display flags the moment before it commits. Build the behavioural model and it names the move and marks what it is about to threaten. Before either, you read the animation, the way you always have

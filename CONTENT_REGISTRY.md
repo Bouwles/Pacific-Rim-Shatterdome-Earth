@@ -295,6 +295,40 @@ launch, wall impact, knockdown and component shock. Each carries a length,
 whether control is lost, what it does to poise, how it scales knockback, and
 whether it opens a finisher.
 
+## Jaeger parts (Milestone 25)
+
+Twenty nine in `src/data/parts.ts` across twelve slots. Every structural part
+declares mass and where that mass sits, power, heat, armour, structure, actuator
+capacity, mobility, turn, ammunition, module slots, hardpoints, the fittings it
+provides and needs, a cost, a silhouette contribution and an honest tradeoff.
+Cosmetics are validated as weightless, so paint can never be a hidden advantage.
+
+| Slot     | Options | The choice being made                                                   |
+| -------- | ------- | ----------------------------------------------------------------------- |
+| head     | 3       | Ordinary, sensors and no armour, or armour and no modules               |
+| torso    | 3       | Balanced, deep magazine and heavy spine only, or compact and quick      |
+| arms     | 3       | Standard, heavy lift needing a wide coupling, or fast and weak          |
+| legs     | 3       | Standard taking any spine, siege, or sprint offering only a light spine |
+| reactor  | 3       | Standard, high output and very hot, or cold running and heavy           |
+| armor    | 3       | Composite plate, radiator skin, or ablative layers                      |
+| movement | 3       | Standard drive, boosters refusing wide hips, or a stabiliser rig        |
+| weapon   | 3       | Rotary cannon, plasma caster needing a heavy mount, or a chain sword    |
+| ability  | 2       | Overdrive coupling, or an emergency vent                                |
+| paint    | 3       | Slate, oxide red, deep blue                                             |
+| markings | 3       | Unmarked, hazard stripes, stencilled serial                             |
+| emblem   | 3       | None, anchor, breach                                                    |
+
+Fittings, in `FITTINGS`: `mount.standard`, `mount.heavy`, `spine.light`,
+`spine.heavy`, `hip.standard`, `hip.wide`, `neck.standard`, `coupling.compact`,
+`coupling.wide`.
+
+## Custom chassis (Milestone 25)
+
+One, `custom-mk1`, synthesised from a blueprint rather than authored. It is
+`research-manufacture` only, priced at zero because nobody sells it, and carries
+no signature loadout. It never enters the shipped `jaegerRegistry`: the bootstrap
+keeps its own copy and puts the derived definition into that.
+
 ## Research nodes (Milestone 24)
 
 Twenty three in `src/data/research.ts` across nine branches. Every node carries

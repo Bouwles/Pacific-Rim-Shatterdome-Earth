@@ -259,7 +259,7 @@ const NODES: readonly ResearchNodeDefinition[] = [
     ],
     dataCost: 220,
     fundingCost: 1_300_000,
-    requiresFacility: { facilityId: "manufacturing", tier: 1 },
+    requiresFacility: { facilityId: "manufacture", tier: 1 },
     staffRequired: 4,
     researchTicks: 6_000,
     benefits: [
@@ -284,7 +284,7 @@ const NODES: readonly ResearchNodeDefinition[] = [
     ],
     dataCost: 300,
     fundingCost: 1_800_000,
-    requiresFacility: { facilityId: "manufacturing", tier: 1 },
+    requiresFacility: { facilityId: "manufacture", tier: 1 },
     staffRequired: 4,
     researchTicks: 7_200,
     benefits: [
@@ -493,7 +493,7 @@ const NODES: readonly ResearchNodeDefinition[] = [
     ],
     dataCost: 200,
     fundingCost: 1_100_000,
-    requiresFacility: { facilityId: "manufacturing", tier: 1 },
+    requiresFacility: { facilityId: "manufacture", tier: 1 },
     staffRequired: 3,
     researchTicks: 5_400,
     benefits: [
@@ -676,7 +676,7 @@ const NODES: readonly ResearchNodeDefinition[] = [
     ],
     dataCost: 600,
     fundingCost: 3_600_000,
-    requiresFacility: { facilityId: "manufacturing", tier: 1 },
+    requiresFacility: { facilityId: "manufacture", tier: 1 },
     staffRequired: 6,
     researchTicks: 12_000,
     benefits: [
@@ -706,7 +706,7 @@ const NODES: readonly ResearchNodeDefinition[] = [
     ],
     dataCost: 1_200,
     fundingCost: 7_200_000,
-    requiresFacility: { facilityId: "manufacturing", tier: 2 },
+    requiresFacility: { facilityId: "manufacture", tier: 2 },
     staffRequired: 8,
     researchTicks: 18_000,
     benefits: [

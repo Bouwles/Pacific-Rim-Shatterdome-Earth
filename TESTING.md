@@ -14,7 +14,7 @@
 
 ## Automated tests
 
-1517 unit and integration tests, plus 136 Playwright browser tests.
+1599 unit and integration tests, plus 140 Playwright browser tests.
 
 - **Unit** (`tests/unit/`):
   - `clock` — deterministic step counts, epsilon-safe exact-multiple deltas, substep clamp, invalid config rejected.
@@ -262,6 +262,44 @@ Measured on WebGPU at seed 20260824 on High, by hand in the browser, in Hong Kon
 | Reactions reach the machine                                       | A tail sweep knockdown put the piloted machine into its get-up state through the locomotion controller's own reaction path                                                                                          |
 | Within budget                                                     | 98 to 101 draw calls with a fight live, 0.6 to 0.8 ms frames at 144 fps                                                                                                                                             |
 | No fake UI                                                        | Every control on the combat block does something; the aim cycle offers only zones the creature has; refusals are shown rather than swallowed                                                                        |
+
+## Milestone 25 acceptance evidence
+
+Measured at seed 20260831, in the browser by hand and in the unit, integration
+and scenario suites.
+
+| Acceptance item                                     | Evidence                                                                                                                                                             |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An invalid build explains every violated constraint | An empty build reports one violation per structural slot at once, each naming the slot; a mismatched build reports the fitting, the heat and the ammunition together |
+| ...and cannot enter combat                          | `chassisFrom` returns null for any illegal build, so there is nothing to acquire and nothing to hand the arena. Asserted for an empty build and a one-fault build    |
+| Two valid builds handle differently                 | Sprinter 1.50x mobility against brawler 0.64x; brawler 0.331 armour against sprinter 0.168; 2,830 t against 1,620 t                                                  |
+| ...animate and fight differently                    | Different run and turn speeds, different get-up time from balance, different combat profiles and different zone placement, all derived from the chassis              |
+| ...and look different                               | Different silhouette bulk and height, with the socket ratios unchanged so a real model still drops in                                                                |
+| Renaming does not duplicate the owned chassis       | Renaming the blueprint leaves the built record's name and serial alone; the machine standing in the bay was stamped when it was assembled                            |
+| Recolouring touches nothing structural              | Paint, markings and emblem are validated as weightless, and a recolour leaves every structural slot identical                                                        |
+| Rebuilding does not duplicate                       | Scrap frees the one slot; the rebuild gets a new serial and the campaign still holds exactly one                                                                     |
+| Saving, exporting and importing do not duplicate    | Export carries no serial and no build record; importing gives a fresh id and a library with zero machines in it                                                      |
+| Tradeoffs are not one capacity bar                  | Thirteen figures shown separately, each against what it is measured against. A test asserts no part dominates another in its slot on every axis                      |
+| Custom parts cannot overwrite a signature loadout   | The assembled chassis carries an empty `signatureEquipment`, never enters the shipped registry, and every shipped chassis is asserted unchanged after a build        |
+| One active custom serial in a campaign              | The limit lives on the library, the sandbox flag is the only exception, and serials only ever go up                                                                  |
+
+Three defects found while building it. The starter build was illegal, because
+cooling was undertuned against heat across the whole catalogue: a new campaign
+could not have built anything. Mobility multiplied part by part, so five modest
+parts compounded into a machine twice as fast as stock; it is now anchored to
+the legs with everything else contributing a fraction. And the actuator ceiling
+was set so high that no build could ever reach it, which is validation that
+never fires.
+
+A fourth was found by the linter and was real rather than cosmetic: the derived
+chassis was never put into a registry the roster could see, so assembling a
+machine would have silently produced nothing. The roster and the market now
+share one chassis registry, and two tests guard it.
+
+A fifth, from Milestone 24, surfaced here: five research nodes and both
+manufacture recipes required a facility called `manufacturing`, which does not
+exist. The facility is `manufacture`, so those programmes could never have been
+started in a real game. Fixed, with a test that every named facility exists.
 
 ## Milestone 24 acceptance evidence
 

@@ -89,7 +89,7 @@ export function runResearchScenario(options: ResearchScenarioOptions = {}): Rese
     researchRate,
     facilityTiers: {
       research: 2,
-      manufacturing: 2,
+      manufacture: 2,
       reactor: 2,
       defense: 1,
       logistics: 1,

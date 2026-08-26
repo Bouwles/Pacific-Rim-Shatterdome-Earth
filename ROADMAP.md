@@ -599,6 +599,35 @@ wiring and research board panel.
 - `npm run typecheck`, `lint`, `format:check`, `test` (1519), `build` all pass.
   **Next action:** none - complete.
 
+## Phase 3 / Milestone 25 - Custom Jaeger builder with power, mass, cooling and balance tradeoffs
+
+**Depends on:** Milestone 13 (the components a machine is made of), 22 (the fabrication hall that houses
+it), 24 (the manufacture path it borrows).
+**Status:** done.
+**Scope:** twelve part slots covering head, torso, arms, legs, reactor, armour, movement, weapons,
+abilities, paint, markings and emblem, with a name and free emblem text; fitting-based socket
+compatibility rather than name matching; mass distribution by height, power generation against draw,
+heat against dissipation, actuator load against capacity, armour, balance, mobility, turn, ammunition
+volume, module capacity and hardpoints all derived separately; live validation reporting every violated
+constraint at once with warnings that do not stop a launch; comparison against the largest machine
+already owned; a test range that takes an illegal build nowhere; saved blueprints with rename, recolour,
+export and import; manufacturing cost charged through the economy; a procedural silhouette derived from
+the chosen parts with the existing sockets preserved; and one active custom serial per campaign with an
+explicit sandbox exception. Created `src/data/parts.ts`, `src/custom/blueprint.ts`,
+`src/custom/blueprintLibrary.ts`, `src/debug/builderScenario.ts`. Extended `src/data/registry.ts` with a
+documented `replace` for runtime-authored definitions, the bootstrap to hand the roster and the market
+one shared chassis registry, the save envelope to version 15, and the shatterdome screen with a builder
+board.
+**Acceptance tests:**
+
+- An invalid build lists every violated constraint and cannot become a chassis, reach the roster or
+  reach the arena.
+- Two valid builds of different parts differ in mass, armour, mobility, turn, get-up time, silhouette
+  and combat profile.
+- Renaming, recolouring, rebuilding, saving, exporting and importing never duplicate the owned chassis.
+- `npm run typecheck`, `lint`, `format:check`, `test` (1599), `build` all pass.
+  **Next action:** none - complete.
+
 ## Phase 4 — World map and attack director MVP
 
 **Depends on:** Phase 3.

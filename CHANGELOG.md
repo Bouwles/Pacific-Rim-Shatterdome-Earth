@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-31, Milestone 25: One machine you build yourself
+
+Every other Jaeger keeps its identity. This one is yours.
+
+- Twelve slots: Conn-Pod, frame, arms, legs, reactor, armour, drive, weapons, abilities, paint, markings and an emblem, plus a name and whatever you want stencilled on the hull.
+- Parts fit by fitting rather than by name. Sprint legs offer a light spine and nothing else; the deep magazine frame needs a heavy one and says so. A new part with the right fittings works with everything already there.
+- Nothing collapses into one bar. Mass, where that mass sits, power made against power drawn, heat made against heat shed, tons carried against tons the actuators are rated for, armour, structure, balance, mobility, turn rate, rounds aboard, hardpoints used against hardpoints fitted, and module slots are all separate numbers you can see at once.
+- No part is simply better than another. A heavier frame carries three times the ammunition and unbalances the machine. A bigger reactor powers anything and makes more heat than most armour can shed. Radiator skin sheds enormous heat and stops almost nothing. A test walks every pair in every slot and fails if one ever dominates another.
+- Balance is its own axis. A machine can be quick and unstable or slow and planted, and a badly balanced one takes visibly longer to get back up after it goes down.
+- Refusals list everything wrong at once, with the numbers that make it wrong. Short forty megawatts, cooks itself by fifty, carrying two hundred tons more than the actuators are rated for, and the frame needs a heavy spine, all on screen together rather than one at a time.
+- Warnings that do not stop you. Eight megawatts of headroom, actuators at their limit, sixty rounds aboard: worth knowing, and your decision.
+- A test range that an illegal build cannot leave the bay to reach.
+- Blueprints are free. Keep as many as you like, rename them, repaint them, export one as text and import somebody else's. Importing a design never hands you a machine.
+- Building is not free. A campaign holds one custom machine at a time, and the only way to get another is to break the one you have. The serial is never reused, so a rebuild is a different machine rather than the same one back.
+- A silhouette that comes from the parts. A leg-heavy build stands on visibly longer legs, a heavy frame is visibly bulkier, and every socket a real model would attach to is still there for later.
+- The machine that comes out is an ordinary Jaeger. The roster owns it, the bay repairs it and the arena fights it without any of them knowing it was assembled rather than bought.
+
+Nothing here can reach a canon machine. Custom parts have no path to an existing chassis, the assembled machine carries no signature loadout, and a test asserts every shipped chassis is untouched after a build.
+
+An old save keeps everything it had. Version 14 files come back with an empty library rather than a design nobody drew.
+
 ## 2026-08-30, Milestone 24: Research, samples and two machines nobody sells
 
 What you learn in a fight now changes the next one.

@@ -14,6 +14,7 @@ import { emptyCrewSnapshot, type CrewSnapshot } from "../pilots/crew";
 import { emptySquadSnapshot, type SquadSnapshot } from "../allies/squad";
 import { emptyEconomySnapshot, type EconomySnapshot } from "../world/economy";
 import { emptyResearchSnapshot, type ResearchSnapshot } from "../research/program";
+import { emptyLibrarySnapshot, type LibrarySnapshot } from "../custom/blueprintLibrary";
 import { createMigrationRegistry, migrateSave, type MigrationStep } from "./migrations";
 import { SaveError, type SaveRepository } from "./repository";
 import {
@@ -69,6 +70,8 @@ export interface SaveRequest {
   readonly economy?: EconomySnapshot;
   /** Research and samples. Omitted by callers with no programme. */
   readonly research?: ResearchSnapshot;
+  /** Blueprints and the built machine. Omitted by callers with no builder. */
+  readonly library?: LibrarySnapshot;
 }
 
 /**
@@ -138,6 +141,7 @@ export class SaveService {
     const squad = request.squad ?? emptySquadSnapshot();
     const economy = request.economy ?? emptyEconomySnapshot();
     const research = request.research ?? emptyResearchSnapshot();
+    const library = request.library ?? emptyLibrarySnapshot();
     const metadata: SaveMetadata = {
       name: request.name?.trim() || "Unnamed save",
       worldSeed: kernel.seed,
@@ -162,6 +166,7 @@ export class SaveService {
       squad,
       economy,
       research,
+      library,
     };
   }
 

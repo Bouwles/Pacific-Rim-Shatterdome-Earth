@@ -335,8 +335,67 @@ export interface ResearchPanelState {
   readonly note: string | null;
 }
 
+/** One slot on the builder, with what is in it and what else could be. */
+export interface BuilderSlotRow {
+  readonly slot: string;
+  readonly label: string;
+  /** Parts that fit here, with the chosen one flagged. */
+  readonly options: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly chosen: boolean;
+    /** The honest sentence about what this part costs you. */
+    readonly tradeoff: string;
+  }[];
+  /** True when more than one part may sit here at a time. */
+  readonly multi: boolean;
+}
+
+/** One derived figure, shown as a number rather than as a bar. */
+export interface BuilderStatRow {
+  readonly label: string;
+  readonly value: string;
+  /** Null when the figure stands alone; otherwise what it is measured against. */
+  readonly against: string | null;
+  /** True when the figure is inside its limit. */
+  readonly ok: boolean;
+}
+
+export interface BuilderPanelState {
+  readonly kind: "builder";
+  readonly title: string;
+  /** The blueprint being worked on, and whether it could be built. */
+  readonly summary: string;
+  readonly blueprintName: string;
+  readonly slots: readonly BuilderSlotRow[];
+  readonly stats: readonly BuilderStatRow[];
+  /** Everything wrong with it. Violations first, then warnings. */
+  readonly issues: readonly { readonly severity: string; readonly message: string }[];
+  /** How it measures up against a machine already owned. */
+  readonly comparison: readonly {
+    readonly label: string;
+    readonly build: string;
+    readonly owned: string;
+    readonly better: boolean;
+  }[];
+  /** Saved designs, with the one being edited flagged. */
+  readonly saved: readonly { readonly id: string; readonly name: string; readonly current: boolean }[];
+  /** The machine standing in the bay, if there is one. */
+  readonly builtLine: string;
+  /** Null when it can be built; otherwise exactly why not. */
+  readonly buildRefusal: string | null;
+  /** Null when the test range can be entered; otherwise why not. */
+  readonly testRefusal: string | null;
+  readonly note: string | null;
+}
+
 export type ShatterdomePanelState =
-  FacilityPanelState | BerthPanelState | ConnPodPanelState | MarketPanelState | ResearchPanelState;
+  | FacilityPanelState
+  | BerthPanelState
+  | ConnPodPanelState
+  | MarketPanelState
+  | ResearchPanelState
+  | BuilderPanelState;
 
 export interface ShatterdomeScreenState {
   readonly roomName: string;
@@ -401,6 +460,24 @@ export interface ShatterdomeScreenCallbacks {
   readonly onTreatPilot: (pilotId: string, injuryId: string) => void;
   /** Stands somebody down for a few days to clear the stress. */
   readonly onStandDownPilot: (pilotId: string) => void;
+  /** Puts a part in a slot, replacing whatever was there. */
+  readonly onChoosePart: (slot: string, partId: string) => void;
+  /** Takes a part out of a slot that allows more than one. */
+  readonly onRemovePart: (slot: string, partId: string) => void;
+  /** Files the blueprint under a name. */
+  readonly onSaveBlueprint: (name: string) => void;
+  /** Opens a saved design for editing. */
+  readonly onLoadBlueprint: (id: string) => void;
+  /** Copies the design to the clipboard as text. */
+  readonly onExportBlueprint: () => void;
+  /** Reads a design in from text. */
+  readonly onImportBlueprint: (text: string) => void;
+  /** Assembles the machine, if the rules allow it. */
+  readonly onBuildCustom: () => void;
+  /** Breaks up the machine standing in the bay. */
+  readonly onScrapCustom: () => void;
+  /** Takes the build to the test range without committing to it. */
+  readonly onTestRange: () => void;
   readonly onClosePanel: () => void;
   readonly onResume: () => void;
   readonly onOpenSaves: () => void;
@@ -761,6 +838,77 @@ function buildPanel(panel: ShatterdomePanelState, callbacks: ShatterdomeScreenCa
     note.dataset["field"] = "research-note";
     note.setAttribute("aria-live", "polite");
     element.appendChild(note);
+  } else if (panel.kind === "builder") {
+    const summary = document.createElement("p");
+    summary.className = "sd-panel-summary";
+    summary.dataset["field"] = "builder-summary";
+    element.appendChild(summary);
+
+    const issues = document.createElement("ul");
+    issues.className = "sd-market-orders";
+    issues.dataset["field"] = "builder-issues";
+    element.appendChild(issues);
+
+    const statsHeading = document.createElement("h4");
+    statsHeading.className = "sd-panel-subheading";
+    statsHeading.textContent = "Numbers";
+    element.appendChild(statsHeading);
+
+    const stats = document.createElement("ul");
+    stats.className = "sd-balance-list";
+    stats.dataset["field"] = "builder-stats";
+    element.appendChild(stats);
+
+    const slotsHeading = document.createElement("h4");
+    slotsHeading.className = "sd-panel-subheading";
+    slotsHeading.textContent = "Parts";
+    element.appendChild(slotsHeading);
+
+    const slots = document.createElement("ul");
+    slots.className = "sd-market-list";
+    for (const row of panel.slots) slots.appendChild(buildSlotRow(row, callbacks));
+    element.appendChild(slots);
+
+    const compareHeading = document.createElement("h4");
+    compareHeading.className = "sd-panel-subheading";
+    compareHeading.textContent = "Against what you fly";
+    element.appendChild(compareHeading);
+
+    const comparison = document.createElement("ul");
+    comparison.className = "sd-balance-list";
+    comparison.dataset["field"] = "builder-comparison";
+    element.appendChild(comparison);
+
+    const savedHeading = document.createElement("h4");
+    savedHeading.className = "sd-panel-subheading";
+    savedHeading.textContent = "Blueprints";
+    element.appendChild(savedHeading);
+
+    const saved = document.createElement("ul");
+    saved.className = "sd-market-orders";
+    saved.dataset["field"] = "builder-saved";
+    element.appendChild(saved);
+
+    const built = document.createElement("p");
+    built.className = "sd-panel-notes";
+    built.dataset["field"] = "builder-built";
+    element.appendChild(built);
+
+    const test = button("Test range", "secondary-button", () => callbacks.onTestRange());
+    test.dataset["action"] = "test-range";
+    const assemble = button("Assemble", "secondary-button", () => callbacks.onBuildCustom());
+    assemble.dataset["action"] = "build-custom";
+    const scrap = button("Scrap", "secondary-button", () => callbacks.onScrapCustom());
+    scrap.dataset["action"] = "scrap-custom";
+    const exportButton = button("Export", "secondary-button", () => callbacks.onExportBlueprint());
+    exportButton.dataset["action"] = "export-blueprint";
+    element.append(test, assemble, scrap, exportButton);
+
+    const note = document.createElement("p");
+    note.className = "sd-panel-notes";
+    note.dataset["field"] = "builder-note";
+    note.setAttribute("aria-live", "polite");
+    element.appendChild(note);
   } else {
     element.appendChild(definitionList(connPodFields(panel)));
     const notes = document.createElement("p");
@@ -953,6 +1101,45 @@ function buildFrameRow(
   build.title = frame.refusal ?? "Build " + frame.name;
   build.dataset["refusal"] = frame.refusal ?? "";
   item.appendChild(build);
+  return item;
+}
+
+/** One slot, with every part that fits it and the one that is in it. */
+function buildSlotRow(row: BuilderSlotRow, callbacks: ShatterdomeScreenCallbacks): HTMLElement {
+  const item = document.createElement("li");
+  item.className = "sd-market-row";
+  item.dataset["slot"] = row.slot;
+
+  const head = document.createElement("div");
+  head.className = "sd-market-head";
+  const label = document.createElement("span");
+  label.className = "sd-market-name";
+  label.textContent = row.label;
+  const chosen = document.createElement("span");
+  chosen.className = "sd-market-price";
+  chosen.dataset["field"] = "slot-chosen";
+  const picked = row.options.filter((option) => option.chosen);
+  chosen.textContent = picked.length > 0 ? picked.map((option) => option.name).join(", ") : "Empty";
+  head.append(label, chosen);
+  item.appendChild(head);
+
+  const options = document.createElement("ul");
+  options.className = "sd-market-terms";
+  for (const option of row.options) {
+    const entry = document.createElement("li");
+    const pick = button(option.name, "secondary-button", () => {
+      if (option.chosen && row.multi) callbacks.onRemovePart(row.slot, option.id);
+      else callbacks.onChoosePart(row.slot, option.id);
+    });
+    pick.dataset["action"] = "choose-part";
+    pick.dataset["part"] = option.id;
+    pick.dataset["chosen"] = option.chosen ? "yes" : "no";
+    // The tradeoff rides on the control, so nothing has to be guessed at.
+    pick.title = option.tradeoff;
+    entry.appendChild(pick);
+    options.appendChild(entry);
+  }
+  item.appendChild(options);
   return item;
 }
 
@@ -1607,6 +1794,77 @@ function refreshPanelElement(
     }
 
     setField(element, "research-note", panel.note ?? "");
+    return;
+  }
+
+  if (panel.kind === "builder") {
+    setField(element, "builder-summary", panel.summary);
+    setField(element, "builder-built", panel.builtLine);
+    setField(element, "builder-note", panel.note ?? "");
+
+    const lists: readonly [string, readonly string[], string][] = [
+      [
+        "builder-issues",
+        panel.issues.map(
+          (issue) => `${issue.severity === "violation" ? "Refused" : "Warning"}: ${issue.message}`,
+        ),
+        "Nothing wrong with it.",
+      ],
+      [
+        "builder-stats",
+        panel.stats.map((stat) =>
+          stat.against ? `${stat.label}: ${stat.value} of ${stat.against}` : `${stat.label}: ${stat.value}`,
+        ),
+        "No parts fitted.",
+      ],
+      [
+        "builder-comparison",
+        panel.comparison.map((row) => `${row.label}: ${row.build} against ${row.owned}`),
+        "Nothing owned to compare against.",
+      ],
+      [
+        "builder-saved",
+        panel.saved.map((entry) => `${entry.name}${entry.current ? " (editing)" : ""}`),
+        "No blueprints filed.",
+      ],
+    ];
+    for (const [field, lines, empty] of lists) {
+      const list = element.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!list) continue;
+      list.replaceChildren(
+        ...(lines.length === 0 ? [empty] : lines).map((text) => {
+          const line = document.createElement("li");
+          line.textContent = text;
+          return line;
+        }),
+      );
+    }
+
+    for (const row of panel.slots) {
+      const item = element.querySelector<HTMLElement>(`[data-slot="${row.slot}"]`);
+      if (!item) continue;
+      const picked = row.options.filter((option) => option.chosen);
+      setField(item, "slot-chosen", picked.length > 0 ? picked.map((o) => o.name).join(", ") : "Empty");
+      for (const option of row.options) {
+        const control = item.querySelector<HTMLButtonElement>(`[data-part="${option.id}"]`);
+        if (control) control.dataset["chosen"] = option.chosen ? "yes" : "no";
+      }
+    }
+
+    const assembleButton = element.querySelector<HTMLButtonElement>('[data-action="build-custom"]');
+    if (assembleButton) {
+      assembleButton.disabled = panel.buildRefusal !== null;
+      assembleButton.title = panel.buildRefusal ?? "Assemble this build";
+      assembleButton.dataset["refusal"] = panel.buildRefusal ?? "";
+    }
+    const testButton = element.querySelector<HTMLButtonElement>('[data-action="test-range"]');
+    if (testButton) {
+      testButton.disabled = panel.testRefusal !== null;
+      testButton.title = panel.testRefusal ?? "Take it to the range";
+      testButton.dataset["refusal"] = panel.testRefusal ?? "";
+    }
+    const scrapButton = element.querySelector<HTMLButtonElement>('[data-action="scrap-custom"]');
+    if (scrapButton) scrapButton.disabled = panel.builtLine.startsWith("Nothing");
     return;
   }
 

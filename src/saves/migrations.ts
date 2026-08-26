@@ -16,6 +16,7 @@ import { emptyCrewSnapshot } from "../pilots/crew";
 import { emptySquadSnapshot } from "../allies/squad";
 import { emptyEconomySnapshot } from "../world/economy";
 import { emptyResearchSnapshot } from "../research/program";
+import { emptyLibrarySnapshot } from "../custom/blueprintLibrary";
 
 /**
  * One step of the upgrade chain. Steps are pure: same input document always
@@ -418,6 +419,25 @@ const addResearchSection: MigrationStep = {
   apply: (document) => ({ ...document, schemaVersion: 14, research: emptyResearchSnapshot() }),
 };
 
+/**
+ * Version 14 to 15: the builder.
+ *
+ * Adds a `library` section: saved blueprints, and the record of the one custom
+ * machine a campaign is allowed to have standing.
+ *
+ * A version 14 save has neither, because there was no builder. It comes back
+ * with an empty library rather than a starter blueprint: handing every existing
+ * campaign a design it did not draw would be putting words in the player's
+ * mouth, and the builder offers a starting point of its own when it is opened.
+ */
+const addBlueprintLibrary: MigrationStep = {
+  id: "14",
+  fromVersion: 14,
+  toVersion: 15,
+  description: "Add the blueprint library and the one custom machine a campaign may hold.",
+  apply: (document) => ({ ...document, schemaVersion: 15, library: emptyLibrarySnapshot() }),
+};
+
 export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   const registry = new ContentRegistry<MigrationStep>((entry) => {
     const errors: string[] = [];
@@ -446,6 +466,7 @@ export function createMigrationRegistry(): ContentRegistry<MigrationStep> {
   registry.register(addSquadSection);
   registry.register(addEconomySection);
   registry.register(addResearchSection);
+  registry.register(addBlueprintLibrary);
   return registry;
 }
 

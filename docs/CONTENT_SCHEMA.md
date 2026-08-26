@@ -1177,3 +1177,32 @@ a node may be authored before the one it depends on.
 chassis exists and is marked `research-manufacture`, so a recipe cannot exist for
 something that can simply be bought. A recipe with no researched component is
 refused for the same reason.
+
+## Jaeger parts (Milestone 25)
+
+`src/data/parts.ts`. Registered through `ContentRegistry` with `validatePart`.
+
+| Field                 | Type                                 | Notes                                                     |
+| --------------------- | ------------------------------------ | --------------------------------------------------------- |
+| `id`                  | string                               | Must start with `part.` and name its own slot             |
+| `slot`                | PartSlot                             | One of twelve                                             |
+| `massTons`            | number                               | Structural parts must weigh something; cosmetics must not |
+| `massHeight`          | 0 to 1                               | 0 at the feet, 1 at the head. Drives balance              |
+| `powerOutputMw`       | number                               | Reactors only                                             |
+| `powerDrawMw`         | number                               | At sustained load                                         |
+| `heatOutput`          | number                               | At sustained load                                         |
+| `heatDissipation`     | number                               | Armour, torsos and reactors carry most of it              |
+| `armorRating`         | 0 to 1                               | Averaged across the machine by structure                  |
+| `actuatorCapacity`    | number                               | Legs, arms and the drive                                  |
+| `mobilityScale`       | above 0                              | Legs set the pace; others move it by 0.4 of their delta   |
+| `ammunitionVolume`    | number                               | Negative on weapons, which consume it                     |
+| `provides`/`requires` | Fitting[]                            | Requiring several means any one will do                   |
+| `silhouette`          | { heightScale, bulk, shoulderRatio } | Proportions fed to the procedural generator               |
+| `tradeoff`            | string                               | Required. The honest sentence about the cost              |
+
+## Blueprints (Milestone 25)
+
+A blueprint is an id, a name, one array of part ids per slot, and free emblem
+text. Nothing derived is ever stored: the chassis, the stats and the silhouette
+are recomputed from the parts every time, so rebalancing a part reaches a saved
+design immediately.

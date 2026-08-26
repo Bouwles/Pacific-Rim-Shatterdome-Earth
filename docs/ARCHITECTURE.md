@@ -1236,6 +1236,44 @@ It is pure: it reports what a build would take and why it cannot happen, and the
 caller does the taking through the economy that owns balances and the roster that
 owns machines.
 
+## The custom Jaeger: parts, assembly and the one serial
+
+Three modules, none of which Babylon or the DOM can see.
+
+`src/data/parts.ts` is the catalogue. A part declares mass and the height that
+mass sits at, power, heat, armour, structure, actuator capacity, mobility, turn,
+ammunition, module slots, hardpoints, the fittings it provides and the fittings
+it needs, a cost, a silhouette contribution and a tradeoff sentence. Cosmetics
+are validated as weightless so paint can never carry a hidden advantage, and a
+test asserts that no part in a slot dominates another on every axis at no extra
+mass.
+
+`src/custom/blueprint.ts` is the assembly, and it is pure. `assemble()` derives
+every figure and returns **every** violated constraint rather than the first, so
+a refused build can be fixed in one pass rather than by guessing. Compatibility
+is a fitting match rather than a name check, which is what lets a part added
+later work with whatever already provides the right fitting.
+
+`chassisFrom()` is the reason there is no parallel combat path: it turns a legal
+blueprint into an ordinary `JaegerDefinition`, so the roster owns it, the arena
+fights it and the locomotion controller drives it without any of them knowing it
+was assembled. It returns null for an illegal build, which is what makes "cannot
+enter combat" a property of the type rather than a check somebody has to
+remember. Balance reaches the fight through `getUpSeconds`, mobility through the
+locomotion speeds, and mass and cooling through the mass budget.
+
+`src/custom/blueprintLibrary.ts` owns the saved designs and the rule that a
+campaign holds one custom machine. The limit is a property of the library rather
+than of a caller, and the sandbox exception is an explicit flag on it. Serials
+only ever go up, so a rebuild is a different machine.
+
+The bootstrap keeps its own `ContentRegistry<JaegerDefinition>`, seeded from the
+shipped table, and hands the same instance to the roster and the market. The
+derived custom chassis is put into that copy via `ContentRegistry.replace`, which
+exists for definitions authored at runtime; `register` still refuses a duplicate,
+so nothing shipped can be quietly overwritten and the shared table is never
+mutated.
+
 ## Quality presets
 
 Low, Medium, High and Cinematic, each a table of numbers some system reads
