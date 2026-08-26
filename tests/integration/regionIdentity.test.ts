@@ -7,7 +7,12 @@ import {
   strategicWeb,
 } from "../../src/debug/regionScenario";
 import { REGION_PROFILES } from "../../src/data/regionProfiles";
-import { conditionsFor, districtsFor, silhouetteOf } from "../../src/world/regionIdentity";
+import {
+  applyRegionConditions,
+  conditionsFor,
+  districtsFor,
+  silhouetteOf,
+} from "../../src/world/regionIdentity";
 import { createDistrictRegistry, type DistrictDefinition, type DistrictKind } from "../../src/data/districts";
 import { generateCityLayout } from "../../src/world/cityLayout";
 import { REGION_DEFINITIONS } from "../../src/data/regions";
@@ -27,6 +32,13 @@ const base: ReadonlyMap<DistrictKind, DistrictDefinition> = new Map(
     .map((district) => [district.id, district]),
 );
 const SEED = 20260902;
+
+/** One profile by id, so the condition tests read as places rather than lookups. */
+function profileOf(id: string) {
+  const found = REGION_PROFILES.find((profile) => profile.id === id);
+  expect(found).toBeDefined();
+  return found!;
+}
 
 describe("the cities are different places", () => {
   it("runs the same way twice", () => {
@@ -208,5 +220,55 @@ describe("a region reports itself honestly", () => {
         .toLowerCase();
       for (const word of banned) expect(text.includes(word), `${profile.id}: ${word}`).toBe(false);
     }
+  });
+});
+
+describe("conditions reach the fight rather than only the panel", () => {
+  const base = {
+    visibilityMeters: 2_000,
+    tractionMultiplier: 1,
+    rangedAccuracyPenalty: 0.1,
+    movementMultiplier: 1,
+    windPushMps: 0,
+    hazardous: false,
+  };
+
+  it("leaves the effects alone where there are no conditions", () => {
+    expect(applyRegionConditions(base, null)).toEqual(base);
+  });
+
+  it("makes ice genuinely slippery in the value locomotion reads", () => {
+    const anchorage = conditionsFor(profileOf("anchorage"));
+    const applied = applyRegionConditions(base, anchorage);
+    expect(applied.tractionMultiplier).toBeLessThan(base.tractionMultiplier);
+  });
+
+  it("makes a storm coast genuinely harder to shoot in", () => {
+    const manila = conditionsFor(profileOf("manila"));
+    const applied = applyRegionConditions(base, manila);
+    expect(applied.rangedAccuracyPenalty).toBeGreaterThan(base.rangedAccuracyPenalty);
+  });
+
+  it("makes a clear high coast easier to see from", () => {
+    const lima = conditionsFor(profileOf("lima"));
+    const applied = applyRegionConditions(base, lima);
+    expect(applied.visibilityMeters).toBeGreaterThan(base.visibilityMeters);
+  });
+
+  it("never makes a machine unable to stand or unable to shoot at all", () => {
+    for (const profile of REGION_PROFILES) {
+      const applied = applyRegionConditions(base, conditionsFor(profile));
+      expect(applied.tractionMultiplier, profile.id).toBeGreaterThan(0.2);
+      expect(applied.rangedAccuracyPenalty, profile.id).toBeLessThan(1);
+      expect(applied.visibilityMeters, profile.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives different regions genuinely different effects", () => {
+    const keys = REGION_PROFILES.map((profile) => {
+      const applied = applyRegionConditions(base, conditionsFor(profile));
+      return `${applied.tractionMultiplier}|${applied.rangedAccuracyPenalty}|${applied.visibilityMeters}`;
+    });
+    expect(new Set(keys).size).toBeGreaterThan(4);
   });
 });

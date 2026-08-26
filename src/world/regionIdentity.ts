@@ -295,6 +295,40 @@ export function knockOnEffect(
     .sort((a, b) => a.contractScale - b.contractScale);
 }
 
+/**
+ * Folds a place's conditions into the effects the world already produces.
+ *
+ * This is what makes a fight in Anchorage genuinely different from the same
+ * fight in Manila rather than only differently described. It reaches the
+ * simulation through `EnvironmentEffects`, which locomotion, targeting and the
+ * HUD all already read, so nothing downstream learns that regions have
+ * profiles.
+ *
+ * Pure: effects in, effects out.
+ */
+export function applyRegionConditions<
+  T extends {
+    readonly visibilityMeters: number;
+    readonly tractionMultiplier: number;
+    readonly rangedAccuracyPenalty: number;
+  },
+>(effects: T, conditions: RegionConditions | null): T {
+  if (!conditions) return effects;
+  const { modifiers } = conditions;
+
+  // Accuracy is stored as a penalty rather than a scale, so a modifier that
+  // halves accuracy has to double what is left to be taken away.
+  const remaining = Math.max(0, 1 - effects.rangedAccuracyPenalty) * modifiers.accuracyScale;
+  return {
+    ...effects,
+    visibilityMeters: Math.max(1, effects.visibilityMeters * modifiers.visibilityScale),
+    // Floored the same way the weather's own traction is, so no combination of
+    // ice and rain can make a machine completely unable to stand.
+    tractionMultiplier: Math.max(0.25, effects.tractionMultiplier * modifiers.footingScale),
+    rangedAccuracyPenalty: Math.min(0.95, Math.max(0, 1 - remaining)),
+  };
+}
+
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));

@@ -63,7 +63,7 @@ import { resolveFeetHeight, sampleWaveHeight, waveFieldCoordinates } from "../wo
 import type { EnvironmentSample } from "../world/environment";
 import { createDistrictRegistry, type DistrictKind } from "../data/districts";
 import { createRegionProfileRegistry } from "../data/regionProfiles";
-import { conditionsFor, districtsFor, economicsFor } from "../world/regionIdentity";
+import { applyRegionConditions, conditionsFor, districtsFor, economicsFor } from "../world/regionIdentity";
 import { generateCityLayout, type CityLayout } from "../world/cityLayout";
 import {
   ALERT_LEVELS,
@@ -136,8 +136,9 @@ import { CREW_MEMBERS, shiftAt } from "../data/personnel";
 import { jaegerRegistry, type JaegerDefinition } from "../data/jaegers";
 import { ContentRegistry } from "../data/registry";
 import { buildHud, type HudInput } from "../ui/hudModel";
-import { defaultPresentation, normalisePresentation, type PresentationSettings } from "../ui/presentation";
+import { normalisePresentation, type PresentationSettings } from "../ui/presentation";
 import type { ColourVisionPreset, TextScale } from "../ui/hudTokens";
+import { browserStorage, loadPresentation, savePresentation } from "../ui/presentationStore";
 import { Exploration, planRoute, travelHoursBetween } from "../world/exploration";
 import { SITE_DEFINITIONS } from "../data/sites";
 import { ShatterdomeState } from "../shatterdome/facilityState";
@@ -1616,7 +1617,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       windSpeedMps: preview.windSpeedMps,
       windDirectionDeg: preview.windDirectionDeg,
     });
-    return worldState.environment.sample({
+    const sample = worldState.environment.sample({
       position,
       groundHeightMeters,
       entityHeightMeters: PLAYER_HEIGHT_METERS,
@@ -1627,6 +1628,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         diving,
       }),
     });
+
+    // Where you are standing is part of the weather. Ice, a dense harbour and a
+    // mountain corridor all reach the fight through the same effects object the
+    // world already produces, so locomotion and targeting need no idea that
+    // regions have profiles at all.
+    const local = worldState.activeRegionId ? regionConditionsFor(worldState.activeRegionId) : null;
+    return { ...sample, effects: applyRegionConditions(sample.effects, local?.conditions ?? null) };
   };
 
   /**
@@ -2940,29 +2948,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onHoldToComplete: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { holdToComplete: enabled });
         },
-        onHudOpacity: (value: number) => {
-          presentation = normalisePresentation({ ...presentation, hudOpacity: value });
-          refreshPilot();
-        },
-        onTextScale: (value: number) => {
-          presentation = normalisePresentation({ ...presentation, textScale: value as TextScale });
-          refreshPilot();
-        },
-        onHighContrast: (enabled: boolean) => {
-          presentation = normalisePresentation({ ...presentation, highContrast: enabled });
-          refreshPilot();
-        },
-        onColourVision: (preset: string) => {
-          presentation = normalisePresentation({
-            ...presentation,
-            colourVision: preset as ColourVisionPreset,
-          });
-          refreshPilot();
-        },
-        onSubtitles: (enabled: boolean) => {
-          presentation = normalisePresentation({ ...presentation, subtitles: enabled });
-          refreshPilot();
-        },
+        onHudOpacity: (value: number) => applyPresentation({ hudOpacity: value }),
+        onTextScale: (value: number) => applyPresentation({ textScale: value as TextScale }),
+        onHighContrast: (enabled: boolean) => applyPresentation({ highContrast: enabled }),
+        onColourVision: (preset: string) => applyPresentation({ colourVision: preset as ColourVisionPreset }),
+        onSubtitles: (enabled: boolean) => applyPresentation({ subtitles: enabled }),
         onSkipSequences: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
         },
@@ -4903,7 +4893,24 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * Presentation only. Nothing here reaches a simulation value, which is why
    * the same fight comes out the same however these are set.
    */
-  let presentation: PresentationSettings = defaultPresentation();
+  const presentationStorage = browserStorage();
+  const restoredPresentation = loadPresentation(presentationStorage);
+  let presentation: PresentationSettings = restoredPresentation.settings;
+  /** What the store said, so the panel can be honest about persistence. */
+  let presentationNote = restoredPresentation.note;
+
+  /**
+   * Takes a change to how things are shown, and remembers it.
+   *
+   * One path for every display control, so nothing can change a setting and
+   * forget to persist it, and so a storage that refuses says so rather than
+   * silently dropping the preference.
+   */
+  const applyPresentation = (change: Partial<PresentationSettings>): void => {
+    presentation = normalisePresentation({ ...presentation, ...change });
+    presentationNote = savePresentation(presentationStorage, presentation).note;
+    refreshPilot();
+  };
 
   /**
    * What the HUD should say, worked out from the systems that are running.
@@ -4982,7 +4989,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       radio: directorNotice,
     };
 
-    return { model: buildHud(input), settings: presentation };
+    return { model: buildHud(input), settings: presentation, note: presentationNote };
   };
 
   /** Signs for a machine. The refusal is the message, never a silent no-op. */

@@ -168,6 +168,8 @@ export interface SquadPanelState {
 export interface HudLayerState {
   readonly model: HudModel;
   readonly settings: PresentationSettings;
+  /** What the settings store said. Shown so persistence is never a mystery. */
+  readonly note: string;
 }
 
 export interface PilotScreenCallbacks {
@@ -726,7 +728,13 @@ export function renderPilotScreen(
   subtitles.addEventListener("change", () => callbacks.onSubtitles(subtitles.checked));
   subtitleLabel.append(subtitles, document.createTextNode(" Subtitles"));
 
-  displayRow.append(opacityLabel, textLabel, contrastLabel, visionLabel, subtitleLabel);
+  // Whether the preferences will actually be remembered. A browser that refuses
+  // to store them says so here rather than surprising somebody after a reload.
+  const displayNote = document.createElement("span");
+  displayNote.className = "pilot-display-note";
+  displayNote.dataset["field"] = "display-note";
+
+  displayRow.append(opacityLabel, textLabel, contrastLabel, visionLabel, subtitleLabel, displayNote);
 
   panel.append(
     header,
@@ -756,6 +764,15 @@ export function renderPilotScreen(
         const { model, settings } = layer;
         hud.style.setProperty("--hud-opacity", String(settings.hudOpacity));
         hud.style.setProperty("--hud-text-scale", String(settings.textScale));
+        displayNote.textContent = layer.note;
+
+        // The controls follow the stored settings rather than whatever the
+        // markup happened to default to, so a restored preference is visible.
+        opacity.value = String(Math.round(settings.hudOpacity * 100));
+        textSelect.value = String(settings.textScale);
+        contrast.checked = settings.highContrast;
+        visionSelect.value = settings.colourVision;
+        subtitles.checked = settings.subtitles;
 
         // The critical band. Never faded, never hidden, and empty when there is
         // genuinely nothing critical rather than as a stylistic choice.
