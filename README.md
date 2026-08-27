@@ -303,6 +303,7 @@ src/data         typed content registries and asset manifests
 src/audio        buses, mixing, ducking, the adaptive score, the radio queue
 src/net          the battle transport, the message protocol, host authority and the guest
 src/sandbox      custom scenarios, the cheat overlay, the scenario library and its statistics
+src/vfx          the effect catalogue, pool budgets, impact language and effect settings
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
@@ -318,6 +319,14 @@ A radio call ducks the music and the ambience under it. It never ducks the acces
 Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
 
 If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
+
+### The look
+
+Combat is anime-influenced without going flat. Machines and creatures carry a rim-light ink line that is stable at any distance, materials keep their roughness floors so a 75 metre machine never reads as a toy, heavy hits land with a brief impact freeze and a camera impulse, and a finisher earns the one long hold. Thirteen pooled effect types cover sparks, plasma, steam, coolant, kaiju blue, rain, water, dust, debris, lightning, muzzle flash, finishers and speed lines, each with a hard budget per quality level.
+
+Five effect settings sit in the pilot panel: flashes, impact shake, motion blur, particle density and intense colour. Turning flashes off suppresses everything flash-class at the source, including lightning and finisher accents. Warning colours are never muted, because they are information. All five are remembered in the browser beside the display and volume settings.
+
+Lower quality presets keep silhouettes and telegraphs and reduce the expensive parts: Low has no true edge lines, no speed lines and smaller pools, but the same fight and the same warnings.
 
 ### Simulator
 

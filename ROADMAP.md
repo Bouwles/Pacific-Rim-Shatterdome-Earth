@@ -792,3 +792,20 @@ campaign progress.
 means a wave scheduler for later waves, mutation stacking on a spawned creature,
 a destruction preloader for the city damage preset, and the water state. Then an
 explicit finish action so a sandbox run reaches the scoreboard.
+
+## Phase 9 / Milestone 32 - Anime-influenced rendering, effects, impact language, and scalable quality
+
+**Depends on:** Milestone 31.
+**Status:** complete.
+
+A style guide as validated data, rim-accent edge treatment stable on giant
+geometry, thirteen pooled effects with per-quality budgets that provably return
+to baseline, impact language with capped freezes and camera impulses through
+the existing comfort rig, and five persisted accessibility toggles that sit in
+the code path rather than in a checklist.
+
+**Next action:** give the remaining catalogue effects their gameplay triggers
+(steam on heat, coolant on breach, rain interaction while raining, water
+displacement at the shoreline), consume the chromatic number in a restrained
+render pass, and streak speed lines along the motion vector once swing
+direction reaches the renderer.

@@ -1597,3 +1597,54 @@ asserts no awarding function ever appears in the module's exports.
 **The advanced panel** holds exactly one thing: debug drawing. Everything else
 is an ordinary option, so the normal sandbox is a game rather than a developer
 build.
+
+## The look
+
+Split the way everything else is split: decisions are pure and data, realisation
+is one Babylon class.
+
+**The style guide is data.** `src/data/styleGuide.ts` holds the palette (every
+colour with a stated job and a warning flag), roughness floors and rim strengths
+per material family, edge treatment per quality level, and the impact grammar:
+freeze lengths, a per-second freeze cap, impulse, pose exaggeration, chromatic
+restraint and speed line counts. `validateStyleGuide()` holds the guide to its
+own rules, so a freeze over 100 ms or a chromatic over 3 px fails a test rather
+than shipping.
+
+**Why rim accents rather than outlines.** A post-process outline on giant
+geometry shimmers: the silhouette of a 75 m machine at 400 m is hundreds of
+near-parallel edges, and a one-pixel line over them crawls with every camera
+step. A fresnel rim is computed on the surface, stable at any distance and any
+size, and reads as the same ink line. True `enableEdgesRendering` lines exist
+only on High and Cinematic and only on meshes above a height threshold, where
+the lines are long, straight and stable.
+
+**The effect catalogue and its ledger.** `src/vfx/effectsModel.ts` defines the
+thirteen effect kinds with per-quality ceilings on instances and particles, and
+`EffectPoolLedger` is the accounting: request, refuse-and-count at the ceiling,
+release exactly once, age bursts out, hold sustained effects until released by
+name. The ledger is pure, which is why the stress test runs a hundred finisher
+rounds on all four levels without a GPU and proves the pool ends at baseline.
+
+**Impact language.** `src/vfx/impactLanguage.ts` maps combat events to what the
+screen owes them through a rule table, already scaled by quality and the
+player's settings. The freeze stops the drawn clock only: the arena stepped
+before the director hears anything, so a frozen frame draws the fight where it
+was and cannot change it. Freezes are capped per rolling second so repeated
+hits land unfrozen rather than strobing.
+
+**Realisation.** `src/engine/effectsView.ts` owns one `ParticleSystem` per
+effect kind, allocated at the catalogue ceiling for the level and never grown.
+A burst is a `manualEmitCount` on the pooled system, so a fight allocates
+nothing. Flash-class effects are refused at `burst()` while the flash setting is
+off, which is the only place a flash can be born. Everything is released in
+`dispose()`, and `stats()` exposes the ledger for the browser test that holds
+the baseline claim.
+
+**Camera impulse rides the existing rig.** `PilotSession.addImpulse` feeds the
+same decay, comfort scale and reduced-motion gate a footfall uses, so no combat
+impulse can bypass the player's settings.
+
+**Settings.** `src/vfx/vfxSettings.ts` persists the five toggles in
+localStorage beside the display and volume settings, clamped on load rather
+than refused.

@@ -758,3 +758,20 @@ nothing is counted twice and that a worse link never produces more of anything.
 | Spawning a roster unit needs no source edit                            | Every chassis in the registry validates as a scenario squad, and the pickers are built from the registries rather than a hard-coded list                                                                                |
 | Debug visualisation stays behind an advanced panel                     | `rulesByPanel(true)` is exactly `debugVisuals`, and a browser test confirms the panel is closed by default and the ordinary rules are outside it                                                                        |
 | Determinism                                                            | The same scenario and rules produce an identical run, asserted by object equality                                                                                                                                       |
+
+## Milestone 32 acceptance evidence
+
+| Acceptance item                                           | Evidence                                                                                                                                                                      |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anime-influenced without flat materials or toy scale      | Roughness floors at 0.3 minimum are validator-enforced; rim accents replace outlines; the machine keeps specular pulled to its floor. Verified by eye on the production build |
+| Low and Medium preserve silhouettes and telegraphs        | The rim accent is per-pixel and present at every level; edge lines are the only thing dropped. Every preset still lists its required telegraphs, enforced since Milestone 15  |
+| Stress: pools return to baseline after repeated finishers | Three of everything, a hundred rounds, all four levels: zero live effects and full capacity at the end, asserted per level, plus the same claim held in a live browser fight  |
+| Budgets hold under abuse                                  | Peak particle demand never exceeded the catalogue worst case on any level; over-budget requests were refused and counted on every level                                       |
+| No full-screen flash ignores accessibility                | Flash-class effects are refused inside burst() while flashes are off; the accessibility proof shows zero freezes, zero impulse, zero chromatic where settings say zero        |
+| Not every post-process stacked at once                    | There is no post-process stack: the chromatic number is computed and capped at 2.5 px but nothing consumes it yet, which errs on the side the failure mode names              |
+| The fight is unchanged by every setting at minimum        | A browser test zeroes all five settings and the hit still lands and logs                                                                                                      |
+| Determinism                                               | The stress run twice produces identical results, asserted by object equality                                                                                                  |
+
+The browser suite found one real leak during this milestone: effects aged only
+on the combat tick, so a burst alive when a fight ended never returned its
+capacity. Aging moved to the frame clock and the browser test now holds it.

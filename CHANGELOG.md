@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-07, Milestone 32: the look
+
+The fights got their style, and the style got budgets.
+
+- A style guide written as numbers: a ten-colour palette where every colour has a stated job, roughness floors under every material family so nothing renders as a toy, rim accent strengths, emission ceilings, edge treatment per quality level and an impact grammar with hard limits on everything.
+- Edges are fresnel rim accents rather than post-process outlines, on purpose: a screen-space line over a 75 metre machine shimmers at distance, and a rim is computed on the surface so it is stable at any scale. True edge lines exist only on High and Cinematic, and only on meshes tall enough for the lines to be long and straight.
+- Thirteen pooled effects: sparks, plasma, steam, coolant, kaiju blue, rain interaction, water displacement, dust, debris bursts, lightning, muzzle flash, finisher accents and speed lines. Each has a per-quality ceiling on instances and particles, allocated once and never grown. An effect over budget is refused and counted rather than costing a frame.
+- Impact language: a brief freeze on heavy hits with a cap per rolling second so hits never strobe, the one long hold reserved for a finisher landing, camera impulse through the same decay and comfort scale as a footfall, pose exaggeration that decays back to one, chromatic offset that never exceeds restraint, and speed lines that do not exist on Low.
+- The freeze stops the drawn clock and never the simulated one: the arena has already counted the hit, so no amount of frozen frames changes a fight.
+- Five accessibility toggles that the whole system obeys: flashes, impact shake, motion blur, particle density and intense colour. A flash-class effect is refused at the only place it can be born while flashes are off, warning colours survive the intense-colour toggle because they are information, and everything persists in the browser beside the display settings.
+- A stress scenario that fires three of everything a hundred rounds on every quality level and requires the pool to end exactly at baseline, and an accessibility proof that runs the same hits under every setting and requires zero freezes, zero impulse and zero chromatic where the settings say zero.
+
+The rim accents, roughness floors and impact grammar keep materials industrial and mass heavy. Nothing is cel-shaded, nothing stacks every post-process at once, and no full-screen flash can ignore the settings, because the settings sit in the code path rather than in a checklist.
+
 ## 2026-09-06, Milestone 31: a place to try things
 
 A simulator, reachable from the menu, with no costs, no rewards and no way back into a campaign.

@@ -732,3 +732,29 @@ of agreement with what produced it.
 
 **Debug drawing is off unless the advanced panel is opened**, and it uses the
 hit-volume rendering that already existed rather than a second debug path.
+
+## Effects
+
+**Per-effect budgets, allocated once.** Each of the thirteen effect kinds has a
+ceiling on simultaneous instances and particles per instance, per quality
+level. One pooled `ParticleSystem` per kind is created with the ground view at
+exactly that capacity and never grows; a burst is a `manualEmitCount`, so a
+fight full of finishers allocates nothing.
+
+**Worst case by level:** Low 324 particles, Medium 832, High 2,284, Cinematic
+4,436 if every kind fired to its ceiling at once, each inside its preset's
+existing `maxParticles` ceiling, asserted by a unit test. The ladder is asserted
+monotonic: no lower preset may demand more than a higher one.
+
+**Refusal, not growth.** An effect over its ceiling is refused and counted, and
+the count is visible in `stats()`. The stress scenario fires three of
+everything for a hundred rounds on every level and requires the pool to end at
+baseline: zero live effects, full capacity, refusals recorded.
+
+**Impact freezes: at most 3 per rolling second** (2 on Low and Medium), 40 to
+85 ms each, 90 to 240 ms for the one finisher hold. A freeze stops the drawn
+clock only, so its cost is one repeated frame, not a simulation stall.
+
+**Effects age on the frame clock, not the combat tick.** A burst alive when a
+fight ends still hands its capacity back; the browser test that holds the
+baseline found exactly this leak once, which is why the rule is written down.

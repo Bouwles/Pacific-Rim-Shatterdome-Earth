@@ -797,3 +797,29 @@ everything that is wrong is listed underneath in plain sentences.
 
 Once a run starts, the fight uses the ordinary pilot controls. Nothing about it
 is saved, spent or earned.
+
+## Effect settings
+
+Five controls in the pilot panel, under the display row.
+
+**Flashes** suppresses everything the catalogue marks as a flash: lightning,
+plasma, muzzle flash and finisher accents. Off means those effects are refused
+at the source, not dimmed.
+
+**Impact shake** scales the camera impulse a heavy hit earns, on top of the
+existing comfort shake scale. Zero means hits never move the camera.
+
+**Motion blur** owns the chromatic offset, which is the one blur-class artefact
+the renderer has. Off means zero pixels of offset, always.
+
+**Particles** scales every effect pool ceiling from full to nothing. At zero,
+every effect request is refused and counted, and the fight runs identically.
+
+**Intense colour** muted pulls saturated effect colour toward steel. Warning
+colours are exempt: red and amber are information, and comfort never trades
+against a reading the player needs.
+
+All five persist in the browser beside the display settings. None of them
+changes the fight: the arena has counted everything before the screen is asked
+to show it, and a reduced-motion pilot fights the same battle at the same
+numbers.

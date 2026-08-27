@@ -142,6 +142,17 @@ export interface PilotScreenState {
   readonly audio: AudioPanelState | null;
   /** Second-player state, or null where co-op is not available at all. */
   readonly coop: CoopPanelState | null;
+  /** The effect accessibility settings, as currently applied. */
+  readonly vfx: VfxPanelState;
+}
+
+/** The five effect settings, plus what the store said about keeping them. */
+export interface VfxPanelState {
+  readonly flashes: boolean;
+  readonly shakeScale: number;
+  readonly motionBlur: boolean;
+  readonly particleDensity: number;
+  readonly intenseColor: boolean;
 }
 
 /** What the co-op row shows. Null anywhere the feature is unavailable. */
@@ -276,6 +287,14 @@ export interface PilotScreenCallbacks {
   readonly onCoopPause: (paused: boolean) => void;
   /** Produces the block of text to send to the other player. */
   readonly onCoopOffer: () => void;
+  /** One effect setting changed. The caller persists and applies it. */
+  readonly onVfx: (change: {
+    readonly flashes?: boolean;
+    readonly shakeScale?: number;
+    readonly motionBlur?: boolean;
+    readonly particleDensity?: number;
+    readonly intenseColor?: boolean;
+  }) => void;
   /** Takes a block pasted from the other player. */
   readonly onCoopSignal: (text: string) => void;
   readonly onExit: () => void;
@@ -826,6 +845,60 @@ export function renderPilotScreen(
 
   displayRow.append(opacityLabel, textLabel, contrastLabel, visionLabel, subtitleLabel, displayNote);
 
+  // Effects. The five accessibility toggles the style system obeys. They sit
+  // with the display controls because they answer the same question: how do
+  // you want to be shown this.
+  const vfxRow = document.createElement("div");
+  vfxRow.className = "pilot-controls";
+  vfxRow.dataset["section"] = "vfx";
+
+  const flashLabel = document.createElement("label");
+  const flashBox = document.createElement("input");
+  flashBox.type = "checkbox";
+  flashBox.dataset["action"] = "vfx-flashes";
+  flashBox.addEventListener("change", () => callbacks.onVfx({ flashes: flashBox.checked }));
+  flashLabel.append(flashBox, document.createTextNode(" Flashes"));
+
+  const blurLabel = document.createElement("label");
+  const blurBox = document.createElement("input");
+  blurBox.type = "checkbox";
+  blurBox.dataset["action"] = "vfx-blur";
+  blurBox.addEventListener("change", () => callbacks.onVfx({ motionBlur: blurBox.checked }));
+  blurLabel.append(blurBox, document.createTextNode(" Motion blur"));
+
+  const intenseLabel = document.createElement("label");
+  const intenseBox = document.createElement("input");
+  intenseBox.type = "checkbox";
+  intenseBox.dataset["action"] = "vfx-intense";
+  intenseBox.addEventListener("change", () => callbacks.onVfx({ intenseColor: intenseBox.checked }));
+  intenseLabel.append(intenseBox, document.createTextNode(" Intense colour"));
+
+  const particlesLabel = document.createElement("label");
+  particlesLabel.append(document.createTextNode("Particles "));
+  const particlesRange = document.createElement("input");
+  particlesRange.type = "range";
+  particlesRange.min = "0";
+  particlesRange.max = "100";
+  particlesRange.dataset["action"] = "vfx-particles";
+  particlesRange.addEventListener("input", () =>
+    callbacks.onVfx({ particleDensity: Number(particlesRange.value) / 100 }),
+  );
+  particlesLabel.appendChild(particlesRange);
+
+  const impactLabel = document.createElement("label");
+  impactLabel.append(document.createTextNode("Impact shake "));
+  const impactRange = document.createElement("input");
+  impactRange.type = "range";
+  impactRange.min = "0";
+  impactRange.max = "100";
+  impactRange.dataset["action"] = "vfx-shake";
+  impactRange.addEventListener("input", () =>
+    callbacks.onVfx({ shakeScale: Number(impactRange.value) / 100 }),
+  );
+  impactLabel.appendChild(impactRange);
+
+  vfxRow.append(flashLabel, blurLabel, intenseLabel, particlesLabel, impactLabel);
+
   // The mixing desk. One fader per bus, built from the bus list rather than
   // hand-written, so a bus added later cannot arrive without a control.
   const audioRow = document.createElement("div");
@@ -927,6 +1000,7 @@ export function renderPilotScreen(
     hud,
     cameraRow,
     displayRow,
+    vfxRow,
     audioRow,
     coopRow,
     rosterRow,
@@ -1024,6 +1098,18 @@ export function renderPilotScreen(
             return item;
           }),
         );
+      }
+
+      // Effect settings follow the stored values, not the markup's defaults,
+      // and sliders are left alone while a pointer is holding them.
+      flashBox.checked = state.vfx.flashes;
+      blurBox.checked = state.vfx.motionBlur;
+      intenseBox.checked = state.vfx.intenseColor;
+      if (document.activeElement !== particlesRange) {
+        particlesRange.value = String(Math.round(state.vfx.particleDensity * 100));
+      }
+      if (document.activeElement !== impactRange) {
+        impactRange.value = String(Math.round(state.vfx.shakeScale * 100));
       }
 
       // The HUD first, because it is the part that has to be right under

@@ -84,6 +84,9 @@ import { loadRuns, statsStorage, summarise } from "../sandbox/stats";
 import { OBJECTIVE_DEFINITIONS } from "../missions/objectives";
 import { WEATHER_KINDS } from "../world/weather";
 import { DIFFICULTY_LEVELS } from "../world/economy";
+import { EffectsView } from "../engine/effectsView";
+import { ImpactDirector } from "../vfx/impactLanguage";
+import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
 import type { SoundscapeInput } from "../audio/soundscape";
 import { crewLineId, crewLines } from "../audio/crewVoice";
 import type { AudioBusId } from "../data/audioBuses";
@@ -334,6 +337,27 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     adapterDispose = adapter.dispose;
 
     bootScene = buildBootScene(adapter.engine, canvas, quality.shadowMapSize);
+    // A read-only debug hook for the browser tests: the pooled-effects claim is
+    // "a fight leaves the scene no heavier than it found it", and mesh count is
+    // the number that holds it. Reads state, changes nothing.
+    (globalThis as { debugSceneMeshCount?: () => number }).debugSceneMeshCount = () =>
+      bootScene?.scene.meshes.length ?? 0;
+    // And the effects pool's own ledger, for the return-to-baseline claim.
+    (globalThis as { debugVfxStats?: () => unknown }).debugVfxStats = () => effectsView?.stats() ?? null;
+    // A debug-only burst trigger, so a test can prove the flash gate without
+    // depending on a weapon being in arc. It goes through the same burst()
+    // every gameplay effect goes through; there is no second path.
+    (globalThis as { debugVfxBurst?: (kind: string) => boolean }).debugVfxBurst = (kind) => {
+      const pose = pilotSession?.pose;
+      return (
+        effectsView?.burst(
+          kind as Parameters<EffectsView["burst"]>[0],
+          pose?.east ?? 0,
+          (pose?.up ?? 0) + 40,
+          pose?.north ?? 0,
+        ) ?? false
+      );
+    };
     const scene = bootScene.scene;
 
     kernel = new SimulationKernel({ seed: resolveSeed(window.location.search) });
@@ -1302,6 +1326,42 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let combatArena: CombatArena | undefined;
 
   /**
+   * The look: pooled effects, impact language and the player's effect settings.
+   *
+   * The director is pure and lives for the session; the view owns GPU objects
+   * and lives with the ground view. Settings come back from the browser and
+   * every change goes back through one path, like the display and volume
+   * settings before them.
+   */
+  const vfxStore = vfxStorage();
+  let vfxSettings: VfxSettings = loadVfxSettings(vfxStore).settings;
+  let effectsView: EffectsView | undefined;
+  const impactDirector = new ImpactDirector(quality.id, {
+    shakeScale: vfxSettings.shakeScale,
+    reducedMotion: false,
+    noFlashes: !vfxSettings.flashes,
+    noChromatic: false,
+  });
+  /** Seconds the render clock still owes the current impact freeze. */
+  let renderFreezeLeft = 0;
+
+  /** One path for every effect-setting change, so nothing skips persistence. */
+  const applyVfxSettings = (change: Partial<VfxSettings>): void => {
+    vfxSettings = { ...vfxSettings, ...change };
+    saveVfxSettings(vfxStore, vfxSettings);
+    effectsView?.setSettings(vfxSettings);
+    impactDirector.setAccessibility({
+      shakeScale: vfxSettings.shakeScale,
+      reducedMotion: pilotSession?.comfort.reducedMotion ?? false,
+      noFlashes: !vfxSettings.flashes,
+      // The chromatic offset is the one blur-class artefact this renderer has,
+      // so the motion blur toggle owns it.
+      noChromatic: !vfxSettings.motionBlur,
+    });
+    refreshPilot();
+  };
+
+  /**
    * The simulator.
    *
    * A scenario, a rule set and a screen. `sandboxRun` is what makes a fight a
@@ -1816,6 +1876,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // still reading them must be gone first.
     skyView?.dispose();
     skyView = undefined;
+    effectsView?.dispose();
+    effectsView = undefined;
     // The stage first: it hangs off the ambience context, so it has to let go
     // of its nodes before the context is closed underneath it.
     soundStage?.dispose();
@@ -1838,6 +1900,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     });
     weatherView = new WeatherView({ scene: bootScene.scene, quality });
     rebuildCityView();
+    effectsView = new EffectsView({ scene: bootScene.scene, quality, settings: vfxSettings });
+    // The style guide reaches the meshes that exist so far. Later meshes are
+    // styled where they are created, by the same call.
+    for (const mesh of bootScene.scene.meshes) {
+      if (mesh.name === "jaeger.placeholderBody") {
+        effectsView.styleMesh(mesh, "machine", mesh.getBoundingInfo().boundingBox.extendSize.y * 2);
+      }
+    }
     ambientAudio = new AmbientAudio(kernel?.seed ?? 0);
     // Browsers refuse audio outside a user gesture. Entering the ground view is
     // one, so this is the earliest honest place to try.
@@ -2013,6 +2083,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // One growth object for the whole fight, read from the roster rather than
     // recomputed per hit.
     const growth = roster.growthOf(session.jaeger.id, crewMachineBonus());
+    // The creature gets the style guide's creature treatment the moment it has
+    // a body: rim accent, roughness floor, edges where the preset affords them.
+    queueMicrotask(() => {
+      for (const mesh of bootScene.scene.meshes) {
+        if (mesh.name === "combat.placeholderBody" && effectsView) {
+          effectsView.styleMesh(mesh, "creature", kaiju.heightMeters);
+        }
+      }
+    });
     if (sandboxRun && adjustmentsFor(sandboxRun.rules).showDebugVisuals) {
       combatDebugVolumes = true;
       combatView?.setDebugVolumes(true);
@@ -2208,6 +2287,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const weaponId = WEAPON_KEYS[code];
     if (!weaponId) return;
     const outcome = arena.fireWeapon("jaeger", weaponId);
+    if (outcome.ok && pilotSession && effectsView) {
+      const pose = pilotSession.pose;
+      effectsView.burst("muzzle-flash", pose.east, pose.up + 40, pose.north);
+    }
     if (!outcome.ok) {
       pushCombatLine(`refused: ${outcome.message}`);
       trainingLine = outcome.message;
@@ -3126,6 +3209,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           refreshPilot();
         },
         onCoopOffer: () => coopOffer(),
+        onVfx: (change) => applyVfxSettings(change),
         onCoopSignal: (text: string) => coopSignal(text),
         onSkipSequences: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
@@ -3882,6 +3966,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       squad: squadPanelState(),
       audio: audioPanelState(),
       coop: coopPanelState(),
+      vfx: {
+        flashes: vfxSettings.flashes,
+        shakeScale: vfxSettings.shakeScale,
+        motionBlur: vfxSettings.motionBlur,
+        particleDensity: vfxSettings.particleDensity,
+        intenseColor: vfxSettings.intenseColor,
+      },
     });
   };
 
@@ -4006,12 +4097,42 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // two ticks is still something that happened.
     events.push(...arena.drain());
     applySandboxRules(arena);
+
+    // Impact language: the events decide what the screen owes them, already
+    // scaled by quality and the player's settings. The arena has counted
+    // everything by now, so nothing here can change the fight.
+    impactDirector.setAccessibility({
+      shakeScale: vfxSettings.shakeScale * (session.comfort.shakeScale ?? 1),
+      reducedMotion: session.comfort.reducedMotion,
+      noFlashes: !vfxSettings.flashes,
+      noChromatic: !vfxSettings.motionBlur,
+    });
+    const impactFrame = impactDirector.advance(deltaSeconds, events);
+    renderFreezeLeft = impactFrame.freezeSecondsLeft;
+    if (impactFrame.impulseMeters > 0) session.addImpulse(Math.min(1, impactFrame.impulseMeters));
+    if (effectsView) {
+      const snapshotForFx = arena.snapshot();
+      const kaijuFx = snapshotForFx.fighters.find((fighter) => fighter.id === "kaiju");
+      for (const [index, request] of impactFrame.requests.entries()) {
+        // At the contact point when the event recorded one, otherwise at the
+        // creature. The pool refuses anything over budget; refusals are counted.
+        const contact = events[index]?.contact;
+        const east = contact?.east ?? kaijuFx?.east ?? pose.east;
+        const north = contact?.north ?? kaijuFx?.north ?? pose.north;
+        const up = contact?.up ?? pose.up + 20;
+        effectsView.burst(request, east, up, north);
+      }
+    }
     consumeCombatEvents(events);
 
     const snapshot = arena.snapshot();
     const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
     if (kaijuView && combatView) {
-      combatView.update(kaijuView, events, deltaSeconds);
+      // The impact freeze stops the drawn clock, never the simulated one: the
+      // arena stepped above, whatever this passes. A frozen frame draws the
+      // fight exactly where it was, which is the whole point of the hold.
+      const visualDelta = renderFreezeLeft > 0 ? 0 : deltaSeconds;
+      combatView.update(kaijuView, events, visualDelta);
       // Draw exactly what is live, and nothing that is not.
       combatView.updateProjectiles(
         arena
@@ -4709,6 +4830,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // Sound advances on the same frame delta as everything else, clamped the
       // same way, so a stalled tab cannot make the score jump a whole state.
       advanceSoundscape(Math.min(0.1, deltaMs / 1000));
+      // Effects age on the frame, not the combat tick: a burst alive when a
+      // fight ends must still hand its capacity back, or the pool never
+      // returns to baseline. The browser test holds exactly this.
+      effectsView?.advance(Math.min(0.1, deltaMs / 1000));
+      renderFreezeLeft = Math.max(0, renderFreezeLeft - Math.min(0.1, deltaMs / 1000));
 
       // Walking into or out of a region swaps the city under the player.
       if (cityRegionId !== worldState.activeRegionId) rebuildCityView();
@@ -6697,6 +6823,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       cityView?.dispose();
       weatherView?.dispose();
       skyView?.dispose();
+      effectsView?.dispose();
       soundStage?.dispose();
       ambientAudio?.dispose();
       globeView?.dispose();

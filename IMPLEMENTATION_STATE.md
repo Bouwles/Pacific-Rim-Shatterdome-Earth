@@ -304,7 +304,14 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a scenario library with save, reload, delete, export and import, marking a cross-version or modded file rather than half-loading it;
   - scenarios and run statistics in their own store, with no function anywhere that turns a sandbox run into campaign progress;
   - a deterministic check that runs a straight fight, the same fight with every cheat on, and the straight fight again, requiring the first and third to match down to the arena digest.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1998 unit+integration), `smoke` (179 Playwright, including 7 two-window co-op tests and 9 simulator tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
+- **The look**, as data with a renderer reading it:
+  - a style guide in numbers: a ten-colour palette with stated jobs and warning flags, roughness floors, rim strengths, emission ceilings, per-level edge treatment and an impact grammar that validates its own limits;
+  - rim accents instead of post-process outlines, chosen for stability on giant geometry, with true edge lines only on High and Cinematic above a height threshold;
+  - thirteen pooled effects with per-quality ceilings on instances and particles, allocated once, refused and counted over budget, and proven to return to baseline after a hundred finisher rounds on every level;
+  - impact language mapping combat events to freezes, impulses, pose exaggeration, chromatic and speed lines through a rule table, capped per rolling second, stopping the drawn clock and never the simulated one;
+  - camera impulses through the existing rig's decay, comfort scale and reduced-motion gate;
+  - five effect settings persisted in the browser, with flash-class effects refused at the source while flashes are off and warning colours exempt from colour muting.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2048 unit+integration), `smoke` (183 Playwright, including 7 two-window co-op, 9 simulator and 4 effects tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -365,6 +372,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- The stylisation is applied to the placeholder bodies, which is what exists: rim accent, roughness floor and edge lines land on the machine and creature placeholders and will apply identically to real models when they arrive through the same styleMesh call. The pose-exaggeration number is computed and decays correctly but nothing consumes it yet, because the placeholder bodies have no animation rig to exaggerate. Speed lines are budgeted and drawn from the pool but their placement is at the impact point rather than streaked along the motion vector, which needs the renderer to know the swing direction.
+- Chromatic offset is computed by the impact director and gated by the motion blur toggle, but no post-process consumes it yet: the number reaches the frame and stops there. Wiring it into a render pipeline pass is deliberately deferred rather than adding a post-process stack this milestone.
+- The steam, coolant, rain-interaction and water-displacement effects are in the catalogue with budgets and are requestable, but only sparks, dust, kaiju blue, debris, plasma, muzzle flash and finisher accents currently have gameplay triggers. The rest need their sources: venting on heat, component breach, active rain and shoreline contact.
 - The simulator's scenario carries waves, mutations, pilots, water state, city damage preset, difficulty and aggression, and validates all of them. What the running fight currently reads from that is the region, the creature and the aggression, slow-motion, invulnerability, infinite-ammunition and debug-drawing rules. Later waves, mutation stacking on a spawned creature, the city damage preset and the water state are authored, validated and stored, but the fight does not apply them yet: they need the wave scheduler and the destruction preloader that do not exist. The editor does not pretend otherwise, but it is the largest gap in the mode.
 - Sandbox runs are not yet written to the scoreboard automatically. `recordRun` and the store are tested and the panel reads them, but nothing calls it at the end of a sandbox fight, because a sandbox fight has no mission to end. It needs an explicit finish action in the pilot screen.
 - The squad in a scenario is one machine. The type holds a list and the escort objective requires two, but the runner puts one on the field.
@@ -380,6 +390,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- The look: [src/data/styleGuide.ts](src/data/styleGuide.ts), [src/vfx/effectsModel.ts](src/vfx/effectsModel.ts), [impactLanguage.ts](src/vfx/impactLanguage.ts), [vfxSettings.ts](src/vfx/vfxSettings.ts), realised in [src/engine/effectsView.ts](src/engine/effectsView.ts)
 - Simulator: [src/sandbox/scenario.ts](src/sandbox/scenario.ts), [rules.ts](src/sandbox/rules.ts), [library.ts](src/sandbox/library.ts), [stats.ts](src/sandbox/stats.ts), [src/ui/sandboxScreen.ts](src/ui/sandboxScreen.ts)
 - Two-player: [src/net/protocol.ts](src/net/protocol.ts), [transport.ts](src/net/transport.ts), [hostSession.ts](src/net/hostSession.ts), [guestSession.ts](src/net/guestSession.ts), [browserTransports.ts](src/net/browserTransports.ts)
 - Sound: [src/audio/mixer.ts](src/audio/mixer.ts), [musicDirector.ts](src/audio/musicDirector.ts), [radioDirector.ts](src/audio/radioDirector.ts), [layerModel.ts](src/audio/layerModel.ts), [soundscape.ts](src/audio/soundscape.ts), [crewVoice.ts](src/audio/crewVoice.ts), realised in [src/engine/soundStage.ts](src/engine/soundStage.ts)

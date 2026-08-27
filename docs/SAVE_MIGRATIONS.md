@@ -568,3 +568,13 @@ silently changing the fight they built.
 An export file adds one more layer, `SANDBOX_FILE_KIND` and a `fileVersion`, so
 a file that is not from this game is recognised as such before its contents are
 examined at all.
+
+## Milestone 32 saves nothing new to a campaign
+
+`ROOT_SAVE_VERSION` stays at 17. The style guide is content, the effect pools
+are runtime state that dies with the scene, and the impact director's counters
+are per-fight. The five effect settings persist in `localStorage` under
+`shatterdome.vfx.v1`, beside the display and volume settings, for the same
+reason those live there: how much flashing somebody can safely be shown is a
+property of the person, not of a campaign, and loading an old save must not
+change it.

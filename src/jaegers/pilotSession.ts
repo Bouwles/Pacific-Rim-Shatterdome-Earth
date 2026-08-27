@@ -92,6 +92,7 @@ export class PilotSession {
   private readonly bufferValue: InputBuffer;
   private lastPlacement: CameraPlacement | null = null;
   private lastInput: JaegerInput = NEUTRAL_JAEGER_INPUT;
+  private pendingImpulse = 0;
 
   constructor(private readonly options: PilotSessionOptions) {
     this.poseValue = spawnPose(options.east, options.north, options.up, options.headingDeg ?? 0);
@@ -166,6 +167,19 @@ export class PilotSession {
     return this.poseValue;
   }
 
+  /**
+   * Adds a camera impulse from outside locomotion, 0 to 1.
+   *
+   * Combat impacts use this: the hit has already been counted by the arena, and
+   * this only asks the camera to acknowledge it. It rides the same decay, the
+   * same comfort scale and the same reduced-motion gate as a footfall, so no
+   * new path can bypass the player's settings.
+   */
+  addImpulse(strength: number): void {
+    if (!Number.isFinite(strength)) return;
+    this.pendingImpulse = Math.max(this.pendingImpulse, Math.max(0, Math.min(1, strength)));
+  }
+
   /** Applies something that happened to the machine. Combat calls this. */
   react(reaction: ReactionRequest): JaegerPose {
     this.poseValue = applyReaction(this.poseValue, reaction);
@@ -188,11 +202,12 @@ export class PilotSession {
       pose: this.poseValue,
       profile: this.profile,
       comfort: this.comfortValue,
-      impulse: step.cameraImpulse,
+      impulse: Math.max(step.cameraImpulse, this.pendingImpulse),
       obstruction: update.obstruction,
       targetPosition: update.targetPosition ?? null,
     };
     this.cameraValue = stepCamera(this.cameraValue, update.cameraInput, update.deltaSeconds, cameraContext);
+    this.pendingImpulse = 0;
     this.lastPlacement = cameraPlacement(this.cameraValue, cameraContext);
 
     return {

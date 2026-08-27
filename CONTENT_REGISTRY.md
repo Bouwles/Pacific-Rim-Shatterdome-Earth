@@ -962,3 +962,30 @@ draws its content from.
 | WATER_STATES           | low-tide, normal, high-tide, surge       |
 | AI_AGGRESSION          | passive, cautious, normal, relentless    |
 | SANDBOX_SCHEMA_VERSION | 1                                        |
+
+## Style palette (Milestone 32)
+
+Ten tokens in `src/data/styleGuide.ts`. Warning colours survive every
+accessibility setting.
+
+| id                  | Hex     | Job                                 | Warning |
+| ------------------- | ------- | ----------------------------------- | ------- |
+| style.ink           | #0a1016 | Edge accents and the darkest shadow | no      |
+| style.steel         | #5f6a72 | Machine plate mid-tone              | no      |
+| style.steel-warm    | #8a7f6a | Weathered plate and rust            | no      |
+| style.sky-cool      | #7fd6ff | Rim light and interface glow        | no      |
+| style.plasma        | #66e0ff | Plasma weapons and reactor emission | no      |
+| style.kaiju-blue    | #39d2c0 | Kaiju blood                         | no      |
+| style.fire          | #ff9a3d | Sparks, muzzle flash, burning fuel  | no      |
+| style.warning-red   | #ff5a48 | Damage and critical alerts          | yes     |
+| style.warning-amber | #ffc247 | Caution and heat warnings           | yes     |
+| style.night-sea     | #0e2233 | Deep water and storm sky            | no      |
+
+## Effect catalogue (Milestone 32)
+
+Thirteen kinds in `src/vfx/effectsModel.ts`, each with per-quality ceilings on
+instances and particles. Worst case if everything fired at once: Low 324,
+Medium 832, High 2,284, Cinematic 4,436 particles, all inside their presets'
+`maxParticles`. Flash-class kinds (plasma, lightning, muzzle flash, finisher)
+obey the flashes toggle at the source. Speed lines have a ceiling of zero on
+Low, by the style guide.
