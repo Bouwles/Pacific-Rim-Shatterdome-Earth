@@ -775,3 +775,20 @@ nothing is counted twice and that a worse link never produces more of anything.
 The browser suite found one real leak during this milestone: effects aged only
 on the combat tick, so a burst alive when a fight ended never returned its
 capacity. Aging moved to the frame clock and the browser test now holds it.
+
+## Milestone 33 acceptance evidence
+
+| Acceptance item                                             | Evidence                                                                                                                                                                                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| After one load, the core game reaches the main menu offline | Production preview, DevTools offline emulation, reload: full menu on WebGPU. Proven real by a network-only path failing while the cached shell served 200                                                                           |
+| Updating between two versions preserves saves and packs     | Built three stamped versions live. The waiting worker was offered at the menu, applying flushed an autosave, the handover reloaded, and afterwards the pre-update slot, the flush's autosave and all 4 pack files were intact       |
+| A partial pack can resume or cleanly restart                | Headless: a two-of-four cache resumes fetching exactly the missing two; a 404 stops at the named file and retry continues from it; remove then download refills. In-browser: the same flow through the real Cache API in Playwright |
+| Saves never cached by the worker                            | The policy refuses /saves and non-GET; the worker's source is held to the policy by a test that also proves no IndexedDB reference and no self-activation                                                                           |
+| No eager caching of future assets                           | Precache is 3 entries; packs are network-only to the worker and fetched only on request                                                                                                                                             |
+| No activation mid-combat                                    | The flow's safe places are MainMenu, Saves and Sandbox; accept() refuses anywhere else, unit-proven, and the worker cannot skip waiting without the page's message                                                                  |
+| The game runs identically with no worker                    | A Playwright test loads without ?sw=1 and reaches the menu; unsupported and insecure contexts produce a sentence, not a failure                                                                                                     |
+
+Two real defects the manual pass found and fixed: the update banner never
+redrew when an update arrived while the menu was already on screen, and the
+flow never learned its starting place, so the menu counted as unsafe until the
+player wandered off and back.

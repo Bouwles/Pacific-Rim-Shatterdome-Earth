@@ -758,3 +758,22 @@ clock only, so its cost is one repeated frame, not a simulation stall.
 **Effects age on the frame clock, not the combat tick.** A burst alive when a
 fight ends still hands its capacity back; the browser test that holds the
 baseline found exactly this leak once, which is why the rule is written down.
+
+## Offline shell and packs
+
+**Precache: 3 entries.** The entry page, the shell URL and the manifest.
+Everything else is cached as it is first fetched, so install cost is a few
+kilobytes and nothing future is downloaded eagerly.
+
+**Shell cache: one version resident.** Activation deletes older shell caches,
+so the ceiling is one build's worth of hashed assets plus the pages that were
+actually visited.
+
+**Packs download one file at a time.** Progress is a count of real files,
+failure is one file's name, and interruption between files loses nothing. The
+first pack is 26.6 KB across 4 files; pack sizes are declared in the registry
+so the panel can be honest before the first byte.
+
+**The worker adds no runtime cost to a fight.** Cache-first assets are served
+from disk after first load; the simulation, the render loop and the audio graph
+never wait on it.

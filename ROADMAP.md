@@ -809,3 +809,18 @@ the code path rather than in a checklist.
 displacement at the shoreline), consume the chromatic number in a restrained
 render pass, and streak speed lines along the motion vector once swing
 direction reaches the renderer.
+
+## Phase 9 / Milestone 33 - Progressive Web App, offline shell, and update safety
+
+**Depends on:** Milestone 32.
+**Status:** complete.
+
+Manifest, icons, offline shell, versioned caches, explicit update offers that
+wait for a safe menu state and flush saves first, per-build worker stamping,
+and optional packs in an update-surviving cache with resume, retry and clean
+removal. Saves stay in IndexedDB, which the worker cannot touch and refuses by
+path as well.
+
+**Next action:** teach the asset resolver to fall through to the pack cache, so
+a downloaded pack's textures are actually used by drop-in models, and grow the
+pack catalogue as real optional content appears.

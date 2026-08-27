@@ -989,3 +989,12 @@ Medium 832, High 2,284, Cinematic 4,436 particles, all inside their presets'
 `maxParticles`. Flash-class kinds (plasma, lightning, muzzle flash, finisher)
 obey the flashes toggle at the source. Speed lines have a ceiling of zero on
 Low, by the style guide.
+
+## Download packs (Milestone 33)
+
+One pack in `src/pwa/packs.ts`, registry-validated: files must live under
+/packs/, carry sizes, and the pack must state its purpose.
+
+| id                        | Files | Bytes  | Purpose                                                |
+| ------------------------- | ----- | ------ | ------------------------------------------------------ |
+| pack.placeholder-textures | 4     | 26,650 | Original procedural detail textures for drop-in models |

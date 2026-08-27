@@ -578,3 +578,20 @@ are per-fight. The five effect settings persist in `localStorage` under
 reason those live there: how much flashing somebody can safely be shown is a
 property of the person, not of a campaign, and loading an old save must not
 change it.
+
+## Milestone 33 saves nothing new, and protects what exists
+
+`ROOT_SAVE_VERSION` stays at 17.
+
+The service worker never touches a save. IndexedDB traffic does not pass
+through service workers at all, and this worker additionally refuses to cache
+anything under `/saves`, so a future save-export URL cannot leak into a cache
+either. Shell updates delete old shell caches and nothing else.
+
+The update flow's contribution to save safety is sequencing: accepting an
+update writes an autosave through the ordinary autosave path and only then
+lets the new worker take over. That autosave is a normal slot, visible in the
+list, subject to the same rotation and backups as any other.
+
+Pack contents are static files, never save data, and live in their own cache
+that survives updates. Nothing about a pack is authoritative state.

@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pacific Rim: Shatterdome Earth</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a1016" />
     <style>
       html,
       body {
@@ -241,6 +243,39 @@
       #uiRoot .pilot-faders input[type="range"] {
         flex: 1 1 70px;
         min-width: 60px;
+      }
+      #uiRoot .pwa-status,
+      #uiRoot .pwa-packs {
+        font:
+          12px/1.6 "Consolas",
+          monospace;
+        opacity: 0.85;
+      }
+      #uiRoot .pwa-packs {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+      }
+      #uiRoot .pwa-packs li {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .pwa-update {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid rgba(255, 194, 71, 0.5);
+        border-radius: 3px;
+        padding: 6px 10px;
+        margin: 6px 0;
+        font:
+          12px/1.5 "Consolas",
+          monospace;
+      }
+      #uiRoot .pwa-detail {
+        color: rgb(255, 168, 148);
       }
       #uiRoot .screen-sandbox .sandbox-row {
         display: flex;

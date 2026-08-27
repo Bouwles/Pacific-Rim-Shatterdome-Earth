@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-08, Milestone 33: yours to keep
+
+The game installs, runs offline, and updates without ever endangering a save.
+
+- A web app manifest with original procedural icons, so the game installs as its own window.
+- A service worker that caches the shell as it loads: after one successful online load, the whole game boots to the menu with the network gone. Nothing future is downloaded eagerly.
+- The caching policy is a pure module the worker mirrors, and a test reads the worker's source to keep the two from drifting. Navigations go network first so a deploy is noticed; hashed assets are cached first-hit for ever; anything under /saves is never cached at all.
+- Saves stay exactly where they were: IndexedDB, which a service worker cannot touch and this one additionally refuses by path. Updating deletes old shell caches and nothing else.
+- Updates are offered, never imposed. A new version installs in the background and waits. The offer appears only at the menu, the save panel or the simulator, never mid-combat, and can always be postponed. Accepting flushes every save to disk before the new worker is allowed to take over, and the flush's own autosave is visible in the slot list afterwards.
+- Optional downloadable packs, starting with an original procedural texture pack. A pack downloads one file at a time into its own cache, which shell updates never delete. A stopped download resumes from the files it already has, a failure names the failing file and offers retry, and removal is a clean restart.
+- Every build stamps its worker, because update detection is byte comparison and a worker that never changes would never announce anything.
+- Offline needs HTTPS or localhost, and the panel says so plainly where neither holds. A browser with no service workers, or one refusing storage, gets the same game with a sentence explaining what it will not keep.
+
 ## 2026-09-07, Milestone 32: the look
 
 The fights got their style, and the style got budgets.

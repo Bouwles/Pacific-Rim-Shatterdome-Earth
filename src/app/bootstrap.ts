@@ -84,6 +84,9 @@ import { loadRuns, statsStorage, summarise } from "../sandbox/stats";
 import { OBJECTIVE_DEFINITIONS } from "../missions/objectives";
 import { WEATHER_KINDS } from "../world/weather";
 import { DIFFICULTY_LEVELS } from "../world/economy";
+import { initialisePwa, type PwaHandle } from "../pwa/registration";
+import { browserPackCache, PackStore } from "../pwa/packs";
+import { renderPwaPanel } from "../ui/screens";
 import { EffectsView } from "../engine/effectsView";
 import { ImpactDirector } from "../vfx/impactLanguage";
 import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
@@ -1333,6 +1336,50 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * every change goes back through one path, like the display and volume
    * settings before them.
    */
+  /**
+   * Installability and offline play.
+   *
+   * The worker registers in production always, and in development only when
+   * the page asks with ?sw=1: a dev server's module graph changes every edit,
+   * and a worker caching it would serve yesterday's modules to today's code.
+   * Everything the flow decides is pure and lives in src/pwa; this only builds
+   * the handle and forwards app-state changes so an update is never offered
+   * anywhere unsafe.
+   */
+  const wantSw = import.meta.env.PROD || new URLSearchParams(window.location.search).has("sw");
+  let pwa: PwaHandle | undefined;
+  let packStore: PackStore | undefined;
+
+  /**
+   * Everything unsaved, written down. The update flow calls this before it
+   * lets a new worker take over, so an update can never race a save.
+   */
+  const flushSaves = async (): Promise<void> => {
+    if (!kernel) return;
+    try {
+      await saveController.autosave(
+        kernel,
+        worldState.serialize(),
+        shatterdomeState.serialize(),
+        roster.snapshot(),
+        attackDirector.snapshot(),
+        mission?.snapshot() ?? null,
+        market.snapshot(),
+        crew.snapshot(),
+        squad.snapshot(),
+        market.economy.snapshot(),
+        research.snapshot(),
+        blueprintLibrary.snapshot(),
+        exploration.snapshot(),
+        soundscape.radio.toSave(),
+      );
+    } catch {
+      // A failed flush must not strand the player mid-update-flow; the update
+      // simply proceeds on whatever was last written, which is what would have
+      // happened without the offer.
+    }
+  };
+
   const vfxStore = vfxStorage();
   let vfxSettings: VfxSettings = loadVfxSettings(vfxStore).settings;
   let effectsView: EffectsView | undefined;
@@ -6741,6 +6788,55 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     sandboxScreen = undefined;
   };
 
+  /** Fills the menu's offline panel from real state. Async, so called on idle. */
+  const refreshPwaPanel = async (): Promise<void> => {
+    const host = document.getElementById("pwaPanel");
+    if (!host || !pwa) return;
+    const statuses = packStore ? await packStore.statuses() : [];
+    const update = pwa.flow.view();
+    renderPwaPanel(
+      host,
+      {
+        status: pwa.status().detail,
+        updateMessage: update.message,
+        showOffer: update.showOffer,
+        packs: statuses.map((pack) => ({
+          id: pack.id,
+          displayName: pack.displayName,
+          purpose: pack.purpose,
+          phase: pack.phase,
+          filesCached: pack.filesCached,
+          filesTotal: pack.filesTotal,
+          detail: pack.detail,
+        })),
+      },
+      {
+        onApplyUpdate: () => {
+          void pwa?.accept();
+        },
+        onPostponeUpdate: () => {
+          pwa?.postpone();
+          void refreshPwaPanel();
+        },
+        onDownloadPack: (id: string) => {
+          void (async () => {
+            // Redrawn before and after, so the downloading state is visible
+            // and the finished count is the cache's own answer.
+            await refreshPwaPanel();
+            await packStore?.download(id);
+            await refreshPwaPanel();
+          })();
+        },
+        onRemovePack: (id: string) => {
+          void (async () => {
+            await packStore?.remove(id);
+            await refreshPwaPanel();
+          })();
+        },
+      },
+    );
+  };
+
   const renderForState = (state: AppState): void => {
     if (state !== AppState.AssetGallery && gallery) closeGallery();
     if (state !== AppState.Saves && saveScreen) closeSaves();
@@ -6758,6 +6854,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           () => stateMachine.transition(AppState.WorldMap),
           () => stateMachine.transition(AppState.Sandbox),
         );
+        void refreshPwaPanel();
         break;
       case AppState.Sandbox:
         openSandbox();
@@ -6794,12 +6891,28 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }
   };
 
+  if (wantSw) {
+    pwa = initialisePwa({ flushSaves, onFlowChange: () => void refreshPwaPanel() });
+    // The machine is usually already at the menu by the time this runs, and a
+    // flow that never learns its starting place would treat the menu as unsafe
+    // until the player wandered off and back.
+    pwa.placeChanged(stateMachine.state);
+    void browserPackCache().then((cache) => {
+      packStore = new PackStore({ cache });
+      void refreshPwaPanel();
+    });
+    unsubscribers.push(() => pwa?.dispose());
+  }
+
   unsubscribers.push(
     stateMachine.onChange((to, from) => {
       // Remember where the save panel was opened from before the screen changes.
       if (to === AppState.Saves && from !== AppState.Saves) {
         savesReturnState = from === AppState.Shatterdome ? AppState.Shatterdome : AppState.MainMenu;
       }
+      // The update flow follows the player, so an offer can only appear in the
+      // places the flow itself lists as safe. Never mid-combat.
+      pwa?.placeChanged(to);
       renderForState(to);
     }),
   );

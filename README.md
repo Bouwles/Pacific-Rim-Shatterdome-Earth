@@ -304,6 +304,7 @@ src/audio        buses, mixing, ducking, the adaptive score, the radio queue
 src/net          the battle transport, the message protocol, host authority and the guest
 src/sandbox      custom scenarios, the cheat overlay, the scenario library and its statistics
 src/vfx          the effect catalogue, pool budgets, impact language and effect settings
+src/pwa          the caching policy, update flow, pack downloads and worker registration
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
@@ -319,6 +320,16 @@ A radio call ducks the music and the ambience under it. It never ducks the acces
 Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
 
 If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
+
+### Installing and playing offline
+
+The game is a progressive web app. Serve it over HTTPS or from localhost, load it once, and the shell caches itself: from then on it boots to the main menu with no connection at all. Browsers offer to install it as its own window from the address bar.
+
+Updates never interrupt anything. A new version downloads in the background and a banner appears on the main menu, never during a fight. Applying it saves everything first and then reloads; postponing costs nothing and the offer returns next time. Save slots live in IndexedDB, which the service worker cannot touch and refuses by path as well.
+
+Optional packs are on the same menu panel. They download into their own cache, survive updates, resume if interrupted, and can be removed and redownloaded cleanly. Nothing large is ever fetched without being asked for.
+
+Without HTTPS or localhost, or in a browser without service workers, the game runs exactly as before and the panel says plainly that offline play is unavailable.
 
 ### The look
 

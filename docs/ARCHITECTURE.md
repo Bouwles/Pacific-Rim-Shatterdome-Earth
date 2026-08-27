@@ -1648,3 +1648,42 @@ impulse can bypass the player's settings.
 **Settings.** `src/vfx/vfxSettings.ts` persists the five toggles in
 localStorage beside the display and volume settings, clamped on load rather
 than refused.
+
+## Offline and updates
+
+**The policy is a module, the worker is its mirror.** A service worker must be
+plain JavaScript at a stable URL, so it cannot import TypeScript. The decisions
+live in `src/pwa/swPolicy.ts` where they are pure and unit-tested, and
+`public/sw.js` implements them; a test reads the worker's source and fails if
+the constants drift. Routing: same-origin GET only, `/saves` never cached,
+`/packs/` left to the pack store, navigations and the manifest network-first
+with cache fallback, hashed assets cache-first for ever, everything else cached
+as fetched so one load leaves enough to boot again.
+
+**Two caches with different lifetimes.** The shell cache is versioned and old
+versions are deleted on activate. The pack cache has its own name and
+activation never touches it, so downloads survive every deploy. IndexedDB is
+not a cache and no worker code path reaches it.
+
+**Updates wait for permission.** The worker never calls skipWaiting on its own;
+it waits for a message the page only sends after `UpdateFlow` has allowed it.
+The flow is a pure state machine: an update is offered only in MainMenu, Saves
+or Sandbox, follows the player until they reach one, withdraws if they leave,
+can always be postponed, and applying passes through a flushing state that only
+advances when the save flush has genuinely resolved. `registration.ts` is the
+one file touching the real API, with reload injected for tests.
+
+**The build stamps the worker.** Update detection is byte comparison of sw.js,
+so `scripts/stamp-sw.mjs` writes a unique stamp into every production build's
+worker. The public/ copy keeps the placeholder so development is deterministic.
+
+**Packs.** `src/pwa/packs.ts` defines packs as registry-validated file lists
+with sizes, and `PackStore` downloads one file at a time into the pack cache,
+skipping files already present, which is what resume is. Failures name the file
+and stop; retry continues from there; removal deletes the pack's files and
+nothing else. The store takes an injected cache and fetch, so the whole
+download lifecycle is tested headless.
+
+**Development.** The worker registers in production always and in development
+only with `?sw=1`, because a dev server's module graph changes every edit and a
+worker caching it would serve yesterday's modules to today's code.

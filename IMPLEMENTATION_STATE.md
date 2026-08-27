@@ -311,7 +311,15 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - impact language mapping combat events to freezes, impulses, pose exaggeration, chromatic and speed lines through a rule table, capped per rolling second, stopping the drawn clock and never the simulated one;
   - camera impulses through the existing rig's decay, comfort scale and reduced-motion gate;
   - five effect settings persisted in the browser, with flash-class effects refused at the source while flashes are off and warning colours exempt from colour muting.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2048 unit+integration), `smoke` (183 Playwright, including 7 two-window co-op, 9 simulator and 4 effects tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
+- **Installable and offline**, with saves out of reach of every update:
+  - a manifest with original procedural icons, and a service worker whose policy is a pure tested module the worker's source is held to;
+  - shell cached as it loads, so one online load boots the whole game to the menu offline, proven against the production build with the network genuinely dead;
+  - navigations network-first so deploys are noticed, hashed assets cache-first for ever, /saves never cached, IndexedDB untouched;
+  - updates that install in the background, are offered only at the menu, the save panel or the simulator, follow the player until somewhere safe, can always be postponed, and flush every save before the new worker takes over;
+  - a per-build worker stamp, because update detection is byte comparison and an unchanging worker would never announce anything;
+  - optional packs in their own cache that survives updates, downloading file by file with real resume, named failures, retry and clean removal, starting with a 26.6 KB original procedural texture pack;
+  - honest degradation everywhere: no HTTPS, no service workers or no storage each produce the same game and a sentence saying what will not be kept.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2079 unit+integration), `smoke` (190 Playwright, including 7 two-window co-op, 9 simulator, 4 effects and 7 offline-shell tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -372,6 +380,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- The offline boot and the two-version update were verified by hand against the production preview with DevTools network emulation, not in the automated suite: the e2e tests run against the dev server, which is exactly the environment the worker deliberately stays out of. The pack lifecycle, worker registration and manifest are covered by automation; the offline reload and the update handover are the two items that stay manual.
+- The pack files are downloaded and cached but nothing consumes them yet: the placeholder texture pack exists to make the download machinery real, and the asset resolver does not look in the pack cache. Wiring resolver fallthrough to cached packs is the natural next step for the pack system.
+- The update offer redraws only the menu panel. A player sitting in the save panel when an update finishes installing sees the banner on their next menu visit rather than immediately, because only the menu hosts the panel.
 - The stylisation is applied to the placeholder bodies, which is what exists: rim accent, roughness floor and edge lines land on the machine and creature placeholders and will apply identically to real models when they arrive through the same styleMesh call. The pose-exaggeration number is computed and decays correctly but nothing consumes it yet, because the placeholder bodies have no animation rig to exaggerate. Speed lines are budgeted and drawn from the pool but their placement is at the impact point rather than streaked along the motion vector, which needs the renderer to know the swing direction.
 - Chromatic offset is computed by the impact director and gated by the motion blur toggle, but no post-process consumes it yet: the number reaches the frame and stops there. Wiring it into a render pipeline pass is deliberately deferred rather than adding a post-process stack this milestone.
 - The steam, coolant, rain-interaction and water-displacement effects are in the catalogue with budgets and are requestable, but only sparks, dust, kaiju blue, debris, plasma, muzzle flash and finisher accents currently have gameplay triggers. The rest need their sources: venting on heat, component breach, active rain and shoreline contact.
@@ -390,6 +401,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- Offline: [src/pwa/swPolicy.ts](src/pwa/swPolicy.ts), [updateFlow.ts](src/pwa/updateFlow.ts), [packs.ts](src/pwa/packs.ts), [registration.ts](src/pwa/registration.ts), [public/sw.js](public/sw.js), [scripts/stamp-sw.mjs](scripts/stamp-sw.mjs)
 - The look: [src/data/styleGuide.ts](src/data/styleGuide.ts), [src/vfx/effectsModel.ts](src/vfx/effectsModel.ts), [impactLanguage.ts](src/vfx/impactLanguage.ts), [vfxSettings.ts](src/vfx/vfxSettings.ts), realised in [src/engine/effectsView.ts](src/engine/effectsView.ts)
 - Simulator: [src/sandbox/scenario.ts](src/sandbox/scenario.ts), [rules.ts](src/sandbox/rules.ts), [library.ts](src/sandbox/library.ts), [stats.ts](src/sandbox/stats.ts), [src/ui/sandboxScreen.ts](src/ui/sandboxScreen.ts)
 - Two-player: [src/net/protocol.ts](src/net/protocol.ts), [transport.ts](src/net/transport.ts), [hostSession.ts](src/net/hostSession.ts), [guestSession.ts](src/net/guestSession.ts), [browserTransports.ts](src/net/browserTransports.ts)

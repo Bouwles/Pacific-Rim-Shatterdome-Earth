@@ -823,3 +823,26 @@ All five persist in the browser beside the display settings. None of them
 changes the fight: the arena has counted everything before the screen is asked
 to show it, and a reduced-motion pilot fights the same battle at the same
 numbers.
+
+## Offline, updates and packs
+
+The offline panel sits at the bottom of the main menu.
+
+The status line says what the worker is doing: active, registering, or why it
+cannot run here. Offline play needs HTTPS or localhost; anywhere else the game
+runs normally and this line says installability is unavailable.
+
+When an update is ready, a banner appears here and nowhere else. **Save and
+update** writes every save to disk, then switches to the new version and
+reloads. **Later** dismisses it; the offer returns the next time you arrive at
+the menu. An update is never offered during a fight, and there is no way to
+apply one from inside a fight.
+
+Each optional pack shows its state and real file count. **Download** fetches
+it; a pack stopped partway shows partial and the button reads **Resume**, which
+fetches only what is missing. A failure names the file that failed and Resume
+retries from there. **Remove** deletes the pack's files for a clean restart.
+Packs survive game updates.
+
+If the browser is not storing site data, packs and offline play are unavailable
+and the panel says so; saves fall back exactly as they always have.
