@@ -87,6 +87,11 @@ import { DIFFICULTY_LEVELS } from "../world/economy";
 import { initialisePwa, type PwaHandle } from "../pwa/registration";
 import { browserPackCache, PackStore } from "../pwa/packs";
 import { renderPwaPanel } from "../ui/screens";
+import { Profiler, buildReport, type PerfReport } from "../perf/profiler";
+import { AdaptiveQuality } from "../perf/adaptiveQuality";
+import { LeakTracker, type ResourceInventory } from "../perf/leakTracker";
+import { budgetFor } from "../data/perfBudgets";
+import { createStressRegistry } from "../debug/perfScenario";
 import { EffectsView } from "../engine/effectsView";
 import { ImpactDirector } from "../vfx/impactLanguage";
 import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
@@ -326,6 +331,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * budget: one upload per frame is the whole point.
    */
   let frameHook: ((deltaMs: number) => void) | null = null;
+
+  /**
+   * The performance instruments. Alive for the whole session and cheap enough
+   * to leave on: the profiler accumulates a rolling window, the adaptive
+   * controller judges frames, and the leak tracker only does arithmetic when a
+   * baseline or an audit is asked for.
+   */
+  const profiler = new Profiler({ longFrameMs: 50 });
+  const adaptive = new AdaptiveQuality("high", false);
+  let stressSceneId = "live";
+  let stressSeed = 0;
   /**
    * Advances world time. Assigned once world state exists.
    *
@@ -347,6 +363,94 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       bootScene?.scene.meshes.length ?? 0;
     // And the effects pool's own ledger, for the return-to-baseline claim.
     (globalThis as { debugVfxStats?: () => unknown }).debugVfxStats = () => effectsView?.stats() ?? null;
+
+    // ------------------------- performance hooks --------------------------
+    // Counters read at report time, each from the system that already counts.
+    const sceneRef = bootScene.scene;
+    profiler.addCounter("meshes", () => sceneRef.meshes.length);
+    profiler.addCounter("materials", () => sceneRef.materials.length);
+    profiler.addCounter("textures", () => sceneRef.textures.length);
+    profiler.addCounter("particleSystems", () => sceneRef.particleSystems.length);
+    profiler.addCounter("drawCalls", () => sceneRef.getEngine()._drawCalls?.current ?? -1);
+    profiler.addCounter("audioVoices", () => {
+      const stage = soundStage?.stats();
+      return stage ? stage.voices + stage.musicVoices : 0;
+    });
+    profiler.addCounter("particles", () => {
+      let live = 0;
+      for (const system of sceneRef.particleSystems) {
+        live += (system as { getActiveCount?: () => number }).getActiveCount?.() ?? 0;
+      }
+      return live;
+    });
+    profiler.addCounter("projectiles", () => combatArena?.projectilePool().live ?? 0);
+    profiler.addCounter("workers", () => (streamer ? 1 : 0));
+
+    /**
+     * Everything countable, counted now. The leak tracker diffs two of these
+     * across a transition, so every number here must be cheap and honest.
+     */
+    const takeInventory = (): ResourceInventory => ({
+      meshes: sceneRef.meshes.length,
+      materials: sceneRef.materials.length,
+      textures: sceneRef.textures.length,
+      particleSystems: sceneRef.particleSystems.length,
+      transformNodes: sceneRef.transformNodes.length,
+      beforeRenderObservers: sceneRef.onBeforeRenderObservable.observers.length,
+      audioVoices: (() => {
+        const stage = soundStage?.stats();
+        return stage ? stage.voices + stage.musicVoices : 0;
+      })(),
+      workers: streamer ? 1 : 0,
+    });
+    const leakTracker = new LeakTracker(takeInventory);
+
+    const perfReportNow = (): PerfReport =>
+      buildReport({
+        profiler,
+        preset: quality.id,
+        sceneId: stressSceneId,
+        seed: stressSeed || (kernel?.seed ?? 0),
+        appVersion: APP_VERSION,
+        browser: navigator.userAgent,
+        gpu: `${adapter.backend} ${adapter.version}`,
+        at: Date.now(),
+      });
+
+    // Debug hooks: read-only or explicitly debug-scoped, like the vfx ones.
+    (globalThis as { debugPerfReport?: () => PerfReport }).debugPerfReport = perfReportNow;
+    (globalThis as { debugPerfInventory?: () => ResourceInventory }).debugPerfInventory = takeInventory;
+    (globalThis as { debugLeakBaseline?: () => ResourceInventory }).debugLeakBaseline = () =>
+      leakTracker.setBaseline();
+    (globalThis as { debugLeakAudit?: () => unknown }).debugLeakAudit = () => leakTracker.audit();
+    /**
+     * Runs one browser stress scene: applies its setup through the same
+     * actions a player has, resets the profiler window, and resolves with the
+     * report after the requested frames. Refuses a scene the catalogue does
+     * not list, so the runner cannot invent one.
+     */
+    (globalThis as { debugRunStress?: (id: string, frames?: number) => Promise<PerfReport> }).debugRunStress =
+      async (id: string, frames = 240) => {
+        const scene = createStressRegistry().get(id);
+        if (!scene) throw new Error(`No stress scene called "${id}".`);
+        stressSceneId = scene.id;
+        stressSeed = scene.seed;
+        profiler.reset();
+        await new Promise<void>((resolve) => {
+          let left = frames;
+          const observer = sceneRef.onAfterRenderObservable.add(() => {
+            left -= 1;
+            if (left <= 0) {
+              sceneRef.onAfterRenderObservable.remove(observer);
+              resolve();
+            }
+          });
+        });
+        const report = perfReportNow();
+        stressSceneId = "live";
+        stressSeed = 0;
+        return report;
+      };
     // A debug-only burst trigger, so a test can prove the flash gate without
     // depending on a weapon being in arc. It goes through the same burst()
     // every gameplay effect goes through; there is no second path.
@@ -373,6 +477,16 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       scene,
       kernel,
       loop: activeLoop,
+      perfLine: () => {
+        const stats = profiler.frameStats();
+        return `p95 ${stats.p95Ms.toFixed(1)} ms · worst ${stats.worstMs.toFixed(0)} ms · ${stats.longFrames} long`;
+      },
+      adaptiveLine: () => {
+        const view = adaptive.view();
+        return view.enabled
+          ? `${view.level} auto · pressure ${(view.pressure * 100).toFixed(0)}%`
+          : `${quality.id} manual`;
+      },
       // No physics backend is wired yet; null makes the overlay say so.
       activePhysicsBodies: () => null,
     });
@@ -381,7 +495,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     let lastEnvironmentTick = 0;
     adapter.engine.runRenderLoop(() => {
       const deltaMs = adapter.engine.getDeltaTime();
+      profiler.beginFrame();
+      profiler.begin("simulation");
       activeLoop.advance(deltaMs);
+      profiler.end();
       // Drain outside the tick so subscribers never mutate state mid-step.
       simKernel.events.drain();
 
@@ -394,7 +511,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         advanceWorldTime(advanced);
       }
 
+      profiler.begin("frameHook");
       frameHook?.(deltaMs);
+      profiler.end();
+      profiler.endFrame();
+      // Adaptive quality judges the same number the profiler recorded, and its
+      // decision goes through the ordinary applyQuality path: nothing about the
+      // simulation, the fight or a telegraph changes with the level.
+      const decision = adaptive.frame(deltaMs);
+      if (decision.kind === "change") {
+        applyQuality(decision.to);
+        profiler.setLongFrameThreshold(budgetFor(decision.to).longFrameMs);
+        refreshWorld();
+      }
       scene.render();
     });
 
@@ -4526,6 +4655,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       audioStatus: ambientAudio?.currentStatus ?? "idle",
       diving,
       qualityId: quality.id,
+      qualityAuto: adaptive.view().enabled,
       particleCapacity: weatherStats?.particleCapacity ?? 0,
       activeParticles: weatherStats?.activeParticles ?? 0,
       shadowMapSize: quality.shadowMapSize,
@@ -4624,6 +4754,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const next = qualityRegistry.get(level);
     if (!next || next.id === quality.id) return;
     quality = next;
+    // The controller and the profiler follow whatever was actually applied,
+    // whoever applied it, so their judgements are always against the live level.
+    adaptive.levelApplied(next.id);
+    profiler.setLongFrameThreshold(budgetFor(next.id).longFrameMs);
     if (viewMode === "ground") {
       // Remember the machine so changing quality does not eject the player from
       // it: the view is rebuilt at the new budgets and handed back.
@@ -4718,7 +4852,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           diving = !diving;
           refreshWorld();
         },
-        onQualityChange: (level: string) => applyQuality(level as QualityLevel),
+        onQualityChange: (level: string) => {
+          // A hand on the dial pins the level and turns the controller off.
+          adaptive.setManual(level as QualityLevel);
+          applyQuality(level as QualityLevel);
+          refreshWorld();
+        },
+        onAdaptiveQuality: (enabled: boolean) => {
+          adaptive.levelApplied(quality.id);
+          adaptive.setEnabled(enabled);
+          refreshWorld();
+        },
         onResolveIncident: (incidentId: string, kind: "ai-defended" | "ignored") => {
           resolveIncident(incidentId, kind);
         },

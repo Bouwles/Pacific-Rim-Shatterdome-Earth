@@ -777,3 +777,24 @@ so the panel can be honest before the first byte.
 **The worker adds no runtime cost to a fight.** Cache-first assets are served
 from disk after first load; the simulation, the render loop and the audio graph
 never wait on it.
+
+## The budget contract (Milestone 34)
+
+The budgets moved into code: `src/data/perfBudgets.ts` is the authoritative
+table, validated against the quality presets in the unit suite, and this
+document no longer duplicates its numbers. What belongs here is the shape:
+
+Every level states its hardware. Low is promised on integrated graphics from
+about 2018; Medium on entry discrete parts; High on a mid-range discrete GPU;
+Cinematic on hardware with frames to spend. Low targets 33.3 ms with an 80 ms
+long-frame line; everything above targets 16.7 ms with lines at 60 and 50 ms.
+
+Two numbers outrank the average. The long-frame line, because spikes are what a
+player feels; every frame past it is captured with its scope breakdown. And
+growth, because a budget met by leaking is a countdown; the leak tracker holds
+combat cycles to a zero diff.
+
+Adaptive quality: down after 90 consecutive over-budget frames, up after 900
+comfortable ones (under three quarters of budget), one step at a time, 120
+frames of cooldown after any change. The asymmetry is deliberate: the worst
+outcome is oscillation, and each step is a visible sector reload.

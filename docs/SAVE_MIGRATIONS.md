@@ -595,3 +595,12 @@ list, subject to the same rotation and backups as any other.
 
 Pack contents are static files, never save data, and live in their own cache
 that survives updates. Nothing about a pack is authoritative state.
+
+## Milestone 34 saves nothing new
+
+`ROOT_SAVE_VERSION` stays at 17. Budgets are content, profiler windows and
+long-frame captures are diagnostics that die with the tab, and the adaptive
+controller's streaks are per-session by design: a machine's thermal state on
+Tuesday says nothing about Thursday, so persisting the controller's opinion
+would bake a bad afternoon into every future session. The quality level itself
+continues to arrive by URL or by hand, exactly as before.

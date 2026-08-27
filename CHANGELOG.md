@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-09, Milestone 34: the contract
+
+Performance stopped being a hope and became numbers with names on them.
+
+- Budgets for all four quality levels, each stating the hardware it is promised on: frame time, a long-frame line, draw calls, triangles, textures, shadows, active bodies, AI agents, particles, debris, audio voices and sector memory. The budget table and the quality presets validate against each other, so a preset cannot build more than its budget simulates.
+- A profiler cheap enough to leave on: named scopes, a rolling window with p95 and worst, and long-frame capture, because a smooth average full of 80 ms spikes is a bad game that benchmarks well. Counters are registered readers, costing nothing until a report asks.
+- A repeatable performance report exportable as JSON: version, browser, GPU, preset, scene id, seed, budgets, frame statistics, the captured long frames, every counter, and the budget lines that were breached, in words.
+- Seven stress scenes, registry-named: dense city, storm ocean, four combatants, projectile barrage, maximum destruction, roster gallery, rapid traversal. The three simulation-heavy ones run headless and deterministic in the unit suite; the four renderer-heavy ones run in the browser through the same actions a player has.
+- Adaptive quality with real hysteresis: a step down needs ninety consecutive over-budget frames, a step back up needs nine hundred comfortable ones, one step at a time with a cooldown so the change's own cost is never judged. The player outranks it: choosing a level by hand pins it and turns the controller off. It only ever changes the preset; the simulation and every telegraph are identical at every level.
+- A leak tracker that inventories meshes, materials, textures, particle systems, transform nodes, render observers, audio voices and workers, and diffs across scene transitions. Three combat entry and exit cycles return the scene to exactly its baseline, held by a browser test.
+- The debug overlay grew two lines: p95, worst and long-frame count, and which level is applied and who chose it.
+
 ## 2026-09-08, Milestone 33: yours to keep
 
 The game installs, runs offline, and updates without ever endangering a save.

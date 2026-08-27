@@ -1687,3 +1687,41 @@ download lifecycle is tested headless.
 **Development.** The worker registers in production always and in development
 only with `?sw=1`, because a dev server's module graph changes every edit and a
 worker caching it would serve yesterday's modules to today's code.
+
+## The performance contract
+
+**Budgets are data validated against the presets.** `src/data/perfBudgets.ts`
+states, per quality level, the hardware the promise is made on and the ceilings
+for frame time, long frames, draw calls, triangles, textures, shadows, active
+bodies, AI, particles, debris, audio voices and sector memory. The validator
+holds the ladder monotonic and cross-checks the quality presets: a preset that
+pools more debris than its budget simulates fails a unit test.
+
+**The profiler is injected time and registered readers.** `src/perf/profiler.ts`
+accumulates named scopes per frame, keeps a rolling window with p95 and worst,
+and captures any frame past the budget's long-frame line with its scope
+breakdown into a bounded ring. Counters are read-at-capture functions, so a
+counter costs nothing per frame and a reader that throws reports -1 rather than
+killing the report. `buildReport` judges a run against its budget and names
+every breach in words.
+
+**Adaptive quality is a pure controller on the ordinary path.**
+`src/perf/adaptiveQuality.ts` needs ninety consecutive over-budget frames to
+step down, nine hundred comfortable ones to step up, moves one level at a time,
+and holds through a cooldown so a change's own cost is never judged. Its
+decision goes through the same applyQuality the settings panel uses, so it can
+only ever do what a player could do, and a manual choice pins the level and
+disables it.
+
+**The leak tracker is arithmetic on injected inventories.**
+`src/perf/leakTracker.ts` diffs two resource inventories and calls growth a
+leak candidate and shrinkage fine. The bootstrap supplies the inventory: scene
+meshes, materials, textures, particle systems, transform nodes, render
+observers, audio voices and workers. The browser test warms up one fight first,
+because the first fight lazily allocates shared singletons that are reuse, not
+growth, then holds three combat cycles to a zero diff.
+
+**Stress scenes are a registry.** `src/debug/perfScenario.ts` names all seven;
+the three simulation-heavy ones run headless and deterministic, and the
+browser runner (`debugRunStress`) refuses any id the catalogue does not list,
+resets the profiler window, waits the requested frames and returns the report.

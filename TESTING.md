@@ -792,3 +792,20 @@ Two real defects the manual pass found and fixed: the update banner never
 redrew when an update arrived while the menu was already on screen, and the
 flow never learned its starting place, so the menu counted as unsafe until the
 player wandered off and back.
+
+## Milestone 34 acceptance evidence
+
+| Acceptance item                                                           | Evidence                                                                                                                                                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repeated combat entry and exit returns near baseline                      | Three spawn-fight-clear cycles in a real browser diff to exactly zero against a warmed baseline, across meshes, materials, textures, particle systems, nodes, observers, audio voices and workers |
+| Stress reports export as JSON with version, browser, GPU, preset, seed    | Asserted field by field in the browser, including that the whole report survives JSON.stringify and parse                                                                                         |
+| Adaptive quality reacts gradually and recovers only after a stable window | Unit-proven: one spike is ignored, 90 sustained frames step down once with the reason attached, the cooldown swallows the change's own cost, and recovery takes 900 comfortable frames            |
+| Long frames are not hidden by the average                                 | A window of 8 ms frames with periodic 80 ms spikes reports average under 16, worst 80, and five captures with scope breakdowns                                                                    |
+| The budget contract and the presets agree                                 | validatePerfBudgets runs in the suite; the initial draft was corrected by it, which is the check doing its job                                                                                    |
+| Headless stress produces real load deterministically                      | Four combatants: 192 events. Barrage: 2,129 events with the pool never over capacity. Destruction: 246 events and a defeated creature. All three identical across runs                            |
+| No core system disabled invisibly                                         | Adaptive quality only calls applyQuality, the same visible path the settings panel uses, and every preset still validates its required telegraphs                                                 |
+
+The leak test's first run failed on +56 meshes: the baseline had been taken
+while terrain streaming was still filling, and the first fight lazily allocates
+shared singletons. Three further cycles held at exactly zero growth, which is
+the steady-state claim the test now makes after a warm-up cycle.

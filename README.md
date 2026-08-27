@@ -305,6 +305,7 @@ src/net          the battle transport, the message protocol, host authority and 
 src/sandbox      custom scenarios, the cheat overlay, the scenario library and its statistics
 src/vfx          the effect catalogue, pool budgets, impact language and effect settings
 src/pwa          the caching policy, update flow, pack downloads and worker registration
+src/perf         the frame profiler, adaptive quality controller and leak tracker
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
@@ -320,6 +321,12 @@ A radio call ducks the music and the ambience under it. It never ducks the acces
 Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
 
 If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
+
+### Performance
+
+Every quality level carries a stated budget on stated hardware, and the game measures itself against it continuously. The debug overlay (F3) shows p95 and worst frame times and the count of long frames, because averages hide spikes. Seven stress scenes exercise the expensive parts, and a performance report exports as JSON with the version, browser, GPU, preset and scene seed, plus every budget line that was breached.
+
+An Auto checkbox next to the quality selector hands the dial to a controller with deliberate hysteresis: it steps down one level after a sustained run of slow frames, steps back up only after a long stable window, and never judges the frames its own change caused. Picking a level by hand pins it and turns the controller off. Whatever the level, the fight, the simulation and every telegraph are identical.
 
 ### Installing and playing offline
 

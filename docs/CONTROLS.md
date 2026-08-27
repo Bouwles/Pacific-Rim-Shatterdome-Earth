@@ -846,3 +846,22 @@ Packs survive game updates.
 
 If the browser is not storing site data, packs and offline play are unavailable
 and the panel says so; saves fall back exactly as they always have.
+
+## Performance
+
+The debug overlay (F3) carries two performance lines: `perf` shows p95, worst
+and the long-frame count over the rolling window, and `quality` shows the
+applied level and whether the controller or the player chose it.
+
+**Auto**, next to the quality selector on the world panel, hands the dial to
+the adaptive controller. It steps down one level after a sustained run of
+over-budget frames and back up only after a long stable window, never more
+than one step at a time. Picking any level by hand pins that level and turns
+Auto off. No level changes the fight: simulation and telegraphs are identical
+everywhere.
+
+A performance report is available at any time from the console via
+`debugPerfReport()`, and a stress scene runs with
+`debugRunStress("stress.dense-city")`. Both return JSON carrying the version,
+browser, GPU, preset, scene id and seed, so two reports are comparable or
+visibly not.

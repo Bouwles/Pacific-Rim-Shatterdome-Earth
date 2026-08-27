@@ -998,3 +998,19 @@ One pack in `src/pwa/packs.ts`, registry-validated: files must live under
 | id                        | Files | Bytes  | Purpose                                                |
 | ------------------------- | ----- | ------ | ------------------------------------------------------ |
 | pack.placeholder-textures | 4     | 26,650 | Original procedural detail textures for drop-in models |
+
+## Stress scenes (Milestone 34)
+
+Seven rows in `src/debug/perfScenario.ts`. Headless scenes run deterministic in
+the unit suite; browser scenes run through `debugRunStress`, which refuses any
+id not listed here.
+
+| id                        | Driver   | Exercises                                            |
+| ------------------------- | -------- | ---------------------------------------------------- |
+| stress.dense-city         | browser  | City meshes, agents, thin instances, draw calls      |
+| stress.storm-ocean        | browser  | Water sheets, weather particles, lightning, fog      |
+| stress.four-combatants    | headless | Arena stepping, hit volumes, statuses at squad scale |
+| stress.projectile-barrage | headless | The projectile pool at capacity                      |
+| stress.max-destruction    | headless | Zone damage, destruction events, debris accounting   |
+| stress.roster-gallery     | browser  | Asset resolution, material count, per-model overhead |
+| stress.rapid-traversal    | browser  | Terrain streaming, sector churn, origin rebases      |

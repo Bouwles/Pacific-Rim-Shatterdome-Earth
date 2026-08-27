@@ -319,7 +319,14 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a per-build worker stamp, because update detection is byte comparison and an unchanging worker would never announce anything;
   - optional packs in their own cache that survives updates, downloading file by file with real resume, named failures, retry and clean removal, starting with a 26.6 KB original procedural texture pack;
   - honest degradation everywhere: no HTTPS, no service workers or no storage each produce the same game and a sentence saying what will not be kept.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2079 unit+integration), `smoke` (190 Playwright, including 7 two-window co-op, 9 simulator, 4 effects and 7 offline-shell tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
+- **A performance contract**, measured continuously:
+  - budgets per quality level with stated hardware, cross-validated against the presets so a preset cannot build more than its budget simulates;
+  - a leave-on profiler with named scopes, a rolling p95/worst window, bounded long-frame capture with per-scope breakdowns, and registered counters read only at report time;
+  - an exportable JSON report with version, browser, GPU, preset, scene id, seed, budgets, statistics, captured long frames and every breach named in words;
+  - seven registry-named stress scenes, three headless and deterministic, four browser-driven through a runner that refuses unlisted ids;
+  - adaptive quality with real hysteresis (90 frames down, 900 up, one step, cooldown), driving the ordinary applyQuality path, pinned off by any manual choice, changing presentation only;
+  - a leak tracker diffing scene inventories across transitions, holding three combat cycles to a zero diff in a real browser.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2113 unit+integration), `smoke` (196 Playwright, including 7 co-op, 9 simulator, 4 effects, 7 offline-shell and 6 performance tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -380,6 +387,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- The triangle, texture-memory and sector-memory budgets are stated but not yet measured: the report carries mesh, material, texture and particle counts, draw calls and audio voices, and triangles and megabytes need engine-level queries that are deferred. A breach in those columns can currently only be found by the browser's own profiler.
+- The four browser stress scenes run wherever the game currently is rather than staging their own world: dense-city measures the loaded city, storm-ocean does not force a storm, roster-gallery and rapid-traversal do not navigate. The runner produces a real report for the scene id it was asked for, but scene _setup_ is still the operator's job, stated in the scene's `exercises` field. Staging is the natural next step for the stress system.
+- The GPU label in the report is the render backend and Babylon version, not the adapter's marketing name: WebGPU's adapter info is inconsistently populated across browsers and WebGL's requires an extension. Honest but coarse.
 - The offline boot and the two-version update were verified by hand against the production preview with DevTools network emulation, not in the automated suite: the e2e tests run against the dev server, which is exactly the environment the worker deliberately stays out of. The pack lifecycle, worker registration and manifest are covered by automation; the offline reload and the update handover are the two items that stay manual.
 - The pack files are downloaded and cached but nothing consumes them yet: the placeholder texture pack exists to make the download machinery real, and the asset resolver does not look in the pack cache. Wiring resolver fallthrough to cached packs is the natural next step for the pack system.
 - The update offer redraws only the menu panel. A player sitting in the save panel when an update finishes installing sees the banner on their next menu visit rather than immediately, because only the menu hosts the panel.
@@ -401,6 +411,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- Performance: [src/data/perfBudgets.ts](src/data/perfBudgets.ts), [src/perf/profiler.ts](src/perf/profiler.ts), [adaptiveQuality.ts](src/perf/adaptiveQuality.ts), [leakTracker.ts](src/perf/leakTracker.ts), [src/debug/perfScenario.ts](src/debug/perfScenario.ts)
 - Offline: [src/pwa/swPolicy.ts](src/pwa/swPolicy.ts), [updateFlow.ts](src/pwa/updateFlow.ts), [packs.ts](src/pwa/packs.ts), [registration.ts](src/pwa/registration.ts), [public/sw.js](public/sw.js), [scripts/stamp-sw.mjs](scripts/stamp-sw.mjs)
 - The look: [src/data/styleGuide.ts](src/data/styleGuide.ts), [src/vfx/effectsModel.ts](src/vfx/effectsModel.ts), [impactLanguage.ts](src/vfx/impactLanguage.ts), [vfxSettings.ts](src/vfx/vfxSettings.ts), realised in [src/engine/effectsView.ts](src/engine/effectsView.ts)
 - Simulator: [src/sandbox/scenario.ts](src/sandbox/scenario.ts), [rules.ts](src/sandbox/rules.ts), [library.ts](src/sandbox/library.ts), [stats.ts](src/sandbox/stats.ts), [src/ui/sandboxScreen.ts](src/ui/sandboxScreen.ts)

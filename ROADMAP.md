@@ -824,3 +824,19 @@ path as well.
 **Next action:** teach the asset resolver to fall through to the pack cache, so
 a downloaded pack's textures are actually used by drop-in models, and grow the
 pack catalogue as real optional content appears.
+
+## Phase 9 / Milestone 34 - Performance budgets, profiling scenes, adaptive quality, and memory safety
+
+**Depends on:** Milestone 32.
+**Status:** complete.
+
+Budgets per level with stated hardware, cross-validated against the quality
+presets. A leave-on profiler with named scopes, p95/worst, long-frame capture
+and registered counters. An exportable JSON report naming every breach. Seven
+stress scenes, three headless. Adaptive quality with real hysteresis on the
+ordinary quality path, pinned off by manual choice. A leak tracker holding
+combat cycles to a zero diff.
+
+**Next action:** stage the browser stress scenes properly (force the storm,
+load the gallery, run the traversal route from inside the runner), and measure
+the stated triangle and memory budgets with engine-level queries.

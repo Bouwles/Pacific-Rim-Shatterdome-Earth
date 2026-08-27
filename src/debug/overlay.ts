@@ -17,6 +17,10 @@ export interface DebugOverlaySources {
    * null makes the overlay say so instead of printing a fake zero.
    */
   activePhysicsBodies(): number | null;
+  /** One line of profiler truth: p95, worst, long-frame count. */
+  perfLine(): string;
+  /** One line of adaptive-quality truth: level, on or off, pressure. */
+  adaptiveLine(): string;
 }
 
 interface Row {
@@ -79,6 +83,8 @@ export class DebugOverlay {
         field: "runState",
         read: () => (loop.isPaused ? "paused" : `running ${loop.timeScale}x`),
       },
+      { label: "perf", field: "perf", read: () => sources.perfLine() },
+      { label: "quality", field: "adaptive", read: () => sources.adaptiveLine() },
     ];
 
     this.root = document.createElement("div");

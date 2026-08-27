@@ -74,6 +74,8 @@ export interface EnvironmentReadout {
   readonly audioStatus: string;
   readonly diving: boolean;
   readonly qualityId: string;
+  /** True while the frame-time controller holds the quality dial. */
+  readonly qualityAuto: boolean;
   readonly particleCapacity: number;
   readonly activeParticles: number;
   readonly shadowMapSize: number;
@@ -329,6 +331,8 @@ export interface WorldScreenCallbacks {
   onAdvanceHours(hours: number): void;
   onDiveToggle(): void;
   onQualityChange(level: string): void;
+  /** Hands the quality dial to the frame-time controller, or takes it back. */
+  onAdaptiveQuality(enabled: boolean): void;
   /** Raises or lowers the alert in the region the player is standing in. */
   onAlertChange(level: string): void;
   /** Starts clearing and then rebuilding the named block. */
@@ -648,6 +652,17 @@ export function renderWorldScreen(
   qualitySelect.addEventListener("change", () => callbacks.onQualityChange(qualitySelect.value));
   qualityLabel.appendChild(qualitySelect);
   qualityRow.appendChild(qualityLabel);
+
+  // Adaptive quality. A checkbox rather than a mode, because the answer to
+  // "who chooses the level" is either the machine or the player, visibly.
+  const adaptiveLabel = document.createElement("label");
+  const adaptiveBox = document.createElement("input");
+  adaptiveBox.type = "checkbox";
+  adaptiveBox.dataset.action = "quality-auto";
+  adaptiveBox.setAttribute("aria-label", "Adaptive quality");
+  adaptiveBox.addEventListener("change", () => callbacks.onAdaptiveQuality(adaptiveBox.checked));
+  adaptiveLabel.append(adaptiveBox, document.createTextNode(" Auto"));
+  qualityRow.appendChild(adaptiveLabel);
 
   // Alert controls sit with the other controls, above the readouts, and are
   // hidden outside a region with a city because there would be nothing to alert.
@@ -1361,6 +1376,9 @@ export function renderWorldScreen(
       diveButton.textContent = env.diving ? "Surface" : "Dive";
       diveButton.classList.toggle("is-active", env.diving);
       if (qualitySelect.value !== env.qualityId) qualitySelect.value = env.qualityId;
+      // The checkbox follows the controller's real state: a manual pick turns
+      // the controller off, and a box still showing on would be a lie.
+      if (adaptiveBox.checked !== env.qualityAuto) adaptiveBox.checked = env.qualityAuto;
 
       const town = state.city;
       city.hidden = town === null;
