@@ -15,7 +15,7 @@ import { createDefaultAssetRegistry } from "../data/assets";
 import { GALLERY_OVERRIDES, buildOverrideMap } from "./galleryOverrides";
 import { renderSaveScreen, type SaveScreenHandle } from "../ui/saveScreen";
 import { SaveController, describeSaveError } from "./saveController";
-import { SaveService } from "../saves/saveService";
+import { APP_VERSION, SaveService } from "../saves/saveService";
 import { IndexedDbSaveRepository } from "../saves/indexedDbRepository";
 import { MemorySaveRepository, type SaveRepository } from "../saves/repository";
 import { probeStorageHealth } from "../saves/storageHealth";
@@ -64,6 +64,11 @@ import { Soundscape } from "../audio/soundscape";
 import { busRows, type MixerLevels } from "../audio/mixer";
 import { loadLevels, mixerStorage, saveLevels } from "../audio/mixerStore";
 import { SOUND_PROFILES } from "../data/soundProfiles";
+import { HostSession } from "../net/hostSession";
+import { GuestSession } from "../net/guestSession";
+import { BroadcastChannelTransport, WebRtcTransport } from "../net/browserTransports";
+import type { BattleSessionTransport } from "../net/transport";
+import type { GuestLoadout } from "../net/protocol";
 import type { SoundscapeInput } from "../audio/soundscape";
 import { crewLineId, crewLines } from "../audio/crewVoice";
 import type { AudioBusId } from "../data/audioBuses";
@@ -123,6 +128,7 @@ import { PilotInputSource } from "../engine/pilotInput";
 import {
   renderPilotScreen,
   type AudioPanelState,
+  type CoopPanelState,
   type PilotScreenHandle,
   type SquadPanelState,
 } from "../ui/pilotScreen";
@@ -1279,6 +1285,25 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * machine walking around on its own costs nothing at all.
    */
   let combatArena: CombatArena | undefined;
+
+  /**
+   * Second player, if there is one.
+   *
+   * All three are undefined in a single-player session and nothing above them
+   * runs, which is what keeps a build with no networking, or a browser that
+   * cannot do it, playing exactly as it always did.
+   */
+  let coopTransport: BattleSessionTransport | undefined;
+  let coopHost: HostSession | undefined;
+  let coopGuest: GuestSession | undefined;
+  let coopRole: "off" | "hosting" | "guest" = "off";
+  let coopStatusLine = "Not connected.";
+  let coopSignalBlock = "";
+  let coopSignalNote =
+    "A direct link needs the two of you to swap one block of text each. " +
+    "There is no server here to do that for you.";
+  /** The fighter id the guest drives once a seat has been opened. */
+  const COOP_GUEST_FIGHTER = "guest";
   let combatView: CombatView | undefined;
   let combatAccumulator = 0;
   let combatDebugVolumes = false;
@@ -1905,6 +1930,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (recovery) pushCombatLine(recovery);
     // Nothing survives the fight it was fired in, so the pool is emptied while
     // the arena that owns it still exists.
+    // The session before the arena: it holds a subscription to a transport and
+    // a reference to the arena, and neither may outlive the fight.
+    coopHost?.dispose();
+    coopGuest?.dispose();
+    coopTransport?.close("The fight ended.");
+    if (pendingRtc && pendingRtc !== coopTransport) pendingRtc.close("The fight ended.");
+    pendingRtc = undefined;
+    coopHost = undefined;
+    coopGuest = undefined;
+    coopTransport = undefined;
+    coopRole = "off";
     combatArena?.projectilePool().clear();
     combatView?.dispose();
     combatView = undefined;
@@ -2104,6 +2140,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    */
   const pressWeapon = (code: string): void => {
     const arena = combatArena;
+    if (coopGuest && coopRole === "guest") {
+      if (code === "KeyL") coopGuest.send("reload", { targetId: WEAPON_KEYS["Digit1"] ?? null });
+      else {
+        const guestWeapon = WEAPON_KEYS[code];
+        if (guestWeapon) coopGuest.send("fire", { targetId: guestWeapon });
+      }
+      return;
+    }
     if (!arena) return;
     if (code === "KeyL") {
       // Reload whatever is emptiest and can still be filled.
@@ -2133,6 +2177,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   /** The melee row: grapple, dodge, parry and a prop swing. */
   const pressMelee = (code: string): void => {
     const arena = combatArena;
+    // A guest has no arena of its own. The same key sends the same intent to
+    // the host, which decides whether it happens, exactly as it decides for the
+    // player sitting next to it.
+    if (coopGuest && coopRole === "guest") {
+      const guestMove = MELEE_KEYS[code];
+      if (guestMove) coopGuest.send("press-move", { targetId: guestMove });
+      return;
+    }
     if (!arena) return;
     if (code === "KeyP") {
       toggleProp();
@@ -3021,6 +3073,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           transcriptOpen = open;
           refreshPilot();
         },
+        onCoopHost: () => startCoopHost(),
+        onCoopJoin: () => joinCoop(),
+        onCoopLeave: () => {
+          coopHost?.abort("Host ended the session.");
+          coopGuest?.leave("Left the session.");
+          closeCoop("Session ended.");
+        },
+        onCoopPause: (paused: boolean) => {
+          coopHost?.setPaused(paused, paused ? "Host paused." : "Host resumed.");
+          refreshPilot();
+        },
+        onCoopOffer: () => coopOffer(),
+        onCoopSignal: (text: string) => coopSignal(text),
         onSkipSequences: (enabled: boolean) => {
           combatArena?.setFinisherSettings("jaeger", { skipSequences: enabled });
         },
@@ -3373,6 +3438,310 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }
   };
 
+  /**
+   * The machine the host lends the guest.
+   *
+   * Picked from the host's own roster, because a co-op partner drives something
+   * this campaign owns and nothing else. The guest is told what it is and
+   * cannot change it.
+   */
+  const guestLoadoutFor = (): GuestLoadout => {
+    const spare = roster.all().find((entry) => entry.status === "ready");
+    const chassis = spare ? jaegerRegistry.get(spare.chassisId) : undefined;
+    return {
+      jaegerId: spare?.jaegerId ?? "heavy-mk4",
+      chassisId: spare?.chassisId ?? "heavy-mk4",
+      displayName: spare?.name ?? chassis?.name ?? "Reserve frame",
+      weaponIds: weaponRegistry.all().map((weapon) => weapon.id),
+    };
+  };
+
+  /** Tears down whatever co-op objects exist. Safe at any point. */
+  const closeCoop = (reason: string): void => {
+    coopHost?.dispose();
+    coopGuest?.dispose();
+    coopTransport?.close(reason);
+    if (pendingRtc && pendingRtc !== coopTransport) pendingRtc.close(reason);
+    pendingRtc = undefined;
+    coopHost = undefined;
+    coopGuest = undefined;
+    coopTransport = undefined;
+    coopRole = "off";
+    coopStatusLine = reason;
+    coopSignalBlock = "";
+    refreshPilot();
+  };
+
+  /**
+   * Opens a seat for somebody in another window.
+   *
+   * The guest's machine is added to the arena the host is already fighting in,
+   * so there is exactly one fight and exactly one thing counting it.
+   */
+  const startCoopHost = (): void => {
+    const arena = combatArena;
+    if (!arena) {
+      coopStatusLine = "Open a seat once a fight is running: there is nothing to join yet.";
+      refreshPilot();
+      return;
+    }
+    if (coopRole !== "off") return;
+
+    const loadout = guestLoadoutFor();
+    const chassis = jaegerRegistry.get(loadout.chassisId);
+    if (chassis && !arena.ids().includes(COOP_GUEST_FIGHTER)) {
+      const pose = pilotSession?.pose;
+      arena.add({
+        id: COOP_GUEST_FIGHTER,
+        kind: "jaeger",
+        displayName: loadout.displayName,
+        heightMeters: chassis.locomotion.heightMeters,
+        profile: combatProfileFor(chassis),
+        pose: { east: (pose?.east ?? 0) + 40, north: pose?.north ?? 0, up: pose?.up ?? 0, yawDeg: 0 },
+        zones: jaegerZones(chassis),
+        layout: jaegerLayout(chassis),
+        finisherThreshold: 0.2,
+      });
+      for (const weapon of weaponRegistry.all()) arena.equipWeapon(COOP_GUEST_FIGHTER, weapon);
+    }
+
+    const transport = new BroadcastChannelTransport("host");
+    if (transport.status.state !== "open") {
+      coopStatusLine = transport.status.detail;
+      transport.close();
+      refreshPilot();
+      return;
+    }
+    coopTransport = transport;
+    coopHost = new HostSession({
+      arena,
+      transport,
+      guestFighterId: COOP_GUEST_FIGHTER,
+      guestLoadout: loadout,
+      sessionId: `session.${Date.now().toString(36)}`,
+      buildVersion: APP_VERSION,
+      // Not while a finisher is playing: a machine appearing mid-sequence is a
+      // machine appearing inside a cutscene.
+      isSafePoint: () => {
+        const view = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+        return !view || view.finisherPhase === "idle" || view.finisherPhase === "none";
+      },
+    });
+    coopRole = "hosting";
+    coopStatusLine = "Seat open. Another window on this machine can take it.";
+    refreshPilot();
+  };
+
+  /** Takes a seat somebody opened in another window. */
+  const joinCoop = (): void => {
+    if (coopRole !== "off") return;
+    const transport = new BroadcastChannelTransport("guest");
+    if (transport.status.state !== "open") {
+      coopStatusLine = transport.status.detail;
+      transport.close();
+      refreshPilot();
+      return;
+    }
+    coopTransport = transport;
+    coopGuest = new GuestSession({
+      transport,
+      displayName: "Second player",
+      buildVersion: APP_VERSION,
+    });
+    transport.onMessage(() => refreshPilot());
+    coopGuest.join();
+    coopRole = "guest";
+    coopStatusLine = "Asking for a seat.";
+    refreshPilot();
+  };
+
+  /**
+   * The direct-link path, which is two presses and two pastes.
+   *
+   * Deliberately manual, because a serverless WebRTC connection genuinely costs
+   * exactly this: one side produces a block, the other pastes it and produces a
+   * block back, and the first side pastes that. Nothing about WebRTC removes
+   * that exchange, and this build has no server to carry it.
+   *
+   * Whichever window presses the button is the offering side; whichever window
+   * pastes first is the answering side.
+   */
+  let pendingRtc: WebRtcTransport | undefined;
+  let rtcIsOfferer = false;
+
+  /** Puts a live direct connection to work, once one exists. */
+  const attachRtc = (transport: WebRtcTransport): void => {
+    if (coopTransport === transport) return;
+    // Whatever was in use goes first: two transports would be two sessions.
+    coopHost?.dispose();
+    coopGuest?.dispose();
+    if (coopTransport && coopTransport !== transport) coopTransport.close("Replaced by a direct link.");
+    coopHost = undefined;
+    coopGuest = undefined;
+    coopTransport = transport;
+
+    const arena = combatArena;
+    if (rtcIsOfferer && arena) {
+      coopHost = new HostSession({
+        arena,
+        transport,
+        guestFighterId: COOP_GUEST_FIGHTER,
+        guestLoadout: guestLoadoutFor(),
+        sessionId: `session.${Date.now().toString(36)}`,
+        buildVersion: APP_VERSION,
+      });
+      coopRole = "hosting";
+      coopStatusLine = "Direct link open. Seat is theirs when they ask for it.";
+    } else {
+      coopGuest = new GuestSession({
+        transport,
+        displayName: "Second player",
+        buildVersion: APP_VERSION,
+      });
+      transport.onMessage(() => refreshPilot());
+      coopGuest.join();
+      coopRole = "guest";
+      coopStatusLine = "Direct link open. Asking for a seat.";
+    }
+    refreshPilot();
+  };
+
+  const newRtc = (offerer: boolean): WebRtcTransport | null => {
+    const transport = new WebRtcTransport({ id: offerer ? "host" : "guest" });
+    if (transport.status.state === "failed") {
+      coopSignalNote = transport.status.detail;
+      transport.close();
+      refreshPilot();
+      return null;
+    }
+    rtcIsOfferer = offerer;
+    pendingRtc = transport;
+    transport.onStatus((status) => {
+      if (status.state === "open") attachRtc(transport);
+      else refreshPilot();
+    });
+    return transport;
+  };
+
+  /** Produces the block this player sends to the other one. */
+  const coopOffer = (): void => {
+    if (coopRole === "off" && !combatArena) {
+      coopSignalNote = "Start a fight first: there is nothing yet to invite anybody into.";
+      refreshPilot();
+      return;
+    }
+    const transport = newRtc(true);
+    if (!transport) return;
+    coopSignalNote = "Preparing a connection block. This takes a moment while addresses are gathered.";
+    refreshPilot();
+    void transport
+      .createOffer()
+      .then((block) => {
+        coopSignalBlock = block.text;
+        coopSignalNote =
+          "Send this whole block to the other player, then paste their reply into this same box.";
+        refreshPilot();
+      })
+      .catch((error: unknown) => {
+        coopSignalNote = `Could not prepare a direct link: ${(error as Error).message}`;
+        refreshPilot();
+      });
+  };
+
+  /**
+   * Takes a block pasted from the other player.
+   *
+   * Which block it is depends on where this window is in the exchange: a window
+   * that has already produced an offer is being handed the answer, and a window
+   * that has produced nothing is being handed an offer to answer.
+   */
+  const coopSignal = (text: string): void => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+
+    if (pendingRtc && rtcIsOfferer) {
+      void pendingRtc
+        .acceptAnswer(trimmed)
+        .then(() => {
+          coopSignalNote = "Answer accepted. Waiting for the link to come up.";
+          refreshPilot();
+        })
+        .catch((error: unknown) => {
+          coopSignalNote = (error as Error).message;
+          refreshPilot();
+        });
+      return;
+    }
+
+    const transport = pendingRtc ?? newRtc(false);
+    if (!transport) return;
+    void transport
+      .acceptOffer(trimmed)
+      .then((block) => {
+        coopSignalBlock = block.text;
+        coopSignalNote = "Send this block back to the other player. That is the last step.";
+        refreshPilot();
+      })
+      .catch((error: unknown) => {
+        coopSignalNote = (error as Error).message;
+        refreshPilot();
+      });
+  };
+
+  /** Everything the co-op row shows, or null where the browser cannot do it. */
+  const coopPanelState = (): CoopPanelState | null => {
+    const supported = typeof globalThis.BroadcastChannel === "function";
+    if (!supported) return null;
+    const hostStatus = coopHost?.status();
+    const guestView = coopGuest?.view();
+    const counters: string[] = [];
+    if (hostStatus) {
+      counters.push(`tick ${hostStatus.tick}`);
+      counters.push(`${hostStatus.eventsSent} announced`);
+      if (hostStatus.guest) {
+        counters.push(`${hostStatus.guest.appliedInputs} inputs applied`);
+        if (hostStatus.guest.duplicateInputs > 0) {
+          counters.push(`${hostStatus.guest.duplicateInputs} repeats ignored`);
+        }
+        if (hostStatus.guest.rejectedInputs > 0) {
+          counters.push(`${hostStatus.guest.rejectedInputs} too stale`);
+        }
+      }
+    }
+    if (guestView) {
+      counters.push(`host tick ${guestView.hostTick}`);
+      counters.push(`${guestView.predictedTicks} ahead`);
+    }
+
+    // A line that says what is true right now, rather than the last thing that
+    // was pressed: "asking for a seat" while already driving one is a lie the
+    // player would have no way to correct.
+    const guestLine = guestView
+      ? guestView.detail ||
+        (guestView.phase === "playing"
+          ? "In the fight, driving the machine the host lent you."
+          : guestView.phase === "connecting"
+            ? "Asking for a seat."
+            : guestView.phase === "finished"
+              ? "Session over."
+              : coopStatusLine)
+      : "";
+
+    return {
+      role: coopRole,
+      status: guestLine || coopStatusLine,
+      connected: coopTransport?.status.state === "open",
+      lentMachine: hostStatus?.guest?.loadout.displayName ?? guestView?.loadout?.displayName ?? null,
+      partner: hostStatus?.guest?.displayName ?? null,
+      counters,
+      log: [...(coopHost?.lines() ?? []), ...(coopGuest?.lines() ?? [])].slice(-8),
+      result: hostStatus?.finished ? "sent" : guestView?.result ? guestView.result.outcome : null,
+      paused: hostStatus?.paused ?? guestView?.paused ?? false,
+      signalBlock: coopSignalBlock,
+      signalNote: coopSignalNote,
+    };
+  };
+
   /** Takes a fader change, applies it, and remembers it. One path, always. */
   const applyAudioLevel = (busId: string, level: number): void => {
     soundscape.setLevel(busId as AudioBusId, level);
@@ -3471,6 +3840,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       combat: pilotCombat,
       squad: squadPanelState(),
       audio: audioPanelState(),
+      coop: coopPanelState(),
     });
   };
 
@@ -3558,6 +3928,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     arena.moveTo("jaeger", { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg });
 
+    // A guest drives by intent. Sent on the combat tick rather than every
+    // frame: the host applies at most one movement per tick anyway, so more
+    // than that is bandwidth spent on nothing.
+    if (coopGuest && coopRole === "guest" && combatAccumulator + deltaSeconds >= COMBAT_TICK_SECONDS) {
+      coopGuest.send("move", { east: pose.east, north: pose.north, yawDeg: pose.yawDeg });
+    }
+
     combatAccumulator += deltaSeconds;
     const events: CombatEvent[] = [];
     // Capped so a stalled frame cannot run a second of combat at once.
@@ -3569,7 +3946,12 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // works out how to get where that goal wants it, and attacks when it is
       // close enough. Nothing here knows which creature it is.
       driveCreature(arena, COMBAT_TICK_SECONDS);
-      arena.step();
+      // While hosting, the session steps the arena and announces what happened,
+      // so there is exactly one place a tick can come from and exactly one
+      // thing counting the fight.
+      if (coopHost) coopHost.advance();
+      else arena.step();
+      coopGuest?.advance();
     }
     // Drained rather than collected from the steps: a trigger pulled between
     // two ticks is still something that happened.

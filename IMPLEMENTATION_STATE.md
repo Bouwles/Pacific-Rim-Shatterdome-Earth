@@ -286,7 +286,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - a saved conversation record with per-line cooldowns, at save version 17, readable in the pilot panel;
   - subtitles inside the HUD, never faded, carrying the speaker's callsign;
   - everything synthesised: no file is ever loaded, so a missing recording is a placeholder that plays rather than a console full of errors.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1910 unit+integration), `smoke` (163 Playwright: 157 pass, 3 blocked behind a pre-existing builder-suite timeout, 3 lost to CPU contention and passing on their own), `build` all pass.
+- **Two-player battles**, optional and host authoritative:
+  - a transport interface with a deterministic loopback, a same-machine window channel and a manually signalled WebRTC link behind it, none of which the session logic can tell apart;
+  - the host owning the arena and producing the one result, with the guest sending intents and drawing what it is told;
+  - sequence guards in both directions, so a retransmitted input cannot fire a weapon twice and a repeated announcement cannot land a hit twice;
+  - consequences on a reliable ordered channel and poses on an unreliable one, with a validator that refuses a message type claiming to be both;
+  - inputs refused for being 30 ticks stale or 4 ticks early, counted and shown rather than applied out of order;
+  - prediction bounded at 20 ticks, after which the guest says plainly that nothing on screen is current;
+  - late join only at a safe point, a rejoin that keeps the sequence guard, a silent guest whose machine holds position, a pause that stops both sides, a host abort that says why, and a protocol mismatch that names both builds;
+  - a deterministic scenario running the same battle on a clean link and on one with 180 ms latency, 90 ms jitter, 20 percent loss and 15 percent duplication, asserting nothing is ever counted twice.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1951 unit+integration), `smoke` (170 Playwright, including 7 two-window co-op tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -347,6 +356,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- Co-op has been played between two windows on one machine, which is what `BroadcastChannel` supports. The WebRTC path is implemented, typechecked and reachable from the panel, but a connection between two physically separate machines has never been made: there is no second machine here to make one with. The offer and answer blocks are produced and consumed correctly; what is unverified is whether they carry a real fight across a real network.
+- The guest window shows the fight as a readout and a status line, not as a second rendered view. It drives a real machine in the host's arena and its inputs genuinely land, but nobody has drawn the host's world in the guest's window, so the second player is flying on instruments. That is the largest thing this milestone deliberately left out.
+- Co-op results go through the host's ordinary mission path, so the guest earns nothing of their own. That is correct for a lent machine and would be wrong if guests ever had campaigns of their own.
 - `tests/e2e/builder.spec.ts` "shows a build with every number it is made of" times out waiting for an ordered facility to become operational, and the three tests after it in that file do not run. Verified failing the same way on a clean checkout of the previous commit, so it is a pre-existing problem with that test's construction wait rather than anything Milestone 29 did.
 - Sound has been verified in Chromium under automation and by the deterministic scenario. It has not been listened to by a person on real speakers, and the placeholder synthesis is tuned by frequency and envelope rather than by ear. Anybody replacing the placeholders with real recordings should expect to retune the layer levels.
 - Radio triggers are evaluated once per frame from the current situation rather than fired from the events they describe. Every one of the twenty two lines has a trigger, but there is no event bus entry for "a sample was recovered", so the ones that are about something happening rather than something being true are noticed by holding the previous count and watching it move. That works and is honest, but it means a change that happens and reverses inside one frame is not noticed, and the counters are reset rather than restored on load, so the first frame after a load does not announce a backlog.
@@ -356,6 +368,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- Two-player: [src/net/protocol.ts](src/net/protocol.ts), [transport.ts](src/net/transport.ts), [hostSession.ts](src/net/hostSession.ts), [guestSession.ts](src/net/guestSession.ts), [browserTransports.ts](src/net/browserTransports.ts)
 - Sound: [src/audio/mixer.ts](src/audio/mixer.ts), [musicDirector.ts](src/audio/musicDirector.ts), [radioDirector.ts](src/audio/radioDirector.ts), [layerModel.ts](src/audio/layerModel.ts), [soundscape.ts](src/audio/soundscape.ts), [crewVoice.ts](src/audio/crewVoice.ts), realised in [src/engine/soundStage.ts](src/engine/soundStage.ts)
 - Engine adapter / boot scene: [src/engine/engineAdapter.ts](src/engine/engineAdapter.ts), [src/engine/scene.ts](src/engine/scene.ts)
 - Simulation kernel: [src/simulation/kernel.ts](src/simulation/kernel.ts), [loop.ts](src/simulation/loop.ts), [clock.ts](src/simulation/clock.ts), [commands.ts](src/simulation/commands.ts), [events.ts](src/simulation/events.ts), [rng.ts](src/simulation/rng.ts), [hash.ts](src/simulation/hash.ts)

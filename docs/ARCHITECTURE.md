@@ -1503,3 +1503,52 @@ second voice system beside it.
 cooldowns are authoritative and go in the save. Volumes are a property of the
 person and the room they are in rather than of a campaign, so they live in
 `localStorage` beside the display settings.
+
+## Two-player battles
+
+Optional, host authoritative, and built entirely on top of what the fight
+already was.
+
+**Why the arena needed almost nothing.** `CombatArena` was already a tick-driven
+authoritative simulation with plain-data snapshots, a digest and command-shaped
+methods, because every milestone before this one kept it that way. Co-op did not
+require a second kind of fight; it required somebody to decide who calls those
+methods.
+
+**The seam.** `BattleSessionTransport` (`src/net/transport.ts`) is the only thing
+the sessions know about the network: send a message, subscribe to messages,
+subscribe to status, close. Three implementations exist. `LoopbackTransport` is
+deterministic and clock-free, which is what lets a whole battle under 20 percent
+packet loss be a unit test. `BroadcastChannelTransport` reaches another window on
+the same machine with no configuration. `WebRtcTransport` is a direct connection
+whose signalling is done by the two players copying text to each other.
+
+**Where authority lives.** `HostSession` owns the arena. It applies guest inputs
+or refuses them, and announces what happened. `GuestSession` sends intents and
+draws what it is told. The guest never damages anything, never spends
+ammunition, never decides an outcome and never computes a result.
+
+**Why duplication is impossible rather than unlikely.** Both directions carry
+sequence numbers and both sides drop anything at or below the highest already
+applied. That is the same guard-by-reference the ledger, the crew and the squad
+already use to stop a mission paying out twice; the network is a third place the
+same problem appears, solved the same way. A duplicated packet is counted and
+discarded, and the counter is shown in the panel rather than swallowed.
+
+**Two channels, and a rule about them.** A message type declares its channel in
+the protocol registry, and the validator refuses a reliable message marked
+droppable or an unreliable one marked as required. Consequences are reliable and
+ordered; poses are unreliable and the newest wins. Nothing cosmetic is ever
+authoritative: debris, particles, civilians and destruction bodies are grown from
+a seed on each client and are not sent at all, because sending them would spend
+bandwidth making two clients agree about something neither decides anything from.
+
+**What a degraded link does and does not change.** It changes when a guest's
+input arrives, so a laggy player genuinely acts later and a different fight
+happens. It does not change how many times anything is counted. The deterministic
+scenario asserts exactly that distinction rather than pretending latency has no
+effect.
+
+**Teardown.** Sessions unsubscribe, transports close, data channels are
+unwired and the peer connection is closed, all with the fight rather than with
+the page.

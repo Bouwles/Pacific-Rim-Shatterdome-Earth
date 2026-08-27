@@ -140,6 +140,37 @@ export interface PilotScreenState {
   readonly squad: SquadPanelState | null;
   /** The mixing desk, the subtitle band and the conversation record. */
   readonly audio: AudioPanelState | null;
+  /** Second-player state, or null where co-op is not available at all. */
+  readonly coop: CoopPanelState | null;
+}
+
+/** What the co-op row shows. Null anywhere the feature is unavailable. */
+export interface CoopPanelState {
+  /** What this window is doing right now. */
+  readonly role: "off" | "hosting" | "guest";
+  /** One sentence of plain status. Never a code on its own. */
+  readonly status: string;
+  /** Whether the transport is actually open, so nothing implies a live link. */
+  readonly connected: boolean;
+  /** The machine the host is lending, once there is one. */
+  readonly lentMachine: string | null;
+  /** The other player, as the host sees them. */
+  readonly partner: string | null;
+  /** Ticks, inputs applied, and what was refused. Shown, never hidden. */
+  readonly counters: readonly string[];
+  /** What happened, newest last. */
+  readonly log: readonly string[];
+  /** The one authoritative result, once there is one. */
+  readonly result: string | null;
+  readonly paused: boolean;
+  /**
+   * The text a player has to copy to the other player for a direct connection.
+   *
+   * Empty until one has been produced. This is the signalling step, and it
+   * exists in the interface precisely because it cannot be automated away.
+   */
+  readonly signalBlock: string;
+  readonly signalNote: string;
 }
 
 /** One fader on the mixing desk. */
@@ -236,6 +267,17 @@ export interface PilotScreenCallbacks {
   readonly onAudioLevel: (busId: string, level: number) => void;
   /** Opens or closes the conversation record. */
   readonly onTranscript: (open: boolean) => void;
+  /** Opens a seat in this window for somebody in another window. */
+  readonly onCoopHost: () => void;
+  /** Takes the seat somebody else opened. */
+  readonly onCoopJoin: () => void;
+  /** Ends the session from whichever side pressed it. */
+  readonly onCoopLeave: () => void;
+  readonly onCoopPause: (paused: boolean) => void;
+  /** Produces the block of text to send to the other player. */
+  readonly onCoopOffer: () => void;
+  /** Takes a block pasted from the other player. */
+  readonly onCoopSignal: (text: string) => void;
   readonly onExit: () => void;
 }
 
@@ -816,12 +858,77 @@ export function renderPilotScreen(
 
   audioRow.append(faders, transcriptToggle, audioNote, transcriptList);
 
+  // Second player. Hidden entirely where the browser cannot do it, rather than
+  // shown as a button that would do nothing.
+  const coopRow = document.createElement("div");
+  coopRow.className = "pilot-controls";
+  coopRow.dataset["section"] = "coop";
+
+  const coopStatus = document.createElement("span");
+  coopStatus.className = "pilot-display-note";
+  coopStatus.dataset["field"] = "coop-status";
+
+  const hostButton = document.createElement("button");
+  hostButton.type = "button";
+  hostButton.dataset["action"] = "coop-host";
+  hostButton.textContent = "Open a seat";
+  hostButton.addEventListener("click", () => callbacks.onCoopHost());
+
+  const joinButton = document.createElement("button");
+  joinButton.type = "button";
+  joinButton.dataset["action"] = "coop-join";
+  joinButton.textContent = "Take a seat";
+  joinButton.addEventListener("click", () => callbacks.onCoopJoin());
+
+  const leaveButton = document.createElement("button");
+  leaveButton.type = "button";
+  leaveButton.dataset["action"] = "coop-leave";
+  leaveButton.textContent = "End session";
+  leaveButton.addEventListener("click", () => callbacks.onCoopLeave());
+
+  const pauseButton = document.createElement("button");
+  pauseButton.type = "button";
+  pauseButton.dataset["action"] = "coop-pause";
+  pauseButton.textContent = "Pause";
+  pauseButton.addEventListener("click", () => callbacks.onCoopPause(pauseButton.dataset["on"] !== "1"));
+
+  const offerButton = document.createElement("button");
+  offerButton.type = "button";
+  offerButton.dataset["action"] = "coop-offer";
+  offerButton.textContent = "Direct link";
+  offerButton.addEventListener("click", () => callbacks.onCoopOffer());
+
+  // The signalling box. Two players copy text to each other through it, because
+  // there is no server here to do it for them and pretending otherwise would be
+  // a lie about how WebRTC works.
+  const signalBox = document.createElement("textarea");
+  signalBox.dataset["field"] = "coop-signal";
+  signalBox.rows = 3;
+  signalBox.placeholder = "Paste the other player's connection block here.";
+  signalBox.addEventListener("change", () => callbacks.onCoopSignal(signalBox.value));
+
+  const coopLog = document.createElement("ol");
+  coopLog.className = "pilot-transcript";
+  coopLog.dataset["field"] = "coop-log";
+
+  coopRow.append(
+    hostButton,
+    joinButton,
+    pauseButton,
+    leaveButton,
+    offerButton,
+    coopStatus,
+    signalBox,
+    coopLog,
+  );
+
   panel.append(
     header,
     hud,
     cameraRow,
     displayRow,
     audioRow,
+    coopRow,
     rosterRow,
     comfortRow,
     combatRow,
@@ -880,6 +987,38 @@ export function renderPilotScreen(
 
         transcriptList.replaceChildren(
           ...audio.transcript.map((line) => {
+            const item = document.createElement("li");
+            item.textContent = line;
+            return item;
+          }),
+        );
+      }
+
+      // Co-op. Hidden outright where the browser cannot support it, so nothing
+      // on screen implies a system that is not there.
+      const coop = state.coop;
+      coopRow.hidden = coop === null;
+      if (coop) {
+        coopStatus.textContent =
+          `${coop.status}${coop.lentMachine ? ` Lending: ${coop.lentMachine}.` : ""}` +
+          `${coop.partner ? ` With: ${coop.partner}.` : ""}` +
+          `${coop.result ? ` Result: ${coop.result}.` : ""}` +
+          (coop.counters.length > 0 ? ` ${coop.counters.join(" · ")}` : "");
+        hostButton.disabled = coop.role !== "off";
+        joinButton.disabled = coop.role !== "off";
+        leaveButton.disabled = coop.role === "off";
+        pauseButton.disabled = coop.role !== "hosting";
+        pauseButton.dataset["on"] = coop.paused ? "1" : "0";
+        pauseButton.textContent = coop.paused ? "Resume" : "Pause";
+        offerButton.disabled = coop.role === "off";
+        // Only overwritten when there is something new to copy, so a block a
+        // player is part way through selecting is not pulled out from under them.
+        if (coop.signalBlock && signalBox.value !== coop.signalBlock) {
+          signalBox.value = coop.signalBlock;
+        }
+        signalBox.title = coop.signalNote;
+        coopLog.replaceChildren(
+          ...coop.log.map((line) => {
             const item = document.createElement("li");
             item.textContent = line;
             return item;

@@ -678,3 +678,35 @@ accumulate an unbounded log inside it.
 **The radio queue: 4.** One line speaks at a time and at most four wait. A fight
 that generates more traffic than that is generating traffic nobody could listen
 to anyway, so the excess is dropped by priority rather than queued.
+
+## Two-player battles
+
+**Snapshot rate: one every 6 combat ticks.** Between them only poses go out. A
+full snapshot carries stamina, heat, poise, guard, active move and every zone's
+health for every fighter; a pose message carries three numbers per fighter. At a
+combat tick of 50 ms that is roughly three full snapshots and seventeen pose
+messages a second for a two-machine fight.
+
+**Nothing cosmetic is sent.** Debris, particles, civilians, destruction bodies
+and every rigid body grown from a seed stay local. This is a correctness rule
+first and a bandwidth rule second: a cosmetic body is not authoritative, so
+synchronising it would make two clients agree about something neither of them
+decides anything from.
+
+**Reliable traffic is proportional to what happened.** One message per combat
+event, which in a busy fight is a handful per tick and in a quiet one is none.
+Inputs are one per intent, and guest movement is sent on the combat tick rather
+than per frame, because the host applies at most one movement per tick anyway.
+
+**Input lag window: 30 ticks behind, 4 ahead.** Anything outside it is refused
+and counted rather than applied out of order. At 50 ms a tick that is a second
+and a half of tolerance, which is generous for a bad connection and far short of
+what would let a stale input arrive in the middle of a different exchange.
+
+**Prediction limit: 20 ticks.** Past that the guest stops extrapolating and says
+so. The cost of the limit is a visible freeze; the cost of not having one is a
+machine that glides through a wall for four seconds and then teleports.
+
+**Guest timeout: 180 ticks.** About nine seconds of silence before the machine
+is held in place. It is not removed and its damage is not undone, and the seat
+stays open for a rejoin.

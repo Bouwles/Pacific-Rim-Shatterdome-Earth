@@ -902,3 +902,29 @@ band is not narrowed and why they duck the dialogue bus rather than the radio on
 
 Priorities, highest first: critical, high, normal, low, chatter. A critical line
 may not be marked interruptible, and the validator refuses one that is.
+
+## Network messages (Milestone 30)
+
+Twelve rows in `src/net/protocol.ts`. Each declares the channel it belongs on,
+and the validator refuses a reliable message marked droppable or an unreliable
+one marked as required.
+
+| id        | Channel    | Direction     | Carries                                            |
+| --------- | ---------- | ------------- | -------------------------------------------------- |
+| hello     | reliable   | guest to host | Protocol version, build version, name              |
+| welcome   | reliable   | host to guest | Session id, the fighter and loadout the host lends |
+| reject    | reliable   | host to guest | Why a join was refused, in a sentence              |
+| input     | reliable   | guest to host | One intent, with a sequence number and a tick      |
+| snapshot  | unreliable | host to guest | Every fighter's state, and the host's digest       |
+| transform | unreliable | host to guest | Poses only, between snapshots                      |
+| event     | reliable   | host to guest | Something that happened, with a sequence number    |
+| pause     | reliable   | either        | A host decision, or a guest request                |
+| abort     | reliable   | either        | Leaving, with a reason                             |
+| result    | reliable   | host to guest | The one authoritative outcome                      |
+| ping      | unreliable | either        | Round-trip measurement                             |
+| pong      | unreliable | either        | The reply, with the host's tick                    |
+
+Twelve input intents: move, press-move, guard, aim, fire, reload, charge-start,
+charge-release, grapple-throw, grapple-slam, grapple-release and prop-drop. Each
+maps to a method the single-player path already calls, so a guest can do exactly
+what a local player can do and nothing else.

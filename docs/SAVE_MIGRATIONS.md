@@ -525,3 +525,22 @@ Volumes are deliberately **not** in the save. How loud somebody wants the music
 is a property of the person and the room they are in, not of a campaign, so the
 mixing desk lives in `localStorage` beside the display settings. Loading an old
 save must not reset it and starting a new campaign must not lose it.
+
+## Milestone 30 saves nothing new
+
+`ROOT_SAVE_VERSION` stays at 17.
+
+A co-op session is a fight, and a fight has never been saved. Everything the
+session holds, the tick, the guest's sequence numbers, what has been announced
+and who is connected, belongs to the battle it happened in and is gone when the
+battle is.
+
+What does survive is what always survived: the host's mission result. A co-op
+battle ends in exactly one result produced by the host, and that result goes
+through the same mission, roster, economy and research path a single-player
+result goes through. There is no second ledger, no guest reward and nothing
+awarded twice, because there is only ever one thing counting.
+
+The guest's machine is lent, not given. It is chosen from the host's roster at
+the moment the seat is opened and the arrangement ends with the session, so
+nothing about it needs to persist either.

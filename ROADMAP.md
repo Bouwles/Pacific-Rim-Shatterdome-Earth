@@ -758,3 +758,20 @@ validators refuse content that would have no placeholder to fall back on.
 currently notices by watching a counter, so a line is fired by what happened
 rather than by a difference between two frames, and give a pilot with several
 lines for a moment a rotation rather than always the first.
+
+## Phase 3 / Milestone 30 - Battle-only two-player co-op transport and host authority
+
+**Depends on:** Milestone 29.
+**Status:** complete.
+
+A transport interface with a deterministic loopback, a same-machine window
+channel and a manually signalled direct link behind it. Host authoritative
+state, guest intents, reliable consequences, unreliable poses, tick ids,
+sequence guards in both directions, a bounded prediction window, and handling
+for pause, late join, temporary disconnect, host abort and version mismatch.
+
+Single player is untouched and works with none of it available.
+
+**Next action:** render the host's fight in the guest's window, so the second
+player is looking at the battle rather than at a readout of it, and verify a
+WebRTC connection between two physically separate machines.

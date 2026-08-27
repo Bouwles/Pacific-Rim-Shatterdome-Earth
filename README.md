@@ -301,6 +301,7 @@ src/app          bootstrap, application state machine, config
 src/debug        developer overlay, asset gallery, deterministic scenario runner
 src/data         typed content registries and asset manifests
 src/audio        buses, mixing, ducking, the adaptive score, the radio queue
+src/net          the battle transport, the message protocol, host authority and the guest
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
@@ -316,6 +317,16 @@ A radio call ducks the music and the ambience under it. It never ducks the acces
 Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
 
 If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
+
+### Two players
+
+Optional, and off unless you ask for it. Single player is unchanged whether or not any of it is available.
+
+On one computer, open two windows of the game. In the first, take a machine out, spawn something to fight, and press Open a seat. In the second, press Take a seat. The two windows find each other with no setup at all.
+
+The window that opened the seat is the host, and it is the only thing that decides anything. It picks the machine the second player drives, from its own roster. It runs the fight, counts the damage, spends the ammunition, and produces the one result. The second player sends what they are trying to do and sees what the host says happened, which is why a slow or lossy connection can make the fight look choppy but can never double a hit or spend a round twice.
+
+For two different computers, press Direct link. That produces a block of text to send to the other player, who pastes it in and sends a block back. That exchange is unavoidable: WebRTC carries the data once a connection exists but does not create one, and this game has no server to introduce two machines to each other. Once connected it is a direct link with nothing in the middle.
 
 ### Saves
 

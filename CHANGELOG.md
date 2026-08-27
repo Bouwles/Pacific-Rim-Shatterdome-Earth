@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-05, Milestone 30: a second pair of hands
+
+Two people can now fight the same kaiju, and exactly one of them decides what happened.
+
+- A transport interface with three implementations behind it: a deterministic loopback for tests, a same-machine channel for two browser windows, and a direct WebRTC link for two machines. Nothing above the interface knows which one it is running on.
+- The host owns the fight. The guest sends what it is trying to do, and the host decides whether it happens, announces the result, and produces the one outcome. A guest never counts a hit, spends a round or awards anything.
+- Two channels, used for what they are for. Damage, ammunition, finishers and the result travel reliably and in order and are applied exactly once. Poses travel unreliably, and losing one costs a frame of smoothness and nothing else. A message type that claimed to be both is refused at registration.
+- Sequence numbers on both sides. The host ignores an input it has already applied; the guest ignores an announcement it has already applied. That is why a retransmitted packet cannot double a hit.
+- Inputs from too far in the past or claiming to be from the future are refused and counted, rather than applied late and out of order.
+- Prediction with a limit. The guest smooths its own movement for twenty ticks and then says plainly that nothing on screen is current, because a machine that keeps gliding for four seconds is a worse lie than one that visibly stopped.
+- The host picks the machine it lends. A co-op partner drives something the host's campaign owns, for as long as they are lent it, and cannot change it.
+- Late join only at a safe point, a rejoin that keeps the sequence guard so nothing from before a drop can be replayed, a silent guest whose machine holds position instead of vanishing, a pause that stops the fight on both sides at once, and a version mismatch that names both builds instead of timing out.
+- The whole thing tears down with the fight: sessions, subscriptions, data channels and the peer connection.
+
+Direct connections between two machines need the two players to swap one block of text each. WebRTC carries data once a connection exists; it does not create one, and there is no server here to do that for them. Two windows on one computer need none of that.
+
 ## 2026-09-04, Milestone 29: Something to listen to
 
 The game stopped being silent apart from a noise bed.

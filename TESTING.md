@@ -723,3 +723,24 @@ were run while the machine was also running the unit suite, a production build
 and a live browser session. Both pass on their own, together, in 2.1 minutes.
 They join `combat.spec.ts` "spends stamina and heat on an attack" as tests whose
 timeouts are tight enough to lose to CPU contention rather than to a defect.
+
+## Milestone 30 acceptance evidence
+
+| Acceptance item                                                            | Evidence                                                                                                                                                                                    |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two browser windows complete a battle and produce one authoritative result | 7 Playwright tests drive two real windows: the seat opens, the second window takes it, the guest's keys reach the host's arena, the host counts them, and one session ends with one result  |
+| Artificial latency, jitter and loss do not duplicate damage                | Same battle on a clean link and on 180 ms / 90 ms jitter / 20 percent loss / 15 percent duplication. Host counted 586 damage clean and 445 degraded, never more                             |
+| ...or ammunition, rewards or finishers                                     | Finishers and events compared the same way; the degraded run is asserted to be less than or equal on both, never greater                                                                    |
+| Nothing is applied twice                                                   | 14 inputs sent, 14 applied on both links, with 3 repeats caught by the host's guard. Every announcement applied exactly once on both links, with 1 repeat caught by the guest's guard       |
+| The degraded run actually degraded                                         | 23 packets dropped by the link and duplicates delivered on both directions, asserted before the comparison is trusted                                                                       |
+| Single-player builds keep working                                          | A Playwright test fights with nobody connected and the single-player hit log still fills. The co-op row reports Not connected and hides itself entirely where the browser cannot support it |
+| Determinism                                                                | Two runs of the same conditions produce identical results, asserted by object equality on the whole run                                                                                     |
+| Version mismatch                                                           | A guest speaking a different protocol is refused with both build versions named, rather than timing out                                                                                     |
+| Disconnect and rejoin                                                      | A silent guest's machine is held in place after 180 ticks and the seat stays open; a rejoin keeps the sequence guard, so nothing from before the drop can be replayed                       |
+
+### What the comparison deliberately does not assert
+
+The two runs are **not** identical, and requiring that would be requiring that
+latency has no effect. A player on a 180 ms link genuinely acts later, so fewer
+of their attacks land inside the same number of ticks. What is asserted is that
+nothing is counted twice and that a worse link never produces more of anything.

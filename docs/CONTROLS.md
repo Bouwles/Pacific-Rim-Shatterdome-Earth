@@ -744,3 +744,32 @@ Browsers refuse to start audio before you have clicked something. Entering the
 ground view is the first click the game gets, so that is where audio starts. The
 panel reports whether it is running, idle, blocked or unsupported, and everything
 else, subtitles and the conversation record included, works either way.
+
+## Two players
+
+The co-op row sits under the mixing desk in the pilot panel. It is hidden
+entirely in a browser that cannot support it, rather than showing buttons that
+would do nothing.
+
+**Open a seat** makes this window the host. It needs a fight already running,
+and says so if there is not one. The machine lent to the second player is chosen
+here, from this campaign's own roster.
+
+**Take a seat** makes this window the guest. It asks the other window for the
+seat and reports what it was told, including a refusal and why.
+
+**Pause** is the host's, and it stops the fight on both sides at once. A guest
+can ask, and the host's answer is broadcast either way so nobody is left
+wondering whether the request was heard.
+
+**End session** closes it from either side. The other window is told why rather
+than simply going quiet.
+
+**Direct link** is for two different computers. It produces a block of text to
+send to the other player; they paste it into the same box and send a block back,
+which the first player pastes in turn. Two presses and two pastes, because that
+is genuinely what a connection with no server in the middle costs.
+
+The guest drives with the same keys as single player. Those keys send intents to
+the host instead of driving a local fight, so a guest can do exactly what a local
+player can do and nothing else.
