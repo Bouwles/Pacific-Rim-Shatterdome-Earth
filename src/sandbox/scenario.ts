@@ -9,6 +9,7 @@ import { jaegerRegistry } from "../data/jaegers";
 import { createPilotRegistry } from "../data/pilots";
 import { REGION_PROFILES } from "../data/regionProfiles";
 import { REGION_DEFINITIONS as REGIONS_FOR_CLIMATE } from "../data/regions";
+import { APP_VERSION } from "../saves/saveService";
 import { DIVEABLE_DEPTH_METERS } from "../world/regionIdentity";
 
 /**
@@ -126,7 +127,7 @@ export function defaultScenario(overrides: Partial<SandboxScenario> = {}): Sandb
     schemaVersion: SANDBOX_SCHEMA_VERSION,
     id: "sandbox.untitled",
     name: "Untitled scenario",
-    buildVersion: "0.3.0",
+    buildVersion: APP_VERSION,
     seed: 20260908,
     regionId: "hong-kong",
     dayFraction: 0.5,

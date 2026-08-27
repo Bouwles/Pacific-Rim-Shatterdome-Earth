@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-10, Milestone 35: release candidate
+
+1.0.0-rc.1. The vertical slices became one game.
+
+- A single continuous browser test walks the whole loop from an empty profile: boot, new campaign, a facility ordered, a manual save, a sortie from alert through carrier to combat, damage, an explained result, the save intact, an export downloaded, and the simulator provably unable to touch any of it. Twenty-four seconds, zero console errors.
+- Golden hashes pin the simulation: the kernel, a year of economy under four strategies, a co-op battle, a sandbox run, the soundscape journey and three stress scenes. Changing any of them is now a failed test naming the system that moved, and updating a golden value belongs in the commit that intended the change.
+- An accessibility review as assertions: the menu fully keyboard operable, focus visible, controls carrying accessible names, errors as sentences with nothing lost, and severity vocabulary distinct without hue. The deep passes live where the systems live and were already tested; this is the frame around them.
+- The dense-city stress scene ran on all four presets on the production build and the numbers are in RELEASE_NOTES.md: zero long frames and zero budget breaches on the reference machine at every level.
+- RELEASE_NOTES.md: the save compatibility promise, performance evidence, a content completeness matrix, known issues stated plainly, and the next phase in order.
+- Version 1.0.0-rc.1 everywhere: the package, the save metadata, the menu, and sandbox scenario stamps now carry the real build version rather than a stale literal.
+
 ## 2026-09-09, Milestone 34: the contract
 
 Performance stopped being a hope and became numbers with names on them.

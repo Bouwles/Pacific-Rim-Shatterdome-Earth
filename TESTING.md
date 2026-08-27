@@ -809,3 +809,14 @@ The leak test's first run failed on +56 meshes: the baseline had been taken
 while terrain streaming was still filling, and the first fight lazily allocates
 shared singletons. Three further cycles held at exactly zero growth, which is
 the steady-state claim the test now makes after a warm-up cycle.
+
+## Milestone 35 acceptance evidence
+
+| Acceptance item                                                  | Evidence                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A fresh user completes the entire core loop without intervention | One continuous Playwright session from an empty profile: boot, new game, purchase, save, deploy, combat, results, export, sandbox isolation. 24 seconds, zero console errors |
+| All required commands pass from a clean install                  | format:check, lint, strict typecheck, 2,121 unit and integration tests, the browser suites, and the production build, all green in sequence                                  |
+| No visible control claims unimplemented function                 | The honest-UI rule has been enforced per milestone since the quality contract; the loop test and the known-issues list in RELEASE_NOTES.md carry the residual gaps openly    |
+| Golden scenarios and state hashes                                | Eight digests pinned in tests/integration/golden.test.ts, covering the kernel, economy, co-op, sandbox, audio and three stress scenes                                        |
+| Accessibility review                                             | tests/e2e/accessibility.spec.ts, plus the pre-existing hud, vfx and audio coverage it frames                                                                                 |
+| Performance on every preset                                      | Dense-city at 180 frames per preset on the production build, recorded in RELEASE_NOTES.md, zero long frames and zero breaches on the reference machine                       |

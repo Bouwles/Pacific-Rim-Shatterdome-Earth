@@ -840,3 +840,17 @@ combat cycles to a zero diff.
 **Next action:** stage the browser stress scenes properly (force the storm,
 load the gallery, run the traversal route from inside the runner), and measure
 the stated triangle and memory budgets with engine-level queries.
+
+## Phase 9 / Milestone 35 - Full regression suite and first complete-game release candidate
+
+**Depends on:** everything before it.
+**Status:** complete. The build is 1.0.0-rc.1.
+
+One continuous automated pass through the whole loop from an empty profile,
+golden hashes over the most important simulation flows, an accessibility
+review as assertions, per-preset performance evidence, and RELEASE_NOTES.md
+with the compatibility promise, the content matrix, the known issues and the
+next phase in priority order.
+
+**Next action:** the next phase is written in RELEASE_NOTES.md, in order:
+owned machines through the whole interface first.

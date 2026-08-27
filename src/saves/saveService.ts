@@ -34,7 +34,7 @@ import {
   type StoredSave,
 } from "./schema";
 
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "1.0.0-rc.1";
 const DEFAULT_AUTOSAVE_SLOTS = 3;
 const DEFAULT_BACKUPS_PER_SLOT = 2;
 

@@ -326,7 +326,13 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - seven registry-named stress scenes, three headless and deterministic, four browser-driven through a runner that refuses unlisted ids;
   - adaptive quality with real hysteresis (90 frames down, 900 up, one step, cooldown), driving the ordinary applyQuality path, pinned off by any manual choice, changing presentation only;
   - a leak tracker diffing scene inventories across transitions, holding three combat cycles to a zero diff in a real browser.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2113 unit+integration), `smoke` (196 Playwright, including 7 co-op, 9 simulator, 4 effects, 7 offline-shell and 6 performance tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
+- **Release candidate 1.0.0-rc.1**:
+  - one continuous browser test of the entire core loop from an empty profile, with zero console errors;
+  - eight golden simulation hashes pinned, so an unintended behaviour change fails a named test;
+  - an accessibility review as assertions: keyboard operability, visible focus, accessible names, actionable errors, hue-free severity;
+  - per-preset performance evidence recorded in RELEASE_NOTES.md, zero breaches on the reference machine;
+  - RELEASE_NOTES.md carrying the save compatibility promise, content matrix, known issues and next phase.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (2121 unit+integration), `smoke` (202 Playwright, including the continuous release loop and 5 accessibility tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 

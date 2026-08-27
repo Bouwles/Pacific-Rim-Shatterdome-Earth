@@ -310,6 +310,7 @@ src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
 docs             architecture, content schema, controls, world coordinates, save migrations, performance budgets
+RELEASE_NOTES.md the release candidate: compatibility promise, evidence, known issues, next phase
 ```
 
 ### Sound

@@ -23,7 +23,7 @@ export function renderMainMenu(
   const title = document.createElement("h1");
   title.textContent = "Pacific Rim: Shatterdome Earth";
   const subtitle = document.createElement("p");
-  subtitle.textContent = "Private fan project — procedural placeholders, Milestone 18.";
+  subtitle.textContent = "Private fan project. Original procedural placeholders. 1.0.0-rc.1.";
 
   const newGameButton = document.createElement("button");
   newGameButton.type = "button";
