@@ -928,3 +928,37 @@ Twelve input intents: move, press-move, guard, aim, fire, reload, charge-start,
 charge-release, grapple-throw, grapple-slam, grapple-release and prop-drop. Each
 maps to a method the single-player path already calls, so a guest can do exactly
 what a local player can do and nothing else.
+
+## Sandbox rules (Milestone 31)
+
+Nine rows in `src/sandbox/rules.ts`. Each has a name, a sentence saying what it
+does, and a flag for whether it belongs behind the advanced panel.
+
+| id                    | Name                  | What it does                                       | Advanced |
+| --------------------- | --------------------- | -------------------------------------------------- | -------- |
+| freeCosts             | Free everything       | Nothing costs funding, alloy or research data      | no       |
+| noCooldowns           | No cooldowns          | Moves and weapons are ready the moment they finish | no       |
+| noDamageTaken         | Invulnerable machines | Your side takes no damage; everything still reacts | no       |
+| infiniteAmmunition    | Infinite ammunition   | Magazines never empty                              | no       |
+| stableDrift           | Perfect drift         | The neural link never slips                        | no       |
+| calmEnemies           | Passive creatures     | Creatures move and react but do not commit         | no       |
+| persistentDestruction | Damage stays          | Wrecked buildings are never cleared during the run | no       |
+| slowMotion            | Slow motion           | Everything runs at a third speed                   | no       |
+| debugVisuals          | Debug visualisation   | Draws hit volumes and markers over the scene       | yes      |
+
+Slow motion and debug drawing do not change the fight, so a run using only those
+still counts as a straight fight on the scoreboard. Every other rule marks the
+run.
+
+## Sandbox scenario vocabulary (Milestone 31)
+
+Four small tables in `src/sandbox/scenario.ts`, alongside the region, weather,
+objective, difficulty, chassis, creature and mutation registries a scenario
+draws its content from.
+
+| Table                  | Values                                   |
+| ---------------------- | ---------------------------------------- |
+| CITY_DAMAGE_PRESETS    | pristine, scarred, half-ruined, levelled |
+| WATER_STATES           | low-tide, normal, high-tide, surge       |
+| AI_AGGRESSION          | passive, cautious, normal, relentless    |
+| SANDBOX_SCHEMA_VERSION | 1                                        |

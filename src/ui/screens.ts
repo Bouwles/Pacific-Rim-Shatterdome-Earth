@@ -14,6 +14,7 @@ export function renderMainMenu(
   onOpenGallery?: () => void,
   onOpenSaves?: () => void,
   onOpenWorld?: () => void,
+  onOpenSandbox?: () => void,
 ): void {
   clear(container);
   const panel = document.createElement("div");
@@ -31,6 +32,16 @@ export function renderMainMenu(
   newGameButton.addEventListener("click", onNewGame);
 
   panel.append(title, subtitle, newGameButton);
+
+  if (onOpenSandbox) {
+    const sandboxButton = document.createElement("button");
+    sandboxButton.type = "button";
+    sandboxButton.textContent = "Simulator";
+    sandboxButton.className = "secondary-button";
+    sandboxButton.dataset["action"] = "open-sandbox";
+    sandboxButton.addEventListener("click", onOpenSandbox);
+    panel.appendChild(sandboxButton);
+  }
 
   if (onOpenSaves) {
     const savesButton = document.createElement("button");

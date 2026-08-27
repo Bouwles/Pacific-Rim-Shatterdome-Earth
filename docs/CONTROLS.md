@@ -773,3 +773,27 @@ is genuinely what a connection with no server in the middle costs.
 The guest drives with the same keys as single player. Those keys send intents to
 the host instead of driving a local fight, so a guest can do exactly what a local
 player can do and nothing else.
+
+## Simulator
+
+Reached from **Simulator** on the main menu, and left with **Back to Menu**.
+There is deliberately no route from the sandbox into a campaign.
+
+The top two rows are the fight: region, weather, water, time of day, then
+machine, creature, objective, difficulty, city damage and aggression. Every list
+is the game's own table, so anything the build knows is there.
+
+Under them are the toggles. Hovering one says what it does. **Advanced** is a
+closed panel holding the debug drawing, which is the only developer-facing thing
+in the mode.
+
+**Save** puts the current scenario in the library under its name, replacing any
+earlier one with the same id rather than piling up copies. **Export** writes it
+into the text box to send to somebody. Pasting somebody else's block in and
+pressing **Import** loads it, or says why it will not load.
+
+**Run it** starts the fight. It is disabled while anything is wrong, and
+everything that is wrong is listed underneath in plain sentences.
+
+Once a run starts, the fight uses the ordinary pilot controls. Nothing about it
+is saved, spent or earned.

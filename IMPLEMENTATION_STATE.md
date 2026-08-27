@@ -295,7 +295,16 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
   - prediction bounded at 20 ticks, after which the guest says plainly that nothing on screen is current;
   - late join only at a safe point, a rejoin that keeps the sequence guard, a silent guest whose machine holds position, a pause that stops both sides, a host abort that says why, and a protocol mismatch that names both builds;
   - a deterministic scenario running the same battle on a clean link and on one with 180 ms latency, 90 ms jitter, 20 percent loss and 15 percent duplication, asserting nothing is ever counted twice.
-- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1951 unit+integration), `smoke` (170 Playwright, including 7 two-window co-op tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
+- **A simulator**, separate from the campaign in both directions:
+  - a scenario as plain data: region, time, weather, water, squad, waves, mutations, objective, city damage, difficulty and aggression, every list built from a registry so anything the build knows is selectable;
+  - validation that separates a name this build does not have from a combination that cannot work, and refuses both with the two settings that disagree named;
+  - nine toggles as an overlay handed to one run and read where a number is used, never written anywhere shared;
+  - invulnerability and infinite ammunition implemented as putting things back, so a cheated fight still looks like a fight;
+  - debug drawing behind an advanced panel that is closed by default;
+  - a scenario library with save, reload, delete, export and import, marking a cross-version or modded file rather than half-loading it;
+  - scenarios and run statistics in their own store, with no function anywhere that turns a sandbox run into campaign progress;
+  - a deterministic check that runs a straight fight, the same fight with every cheat on, and the straight fight again, requiring the first and third to match down to the arena digest.
+- Tooling: `typecheck`, `lint`, `format`/`format:check`, `test` (1998 unit+integration), `smoke` (179 Playwright, including 7 two-window co-op tests and 9 simulator tests; 3 remain blocked behind a pre-existing builder-suite timeout), `build` all pass.
 
 ## What is stubbed / placeholder
 
@@ -356,6 +365,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.
 - No Firefox/Safari verification — Chromium-family only.
+- The simulator's scenario carries waves, mutations, pilots, water state, city damage preset, difficulty and aggression, and validates all of them. What the running fight currently reads from that is the region, the creature and the aggression, slow-motion, invulnerability, infinite-ammunition and debug-drawing rules. Later waves, mutation stacking on a spawned creature, the city damage preset and the water state are authored, validated and stored, but the fight does not apply them yet: they need the wave scheduler and the destruction preloader that do not exist. The editor does not pretend otherwise, but it is the largest gap in the mode.
+- Sandbox runs are not yet written to the scoreboard automatically. `recordRun` and the store are tested and the panel reads them, but nothing calls it at the end of a sandbox fight, because a sandbox fight has no mission to end. It needs an explicit finish action in the pilot screen.
+- The squad in a scenario is one machine. The type holds a list and the escort objective requires two, but the runner puts one on the field.
 - Co-op has been played between two windows on one machine, which is what `BroadcastChannel` supports. The WebRTC path is implemented, typechecked and reachable from the panel, but a connection between two physically separate machines has never been made: there is no second machine here to make one with. The offer and answer blocks are produced and consumed correctly; what is unverified is whether they carry a real fight across a real network.
 - The guest window shows the fight as a readout and a status line, not as a second rendered view. It drives a real machine in the host's arena and its inputs genuinely land, but nobody has drawn the host's world in the guest's window, so the second player is flying on instruments. That is the largest thing this milestone deliberately left out.
 - Co-op results go through the host's ordinary mission path, so the guest earns nothing of their own. That is correct for a lent machine and would be wrong if guests ever had campaigns of their own.
@@ -368,6 +380,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 - Entry: [src/main.ts](src/main.ts) → [src/app/bootstrap.ts](src/app/bootstrap.ts) → [src/app/config.ts](src/app/config.ts)
 - State machine: [src/app/appState.ts](src/app/appState.ts)
+- Simulator: [src/sandbox/scenario.ts](src/sandbox/scenario.ts), [rules.ts](src/sandbox/rules.ts), [library.ts](src/sandbox/library.ts), [stats.ts](src/sandbox/stats.ts), [src/ui/sandboxScreen.ts](src/ui/sandboxScreen.ts)
 - Two-player: [src/net/protocol.ts](src/net/protocol.ts), [transport.ts](src/net/transport.ts), [hostSession.ts](src/net/hostSession.ts), [guestSession.ts](src/net/guestSession.ts), [browserTransports.ts](src/net/browserTransports.ts)
 - Sound: [src/audio/mixer.ts](src/audio/mixer.ts), [musicDirector.ts](src/audio/musicDirector.ts), [radioDirector.ts](src/audio/radioDirector.ts), [layerModel.ts](src/audio/layerModel.ts), [soundscape.ts](src/audio/soundscape.ts), [crewVoice.ts](src/audio/crewVoice.ts), realised in [src/engine/soundStage.ts](src/engine/soundStage.ts)
 - Engine adapter / boot scene: [src/engine/engineAdapter.ts](src/engine/engineAdapter.ts), [src/engine/scene.ts](src/engine/scene.ts)

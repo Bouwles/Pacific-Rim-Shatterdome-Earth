@@ -242,6 +242,64 @@
         flex: 1 1 70px;
         min-width: 60px;
       }
+      #uiRoot .screen-sandbox .sandbox-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      #uiRoot .screen-sandbox .sandbox-blurb,
+      #uiRoot .screen-sandbox .sandbox-note {
+        font:
+          12px/1.5 "Consolas",
+          monospace;
+        opacity: 0.8;
+        margin: 2px 0;
+      }
+      #uiRoot .screen-sandbox textarea {
+        flex-basis: 100%;
+        min-height: 52px;
+        resize: vertical;
+        font:
+          10px/1.4 "Consolas",
+          monospace;
+        color: inherit;
+        background: rgba(4, 10, 16, 0.7);
+        border: 1px solid rgba(127, 214, 255, 0.2);
+        border-radius: 3px;
+        padding: 4px 6px;
+      }
+      #uiRoot .screen-sandbox .sandbox-library,
+      #uiRoot .screen-sandbox .sandbox-problems {
+        flex-basis: 100%;
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          12px/1.7 "Consolas",
+          monospace;
+      }
+      #uiRoot .screen-sandbox .sandbox-problems {
+        color: rgb(255, 168, 148);
+      }
+      #uiRoot .screen-sandbox .sandbox-library li {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #uiRoot .screen-sandbox .sandbox-advanced {
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 3px;
+        padding: 4px 8px;
+        margin: 6px 0;
+        font:
+          12px/1.6 "Consolas",
+          monospace;
+      }
+      #uiRoot .screen-sandbox .sandbox-advanced summary {
+        cursor: pointer;
+      }
       #uiRoot .pilot-controls[data-section="coop"] {
         flex-wrap: wrap;
         gap: 6px 10px;

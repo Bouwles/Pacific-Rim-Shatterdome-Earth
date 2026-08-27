@@ -69,6 +69,21 @@ import { GuestSession } from "../net/guestSession";
 import { BroadcastChannelTransport, WebRtcTransport } from "../net/browserTransports";
 import type { BattleSessionTransport } from "../net/transport";
 import type { GuestLoadout } from "../net/protocol";
+import { renderSandboxScreen, type SandboxScreenHandle } from "../ui/sandboxScreen";
+import { defaultScenario, liveRegistries, validateScenario, type SandboxScenario } from "../sandbox/scenario";
+import { adjustmentsFor, defaultRules, type SandboxRuleId, type SandboxRules } from "../sandbox/rules";
+import {
+  exportScenario,
+  importScenario,
+  loadLibrary,
+  sandboxStorage,
+  saveScenario as saveSandboxScenario,
+  deleteScenario as deleteSandboxScenario,
+} from "../sandbox/library";
+import { loadRuns, statsStorage, summarise } from "../sandbox/stats";
+import { OBJECTIVE_DEFINITIONS } from "../missions/objectives";
+import { WEATHER_KINDS } from "../world/weather";
+import { DIFFICULTY_LEVELS } from "../world/economy";
 import type { SoundscapeInput } from "../audio/soundscape";
 import { crewLineId, crewLines } from "../audio/crewVoice";
 import type { AudioBusId } from "../data/audioBuses";
@@ -1287,6 +1302,24 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let combatArena: CombatArena | undefined;
 
   /**
+   * The simulator.
+   *
+   * A scenario, a rule set and a screen. `sandboxRun` is what makes a fight a
+   * sandbox fight: while it is set, nothing reports to a mission, nothing
+   * settles an economy and nothing touches a career save, because the sandbox
+   * never starts a mission in the first place.
+   */
+  let sandboxScreen: SandboxScreenHandle | undefined;
+  let sandboxScenario: SandboxScenario = defaultScenario();
+  let sandboxRules: SandboxRules = defaultRules();
+  let sandboxAdvancedOpen = false;
+  let sandboxTransfer = "";
+  let sandboxTransferNote = "";
+  let sandboxRun: { readonly scenario: SandboxScenario; readonly rules: SandboxRules } | null = null;
+  const sandboxLibraryStore = sandboxStorage();
+  const sandboxStatsStore = statsStorage();
+
+  /**
    * Second player, if there is one.
    *
    * All three are undefined in a single-player session and nothing above them
@@ -1961,12 +1994,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * what it reports. Both fighters run the same resolver, which is the whole
    * point of the framework.
    */
-  const spawnTarget = (): void => {
+  const spawnTarget = (kaijuId = "kaiju.biped-alpha"): void => {
     const session = pilotSession;
     if (!session) return;
     clearTarget();
 
-    const kaiju = kaijuRegistry.getOrThrow("kaiju.biped-alpha");
+    // Named by the caller rather than hard-coded, which is what lets the
+    // simulator put any creature the build knows on the field without anybody
+    // editing this file.
+    const kaiju = kaijuRegistry.get(kaijuId) ?? kaijuRegistry.getOrThrow("kaiju.biped-alpha");
     const pose = session.pose;
     const yaw = (pose.yawDeg * Math.PI) / 180;
     // A hundred and twenty metres ahead: outside every move's reach, so the
@@ -1977,6 +2013,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // One growth object for the whole fight, read from the roster rather than
     // recomputed per hit.
     const growth = roster.growthOf(session.jaeger.id, crewMachineBonus());
+    if (sandboxRun && adjustmentsFor(sandboxRun.rules).showDebugVisuals) {
+      combatDebugVolumes = true;
+      combatView?.setDebugVolumes(true);
+    }
     combatArena = new CombatArena({
       moves: moveRegistry,
       space: spaceQuery(),
@@ -3055,7 +3095,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           orderDialOpen = !orderDialOpen;
           refreshPilot();
         },
-        onSpawnTarget: spawnTarget,
+        onSpawnTarget: () =>
+          spawnTarget(sandboxRun?.scenario.waves[0]?.combatants[0]?.kaijuId ?? "kaiju.biped-alpha"),
         onClearTarget: clearTarget,
         onMoveList: (open: boolean) => {
           moveListOpen = open;
@@ -3935,7 +3976,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       coopGuest.send("move", { east: pose.east, north: pose.north, yawDeg: pose.yawDeg });
     }
 
-    combatAccumulator += deltaSeconds;
+    // Slow motion is a smaller step, not a different fight: the same ticks
+    // happen, spread over more wall time.
+    combatAccumulator += sandboxRun
+      ? deltaSeconds * adjustmentsFor(sandboxRun.rules).timeScale
+      : deltaSeconds;
     const events: CombatEvent[] = [];
     // Capped so a stalled frame cannot run a second of combat at once.
     let budget = 8;
@@ -3945,7 +3990,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // The creature decides for itself: it senses the machine, picks a goal,
       // works out how to get where that goal wants it, and attacks when it is
       // close enough. Nothing here knows which creature it is.
-      driveCreature(arena, COMBAT_TICK_SECONDS);
+      // Passive creatures move and react but do not commit, which is a rule
+      // read here rather than a setting written into the creature.
+      if (!sandboxRun || adjustmentsFor(sandboxRun.rules).aggressionScale > 0) {
+        driveCreature(arena, COMBAT_TICK_SECONDS);
+      }
       // While hosting, the session steps the arena and announces what happened,
       // so there is exactly one place a tick can come from and exactly one
       // thing counting the fight.
@@ -3956,6 +4005,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // Drained rather than collected from the steps: a trigger pulled between
     // two ticks is still something that happened.
     events.push(...arena.drain());
+    applySandboxRules(arena);
     consumeCombatEvents(events);
 
     const snapshot = arena.snapshot();
@@ -3973,6 +4023,36 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // The camera frames the creature while a lock is held.
     if (kaijuView) lastTargetPosition = { east: kaijuView.east, north: kaijuView.north, up: pose.up };
     void session;
+  };
+
+  /**
+   * The rules that have to be applied after a tick rather than before one.
+   *
+   * Invulnerability and infinite ammunition are both "put it back": the hit
+   * lands, the round is fired, everything reacts exactly as it would, and then
+   * the cost is undone. Doing it this way rather than by editing the machine is
+   * what keeps a cheated fight looking like a fight instead of like a fight with
+   * the physics switched off, and it is why nothing shared is ever written to.
+   */
+  const applySandboxRules = (arena: CombatArena): void => {
+    if (!sandboxRun) return;
+    const adjust = adjustmentsFor(sandboxRun.rules);
+    const view = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (!view) return;
+
+    if (adjust.incomingDamageScale === 0) {
+      for (const zone of view.zones) {
+        const missing = zone.maxHealth - zone.health;
+        if (missing > 0) arena.damageZone("jaeger", zone.id, -missing);
+      }
+    }
+    if (adjust.ammunitionUseScale === 0) {
+      for (const weapon of view.weapons) {
+        if (weapon.magazineSize > 0 && weapon.magazine < weapon.magazineSize) {
+          arena.reloadWeapon("jaeger", weapon.id);
+        }
+      }
+    }
   };
 
   let lastTargetPosition: { east: number; north: number; up: number } | null = null;
@@ -6403,11 +6483,144 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refreshShatterdome();
   };
 
+  /**
+   * The simulator screen.
+   *
+   * Every picker is built from a registry, so a creature or a chassis added
+   * later appears here without a line changing. Nothing on it is spent, earned
+   * or saved anywhere a campaign can see.
+   */
+  const sandboxState = () => {
+    const registries = liveRegistries();
+    const library = loadLibrary(sandboxLibraryStore);
+    const runs = loadRuns(sandboxStatsStore);
+    return {
+      scenario: sandboxScenario,
+      rules: sandboxRules,
+      problems: validateScenario(sandboxScenario, registries),
+      library: library.entries.map((entry) => ({
+        id: entry.scenario.id,
+        name: entry.scenario.name,
+        note: validateScenario(entry.scenario, registries).length > 0 ? "needs repair" : "",
+      })),
+      libraryNote: library.note,
+      statsNote: summarise(runs).note,
+      transferText: sandboxTransfer,
+      transferNote: sandboxTransferNote,
+      advancedOpen: sandboxAdvancedOpen,
+      regions: regionRegistry.all().map((region) => ({ id: region.id, label: region.displayName })),
+      weathers: WEATHER_KINDS.map((id) => ({ id, label: id })),
+      objectives: OBJECTIVE_DEFINITIONS.map((entry) => ({ id: entry.id, label: entry.displayName })),
+      difficulties: DIFFICULTY_LEVELS.map((id) => ({ id, label: id })),
+      chassis: jaegerRegistry.all().map((entry) => ({ id: entry.id, label: entry.name })),
+      creatures: kaijuRegistry.all().map((entry) => ({ id: entry.id, label: entry.name })),
+    };
+  };
+
+  const refreshSandbox = (): void => {
+    sandboxScreen?.update(sandboxState());
+  };
+
+  /**
+   * Starts a sandbox fight.
+   *
+   * It goes through the same world, the same pilot session and the same arena a
+   * campaign fight goes through. What makes it a sandbox is what it does *not*
+   * do: no mission is created, so nothing reports progress, settles an economy,
+   * pays a crew or touches a save.
+   */
+  const runSandboxScenario = (): void => {
+    if (validateScenario(sandboxScenario).length > 0) return;
+    sandboxRun = { scenario: sandboxScenario, rules: sandboxRules };
+    // A sandbox fight is not a sortie. Anything a mission would have settled is
+    // absent because there is no mission, not because something was suppressed.
+    mission = undefined;
+    missionResults = null;
+    worldState.teleportTo(sandboxScenario.regionId, kernel?.tick ?? 0);
+    floatingOrigin.forceRebase(worldState.playerPosition);
+    stateMachine.transition(AppState.WorldMap);
+  };
+
+  const openSandbox = (): void => {
+    sandboxScreen = renderSandboxScreen(uiRoot, {
+      onChange: (change) => {
+        sandboxScenario = { ...sandboxScenario, ...change };
+        refreshSandbox();
+      },
+      onRule: (id: SandboxRuleId, on: boolean) => {
+        // A new object every time: the rule set is an overlay handed to a run,
+        // never a setting written into anything shared.
+        sandboxRules = { ...sandboxRules, [id]: on };
+        refreshSandbox();
+      },
+      onAdvanced: (open: boolean) => {
+        sandboxAdvancedOpen = open;
+        refreshSandbox();
+      },
+      onSave: () => {
+        const result = saveSandboxScenario(sandboxLibraryStore, {
+          scenario: sandboxScenario,
+          rules: sandboxRules,
+          savedAt: Date.now(),
+        });
+        sandboxTransferNote = result.note;
+        refreshSandbox();
+      },
+      onLoad: (id: string) => {
+        const found = loadLibrary(sandboxLibraryStore).entries.find((entry) => entry.scenario.id === id);
+        if (!found) return;
+        sandboxScenario = found.scenario;
+        sandboxRules = found.rules;
+        sandboxTransferNote = `Loaded "${found.scenario.name}".`;
+        refreshSandbox();
+      },
+      onDelete: (id: string) => {
+        sandboxTransferNote = deleteSandboxScenario(sandboxLibraryStore, id).note;
+        refreshSandbox();
+      },
+      onExport: () => {
+        sandboxTransfer = exportScenario({
+          scenario: sandboxScenario,
+          rules: sandboxRules,
+          savedAt: Date.now(),
+        });
+        sandboxTransferNote = "Copy this and send it to somebody.";
+        refreshSandbox();
+      },
+      onImport: (text: string) => {
+        const result = importScenario(text);
+        if (result.entry && result.compatibility.openable) {
+          sandboxScenario = result.entry.scenario;
+          sandboxRules = result.entry.rules;
+        }
+        // A file from another version or naming missing content is marked here
+        // rather than silently half-loaded.
+        sandboxTransferNote =
+          result.compatibility.verdict === "ok"
+            ? "Imported."
+            : `${result.compatibility.verdict}: ${result.compatibility.reasons.join(" ")}`;
+        refreshSandbox();
+      },
+      onRun: () => runSandboxScenario(),
+      onExit: () => {
+        sandboxRun = null;
+        stateMachine.transition(AppState.MainMenu);
+      },
+    });
+    refreshSandbox();
+  };
+
+  const closeSandbox = (): void => {
+    sandboxScreen?.dispose();
+    sandboxScreen = undefined;
+  };
+
   const renderForState = (state: AppState): void => {
     if (state !== AppState.AssetGallery && gallery) closeGallery();
     if (state !== AppState.Saves && saveScreen) closeSaves();
     if (state !== AppState.WorldMap && worldScreen) closeWorld();
     if (state !== AppState.Shatterdome && shatterdomeScreen) closeShatterdome();
+    if (state !== AppState.Sandbox && sandboxScreen) closeSandbox();
 
     switch (state) {
       case AppState.MainMenu:
@@ -6417,7 +6630,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           () => stateMachine.transition(AppState.AssetGallery),
           () => stateMachine.transition(AppState.Saves),
           () => stateMachine.transition(AppState.WorldMap),
+          () => stateMachine.transition(AppState.Sandbox),
         );
+        break;
+      case AppState.Sandbox:
+        openSandbox();
         break;
       case AppState.WorldMap:
         openWorld();

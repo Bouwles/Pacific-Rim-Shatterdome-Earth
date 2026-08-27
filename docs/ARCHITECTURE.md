@@ -1552,3 +1552,48 @@ effect.
 **Teardown.** Sessions unsubscribe, transports close, data channels are
 unwired and the peer connection is closed, all with the fight rather than with
 the page.
+
+## The simulator
+
+A separate mode, built on the same world, the same pilot session and the same
+arena a campaign fight uses. What makes it a sandbox is what it does not do.
+
+**A scenario is data.** `src/sandbox/scenario.ts` holds a complete description
+of a fight as plain serializable values with stable ids: place, time, weather,
+water, squad, waves, mutations, objective, city damage, difficulty and
+aggression. Every list it validates against comes from a registry, so anything
+the build knows is selectable and nothing needs a source edit to spawn.
+
+**Validation is two jobs.** The first is a name this build does not have, which
+is what a modded or cross-version file looks like from here. The second is a
+combination that is individually fine and jointly impossible: a surge where the
+shelf is twelve metres deep, a rescue at a place with nobody in it, snow in the
+tropics. Both are refused with the reason attached, because loading either
+produces a scene that is broken in a way nobody could diagnose.
+
+**Cheats are an overlay, not a setting.** `src/sandbox/rules.ts` produces a
+small object of multipliers from a set of toggles, and that object is handed to
+one run and read where a number is used. Nothing writes to a registry, a
+definition or a preset table, so there is no global to restore afterwards
+because nothing was ever changed. `checkRuleIsolation` runs a straight fight,
+the same fight with every cheat on, and the straight fight again, and requires
+the first and third to match down to the arena digest. That catches a mutating
+toggle wherever somebody put it.
+
+**Two of the cheats put things back rather than switching them off.**
+Invulnerability lets the hit land, the reaction play and the damage be counted,
+then restores the zone. Infinite ammunition lets the round be fired and then
+reloads. Doing it the other way would make a cheated fight look like a fight
+with the physics turned off.
+
+**The separation is structural.** Sandbox scenarios and statistics live in their
+own browser storage under their own keys, and there is no function in
+`src/sandbox/` that produces funding, research data, salvage, standing, crew
+experience or prestige. A sandbox fight also never creates a `Mission`, and a
+mission is the only thing that settles any of those, so the absence is a
+consequence of the design rather than a rule somebody has to remember. A test
+asserts no awarding function ever appears in the module's exports.
+
+**The advanced panel** holds exactly one thing: debug drawing. Everything else
+is an ordinary option, so the normal sandbox is a game rather than a developer
+build.

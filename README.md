@@ -302,6 +302,7 @@ src/debug        developer overlay, asset gallery, deterministic scenario runner
 src/data         typed content registries and asset manifests
 src/audio        buses, mixing, ducking, the adaptive score, the radio queue
 src/net          the battle transport, the message protocol, host authority and the guest
+src/sandbox      custom scenarios, the cheat overlay, the scenario library and its statistics
 src/ui           menus and screens
 public/assets    drop point for your own models, empty by design
 tests            unit, integration and browser tests
@@ -317,6 +318,20 @@ A radio call ducks the music and the ambience under it. It never ducks the acces
 Everything is generated in the browser. Machines are built from layers that come and go with speed, damage, heat, footing and what is faulted, so a limping machine sounds like a limping machine. The score follows the situation through eleven states and crossfades between them at a speed that depends on how urgent the change is. Voices are band-limited bursts on each speaker's own frequency range with the written line as the subtitle.
 
 If the browser refuses to start audio, which most will until you click something, the panel says so and everything else keeps working. Subtitles and the conversation record do not need sound at all.
+
+### Simulator
+
+Open Simulator from the main menu. It is a separate mode for building fights, trying things and breaking things, and it is walled off from career progress in both directions.
+
+Pick a place, a time of day, weather, the state of the water, the machine you take out, the creature you face, an objective, how wrecked the city starts, a difficulty and how hard the creatures try. Every list is built from the game's own tables, so anything the build knows about is selectable.
+
+Nine toggles sit under that: free costs, no cooldowns, invulnerable machines, infinite ammunition, perfect drift, passive creatures, damage that stays, slow motion, and debug drawing. Debug drawing is behind an Advanced panel that stays closed unless you open it. Turning any of them on affects that run and nothing else: none of them writes a setting anywhere, so a campaign played afterwards is exactly the campaign you would have had.
+
+Combinations that cannot work are refused in a sentence naming the two settings that disagree, with the run button disabled until you fix it, rather than loading a broken scene.
+
+Scenarios can be saved, reloaded, deleted and exported to a block of text you can send to somebody. A file written by a different version, or one naming content your copy does not have, is marked as such. The second kind still opens so you can swap the missing piece out.
+
+Sandbox scenarios and statistics live in their own storage, separate from campaign saves. Nothing you do here earns funding, research, salvage, standing, crew experience or prestige, and best times are only counted for runs with none of the toggles on.
 
 ### Two players
 

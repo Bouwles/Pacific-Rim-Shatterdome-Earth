@@ -775,3 +775,20 @@ Single player is untouched and works with none of it available.
 **Next action:** render the host's fight in the guest's window, so the second
 player is looking at the battle rather than at a readout of it, and verify a
 WebRTC connection between two physically separate machines.
+
+## Phase 8 / Milestone 31 - Simulator sandbox, scenario editor, and gameplay cheats
+
+**Depends on:** Milestone 30.
+**Status:** complete.
+
+A separate mode for building fights, with a scenario as plain data, nine cheats
+implemented as an overlay rather than a setting, a scenario library with export
+and import, and marking for cross-version or modded files. Impossible
+combinations are refused with the two settings that disagree named. Scenarios
+and statistics live in their own store, and nothing in the mode can produce
+campaign progress.
+
+**Next action:** apply the parts of a scenario the fight does not read yet, which
+means a wave scheduler for later waves, mutation stacking on a spawned creature,
+a destruction preloader for the city damage preset, and the water state. Then an
+explicit finish action so a sandbox run reaches the scoreboard.

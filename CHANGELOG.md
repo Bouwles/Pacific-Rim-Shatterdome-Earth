@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-06, Milestone 31: a place to try things
+
+A simulator, reachable from the menu, with no costs, no rewards and no way back into a campaign.
+
+- Build a fight: region, time of day, weather, water state, the machine you take, the creature you face, objective, city damage, difficulty and how hard the creatures try.
+- Every picker is built from the game's own tables. Any region, any chassis and any creature the build knows is selectable, and adding one later puts it in the list without a line changing. Nothing needs a source edit to spawn.
+- Nine toggles: free costs, no cooldowns, invulnerable machines, infinite ammunition, perfect drift, passive creatures, damage that stays, slow motion, and debug drawing.
+- The toggles are an overlay, never a setting. A rule set is a small object handed to one run and read where a number is used, so nothing global is written and nothing has to be restored afterwards. A test runs a straight fight, then the same fight with every cheat on, then the straight fight again, and requires the first and third to be identical down to the digest.
+- Invulnerability and infinite ammunition put things back rather than switching them off. The hit lands, the round is fired, everything reacts, and then the cost is undone, so a cheated fight still looks like a fight.
+- Debug drawing lives behind an advanced panel that is closed by default. Everything else is an ordinary player-facing option, so the normal sandbox stays a game.
+- Save scenarios, reload them, delete them, and export one to a block of text somebody else can import.
+- A file from another version, or one naming content this copy does not have, is marked and explained rather than half-loaded. The second kind still opens for editing, so a missing piece can be swapped out instead of being a dead end.
+- Impossible combinations are refused in words with the run button disabled: a surge somewhere too shallow to dive, damage to a city that is not there, a rescue at the Breach, an escort with nothing to escort, snow in the tropics. Each one names the two settings that disagree.
+- Sandbox scenarios and statistics live in their own store. There is no function anywhere that turns a sandbox run into funding, research, salvage, standing, crew experience or prestige, and a test asserts that none appears.
+- Runs record whether the cheats were on, and best times count only straight fights.
+
 ## 2026-09-05, Milestone 30: a second pair of hands
 
 Two people can now fight the same kaiju, and exactly one of them decides what happened.

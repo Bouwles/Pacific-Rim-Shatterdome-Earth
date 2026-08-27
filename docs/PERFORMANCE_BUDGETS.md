@@ -710,3 +710,25 @@ machine that glides through a wall for four seconds and then teleports.
 **Guest timeout: 180 ticks.** About nine seconds of silence before the machine
 is held in place. It is not removed and its damage is not undone, and the seat
 stays open for a rejoin.
+
+## The simulator
+
+**Scenario library: 50 scenarios.** A scenario is a few hundred bytes, so the
+cap is about keeping a browser store small and predictable rather than about
+memory. Past it, a new save is refused with a sentence rather than silently
+dropping somebody else's scenario.
+
+**Statistics: 100 runs.** Oldest dropped first. It is a scoreboard, not an
+archive, and an unbounded log in browser storage is a slow leak.
+
+**Slow motion: one third speed.** Implemented as a smaller step into the same
+fixed-step accumulator, so the same ticks happen spread over more wall time. It
+does not run more simulation, and it cannot make a fight cost more.
+
+**The rule overlay costs one small object per frame it is read.** It is derived
+rather than stored, which is the same trade the rest of the project makes: a
+handful of multiplications against the alternative of state that can drift out
+of agreement with what produced it.
+
+**Debug drawing is off unless the advanced panel is opened**, and it uses the
+hit-volume rendering that already existed rather than a second debug path.

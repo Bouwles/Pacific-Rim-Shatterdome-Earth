@@ -12,6 +12,15 @@ export enum AppState {
   Saves = "Saves",
   /** Globe map: coordinates, sectors, and deployment between regions. */
   WorldMap = "WorldMap",
+  /**
+   * The simulator. A separate mode with no costs, no rewards and no campaign.
+   *
+   * Reachable only from the menu, and it leaves the same way: there is
+   * deliberately no transition between the sandbox and a career, because a
+   * player must never be able to wander from one into the other with anything
+   * in their hands.
+   */
+  Sandbox = "Sandbox",
   Error = "Error",
 }
 
@@ -22,6 +31,7 @@ const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
     AppState.AssetGallery,
     AppState.Saves,
     AppState.WorldMap,
+    AppState.Sandbox,
     AppState.Error,
   ],
   [AppState.Loading]: [AppState.Shatterdome, AppState.Deployment, AppState.Error],
@@ -34,6 +44,8 @@ const ALLOWED_TRANSITIONS: Record<AppState, readonly AppState[]> = {
   [AppState.AssetGallery]: [AppState.MainMenu, AppState.Error],
   [AppState.Saves]: [AppState.MainMenu, AppState.Loading, AppState.Shatterdome, AppState.Error],
   [AppState.WorldMap]: [AppState.MainMenu, AppState.Deployment, AppState.Error],
+  // Out to the menu or into a sandbox fight, and never into a campaign.
+  [AppState.Sandbox]: [AppState.MainMenu, AppState.WorldMap, AppState.Error],
   [AppState.Error]: [AppState.MainMenu],
 };
 

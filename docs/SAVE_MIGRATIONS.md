@@ -544,3 +544,27 @@ awarded twice, because there is only ever one thing counting.
 The guest's machine is lent, not given. It is chosen from the host's roster at
 the moment the seat is opened and the arrangement ends with the session, so
 nothing about it needs to persist either.
+
+## Milestone 31 saves nothing new to a campaign
+
+`ROOT_SAVE_VERSION` stays at 17, and that is the point rather than an omission.
+
+The simulator has its own persistence, deliberately in a different store: a
+scenario library under `shatterdome.sandbox.v1` and a run scoreboard under
+`shatterdome.sandbox.stats.v1`, both in browser storage beside the display and
+volume settings rather than in the IndexedDB save pipeline.
+
+Keeping them apart is what makes the separation structural instead of a rule.
+There is no migration between a campaign save and a sandbox scenario because
+there is no shape they share, no function that converts one into the other, and
+no code path that reads one while writing the other.
+
+Scenarios carry their own `SANDBOX_SCHEMA_VERSION`, currently 1. A file written
+under a different one is refused with a sentence saying so rather than migrated,
+because a sandbox scenario is content somebody authored rather than progress
+somebody earned: guessing at what an unfamiliar version meant would risk
+silently changing the fight they built.
+
+An export file adds one more layer, `SANDBOX_FILE_KIND` and a `fileVersion`, so
+a file that is not from this game is recognised as such before its contents are
+examined at all.
