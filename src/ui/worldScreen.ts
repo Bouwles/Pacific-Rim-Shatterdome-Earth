@@ -463,6 +463,12 @@ function megabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/** Instrumentation rows: present in the DOM for tests and debug builds, hidden from players. */
+function dev(line: HTMLElement): HTMLElement {
+  line.hidden = document.documentElement.dataset["debug"] !== "1";
+  return line;
+}
+
 function row(label: string, field: string): HTMLElement {
   const line = document.createElement("div");
   line.className = "world-row";
@@ -518,14 +524,14 @@ export function renderWorldScreen(
     row("Latitude", "latitude"),
     row("Longitude", "longitude"),
     row("Altitude", "altitude"),
-    row("Local E/N", "local"),
-    row("Sector", "sector"),
-    row("Neighbours", "neighbors"),
+    dev(row("Local E/N", "local")),
+    dev(row("Sector", "sector")),
+    dev(row("Neighbours", "neighbors")),
     row("Region", "region"),
     row("Climate", "climate"),
-    row("Simulation", "tiers"),
-    row("Origin anchor", "anchor"),
-    row("Rebases", "rebases"),
+    dev(row("Simulation", "tiers")),
+    dev(row("Origin anchor", "anchor")),
+    dev(row("Rebases", "rebases")),
   );
 
   const viewRow = document.createElement("div");
@@ -558,18 +564,18 @@ export function renderWorldScreen(
   streaming.dataset.section = "streaming";
   streaming.hidden = true;
   streaming.append(
-    row("Generator", "stream-service"),
-    row("Sector states", "stream-states"),
-    row("Resident", "stream-resident"),
-    row("Generated", "stream-generated"),
-    row("Cache", "stream-cache"),
-    row("Cancelled / evicted", "stream-churn"),
-    row("Generation", "stream-generation"),
-    row("Upload", "stream-upload"),
-    row("Sector memory", "stream-memory"),
-    row("Scene", "stream-scene"),
-    row("Ground height", "stream-ground"),
-    row("Stress route", "stream-route"),
+    dev(row("Generator", "stream-service")),
+    dev(row("Sector states", "stream-states")),
+    dev(row("Resident", "stream-resident")),
+    dev(row("Generated", "stream-generated")),
+    dev(row("Cache", "stream-cache")),
+    dev(row("Cancelled / evicted", "stream-churn")),
+    dev(row("Generation", "stream-generation")),
+    dev(row("Upload", "stream-upload")),
+    dev(row("Sector memory", "stream-memory")),
+    dev(row("Scene", "stream-scene")),
+    dev(row("Ground height", "stream-ground")),
+    dev(row("Stress route", "stream-route")),
   );
 
   const routeRow = document.createElement("div");
@@ -891,8 +897,8 @@ export function renderWorldScreen(
     row("Harbour / military", "city-harbour"),
     row("Layout", "city-layout"),
     row("Defence / routes", "city-defence"),
-    row("Drawn", "city-drawn"),
-    row("Agents", "city-agents"),
+    dev(row("Drawn", "city-drawn")),
+    dev(row("Agents", "city-agents")),
     row("Damage", "city-damage"),
     row("Hazards", "city-hazards"),
     row("Rubble", "city-rubble"),
@@ -916,8 +922,8 @@ export function renderWorldScreen(
     row("Ranged penalty", "env-accuracy"),
     row("Water", "env-water"),
     row("Waves", "env-waves"),
-    row("Audio", "env-audio"),
-    row("Quality budgets", "env-quality"),
+    dev(row("Audio", "env-audio")),
+    dev(row("Quality budgets", "env-quality")),
   );
 
   const teleportRow = document.createElement("div");

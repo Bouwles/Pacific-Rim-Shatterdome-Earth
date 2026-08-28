@@ -280,7 +280,8 @@ export class PilotInputSource {
   private requestPointerLock(): void {
     if (!this.enabledValue || this.disposed) return;
     if (document.pointerLockElement === this.canvas) return;
-    void this.canvas.requestPointerLock?.();
+    // Automation and unfocused documents refuse the lock; that is not an error.
+    void Promise.resolve(this.canvas.requestPointerLock?.()).catch(() => undefined);
   }
 
   private bind(type: string, handler: (event: Event) => void): void {

@@ -83,6 +83,28 @@
         display: none;
       }
 
+      /* ------------------------------------------------------------------
+         The design system. One palette, one type voice, one panel chrome.
+         Deep navy and graphite ground, cold steel lines, amber for machinery
+         and caution, cyan for neutral systems, red only for real trouble.
+         ------------------------------------------------------------------ */
+      :root {
+        --ink: #05070a;
+        --graphite: #0b1016;
+        --panel: rgba(9, 14, 20, 0.92);
+        --panel-light: rgba(16, 24, 33, 0.92);
+        --steel: #3c4a57;
+        --line: rgba(120, 150, 175, 0.28);
+        --line-strong: rgba(140, 190, 220, 0.5);
+        --text: #d8e6f2;
+        --text-dim: #8aa0b2;
+        --cyan: #7fd6ff;
+        --amber: #ffb347;
+        --alert: #ff5a48;
+        --ok: #6fd68f;
+        --font-ui: "Segoe UI", "Inter", system-ui, sans-serif;
+        --font-data: "Cascadia Mono", "Consolas", monospace;
+      }
       #uiRoot {
         position: fixed;
         inset: 0;
@@ -97,44 +119,166 @@
       }
       #uiRoot .screen {
         pointer-events: auto;
-        background: rgba(8, 12, 18, 0.82);
-        border: 1px solid rgba(127, 214, 255, 0.35);
-        border-radius: 6px;
-        padding: 28px 36px;
-        max-width: 420px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-top: 1px solid var(--line-strong);
+        clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        padding: 26px 34px;
+        max-width: 460px;
         text-align: center;
-        color: #e8f4ff;
-        font:
-          14px/1.5 "Segoe UI",
-          system-ui,
-          sans-serif;
+        color: var(--text);
+        font: 14px/1.5 var(--font-ui);
+        animation: screen-in 240ms ease-out;
+      }
+      @keyframes screen-in {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #uiRoot .screen {
+          animation: none;
+        }
       }
       #uiRoot h1 {
-        font-size: 20px;
-        margin: 0 0 8px;
+        font-size: 30px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 4px;
+        color: var(--text);
+        text-shadow: 0 0 24px rgba(127, 214, 255, 0.25);
       }
       #uiRoot h2 {
-        font-size: 18px;
-        margin: 0 0 8px;
+        font-size: 15px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 10px;
+        color: var(--cyan);
+      }
+      #uiRoot h2::before {
+        content: "// ";
+        color: var(--text-dim);
       }
       #uiRoot p {
-        margin: 0 0 16px;
-        color: #a9c3d6;
+        margin: 0 0 14px;
+        color: var(--text-dim);
       }
       #uiRoot button {
-        font: inherit;
-        padding: 8px 20px;
-        border-radius: 4px;
+        font: 600 13px/1.2 var(--font-ui);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 10px 22px;
         cursor: pointer;
-        border: 1px solid rgba(127, 214, 255, 0.5);
+        color: var(--text);
+        background: linear-gradient(180deg, rgba(60, 74, 87, 0.35), rgba(24, 32, 41, 0.55));
+        border: 1px solid var(--line);
+        border-left: 2px solid var(--amber);
+        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        transition:
+          background 140ms ease,
+          border-color 140ms ease,
+          color 140ms ease;
+      }
+      #uiRoot button:hover:not(:disabled) {
+        background: linear-gradient(180deg, rgba(127, 214, 255, 0.18), rgba(24, 32, 41, 0.6));
+        border-color: var(--line-strong);
+      }
+      #uiRoot button:focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 2px;
+      }
+      #uiRoot button:disabled {
+        opacity: 0.45;
+        cursor: default;
+        border-left-color: var(--steel);
       }
       #uiRoot .primary-button {
-        background: #1c6ea4;
-        color: #fff;
+        background: linear-gradient(180deg, rgba(255, 179, 71, 0.25), rgba(120, 70, 20, 0.3));
+        border-left-color: var(--amber);
+        color: #ffe9c9;
       }
       #uiRoot .secondary-button {
-        background: transparent;
-        color: #a9c3d6;
+        color: var(--text-dim);
+      }
+      #uiRoot select,
+      #uiRoot input[type="text"],
+      #uiRoot textarea {
+        font: 13px/1.4 var(--font-ui);
+        color: var(--text);
+        background: rgba(5, 9, 13, 0.8);
+        border: 1px solid var(--line);
+        padding: 6px 8px;
+      }
+      #uiRoot select:focus-visible,
+      #uiRoot input:focus-visible,
+      #uiRoot textarea:focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 1px;
+      }
+      #uiRoot input[type="range"] {
+        accent-color: var(--amber);
+      }
+      #uiRoot input[type="checkbox"] {
+        accent-color: var(--amber);
+      }
+      #uiRoot label {
+        color: var(--text-dim);
+      }
+
+      /* ------------------------- the title menu ------------------------- */
+      #uiRoot .screen-menu {
+        position: absolute;
+        left: clamp(32px, 6vw, 120px);
+        top: clamp(24px, 9vh, 110px);
+        bottom: auto;
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        max-width: 380px;
+        text-align: left;
+        background: none;
+        border: none;
+        clip-path: none;
+        padding: 0;
+      }
+      #uiRoot .screen-menu h1 {
+        font-size: clamp(26px, 2.6vw, 44px);
+        line-height: 1.05;
+        margin-bottom: 6px;
+      }
+      #uiRoot .screen-menu > p {
+        font: 12px/1.5 var(--font-data);
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        margin-bottom: 22px;
+      }
+      #uiRoot .screen-menu button {
+        display: block;
+        width: 240px;
+        text-align: left;
+        margin: 0 0 8px;
+        background: linear-gradient(90deg, rgba(9, 14, 20, 0.9), rgba(9, 14, 20, 0.4));
+      }
+      @media (max-height: 820px) {
+        #uiRoot .screen-menu h1 {
+          font-size: clamp(22px, 2.4vw, 30px);
+          line-height: 1.05;
+        }
+        #uiRoot .screen-menu #pwaPanel {
+          margin-top: 10px;
+        }
+      }
+      #uiRoot .screen-menu #pwaPanel {
+        margin-top: 18px;
+        max-width: 300px;
+        font-size: 11px;
+        opacity: 0.85;
       }
       #uiRoot .screen-error {
         border-color: rgba(255, 120, 120, 0.5);
@@ -264,6 +408,7 @@
       }
       #uiRoot .pwa-update {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         align-items: center;
         border: 1px solid rgba(255, 194, 71, 0.5);
@@ -273,6 +418,60 @@
         font:
           12px/1.5 "Consolas",
           monospace;
+      }
+      #uiRoot .pwa-update span {
+        flex: 1 1 100%;
+      }
+      #uiRoot .pwa-update button {
+        flex: 1 1 auto;
+        display: inline-block;
+        width: auto;
+        margin: 0;
+      }
+      /* While piloting, the world panel keeps only the sortie: the fight owns the screen. */
+      #uiRoot #worldScreen.is-piloting {
+        max-width: 360px;
+        max-height: 46vh;
+      }
+      #uiRoot #worldScreen.is-piloting > .world-readout,
+      #uiRoot #worldScreen.is-piloting > [data-section="identity"],
+      #uiRoot #worldScreen.is-piloting > [data-section="map"],
+      #uiRoot #worldScreen.is-piloting > [data-section="route"],
+      #uiRoot #worldScreen.is-piloting > [data-section="water"],
+      #uiRoot #worldScreen.is-piloting > [data-section="city"],
+      #uiRoot #worldScreen.is-piloting > [data-section="environment"],
+      #uiRoot #worldScreen.is-piloting > [data-section="streaming"] {
+        display: none;
+      }
+      #uiRoot #worldScreen.is-piloting [data-section="crisis-frequency"] {
+        display: none;
+      }
+      #uiRoot .pilot-drawer {
+        margin: 10px 0 0;
+        border-top: 1px solid var(--line);
+        padding-top: 6px;
+      }
+      #uiRoot .pilot-drawer > summary {
+        cursor: pointer;
+        list-style: none;
+        font: 600 11px/1.6 var(--font-ui);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--cyan);
+        opacity: 0.8;
+        padding: 2px 0;
+      }
+      #uiRoot .pilot-drawer > summary::-webkit-details-marker {
+        display: none;
+      }
+      #uiRoot .pilot-drawer > summary::before {
+        content: "+ ";
+      }
+      #uiRoot .pilot-drawer[open] > summary::before {
+        content: "- ";
+      }
+      #uiRoot .pilot-drawer > summary:hover {
+        opacity: 1;
       }
       #uiRoot .pwa-detail {
         color: rgb(255, 168, 148);

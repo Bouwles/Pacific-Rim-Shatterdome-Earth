@@ -1,6 +1,8 @@
 import {
   Color3,
+  DynamicTexture,
   HemisphericLight,
+  Texture,
   Matrix,
   Mesh,
   MeshBuilder,
@@ -44,11 +46,11 @@ export const INTERIOR_CAMERA = {
 } as const;
 
 const OBSTACLE_COLOURS: Readonly<Record<ObstacleKind, readonly [number, number, number]>> = {
-  fixture: [0.32, 0.35, 0.38],
-  scaffold: [0.72, 0.56, 0.18],
-  berth: [0.24, 0.26, 0.3],
-  crate: [0.4, 0.34, 0.24],
-  rail: [0.5, 0.5, 0.54],
+  fixture: [0.3, 0.33, 0.37],
+  scaffold: [0.62, 0.46, 0.14],
+  berth: [0.22, 0.24, 0.28],
+  crate: [0.33, 0.29, 0.22],
+  rail: [0.44, 0.46, 0.5],
 };
 
 const INTERACTABLE_COLOURS: Readonly<Record<InteractableKind, readonly [number, number, number]>> = {
@@ -115,6 +117,8 @@ export class InteriorView {
   private readonly camera: UniversalCamera;
   private readonly previousCamera: Camera | null;
   private readonly materials: StandardMaterial[] = [];
+  private readonly textures: DynamicTexture[] = [];
+  private readonly savedFog: { mode: number; density: number; colour: Color3 };
   private readonly meshes: Mesh[] = [];
   private readonly lights: Array<HemisphericLight | PointLight> = [];
   private readonly resolvedAssets: ResolvedAsset[] = [];
@@ -152,11 +156,24 @@ export class InteriorView {
     this.scene.activeCamera = this.camera;
 
     const ambient = new HemisphericLight("interiorAmbient", new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.6;
+    // Low: the room's own lamps do the lighting, the ambient only keeps the
+    // shadow side from going to black.
+    ambient.intensity = 0.46;
+    ambient.diffuse = new Color3(0.72, 0.8, 0.92);
     // Downward-facing surfaces are lit too, or the ceiling of an enclosed room
     // renders as a black hole above the player rather than as a ceiling.
-    ambient.groundColor = new Color3(0.34, 0.35, 0.38);
+    ambient.groundColor = new Color3(0.14, 0.15, 0.18);
     this.lights.push(ambient);
+
+    // Haze: the far wall of a bay is dimmer than the near one. Restored on dispose.
+    this.savedFog = {
+      mode: this.scene.fogMode,
+      density: this.scene.fogDensity,
+      colour: this.scene.fogColor.clone(),
+    };
+    this.scene.fogMode = Scene.FOGMODE_EXP2;
+    this.scene.fogDensity = 0.012;
+    this.scene.fogColor = new Color3(0.04, 0.05, 0.07);
   }
 
   get activeRoomId(): string | null {
@@ -257,6 +274,9 @@ export class InteriorView {
     for (const light of this.lights) light.dispose();
     this.lights.length = 0;
     this.root.dispose();
+    this.scene.fogMode = this.savedFog.mode;
+    this.scene.fogDensity = this.savedFog.density;
+    this.scene.fogColor = this.savedFog.colour;
     if (this.scene.activeCamera === this.camera) this.scene.activeCamera = this.previousCamera;
     this.camera.dispose();
   }
@@ -271,6 +291,8 @@ export class InteriorView {
     this.meshes.length = 0;
     for (const material of this.materials) material.dispose();
     this.materials.length = 0;
+    for (const texture of this.textures) texture.dispose();
+    this.textures.length = 0;
     // Room lights go with the room; the ambient fill in `lights` stays.
     while (this.lights.length > 1) {
       const light = this.lights.pop();
@@ -309,7 +331,13 @@ export class InteriorView {
     const height = room.heightMeters;
 
     const floor = MeshBuilder.CreateGround(`interior.floor.${room.id}`, { width, height: depth }, this.scene);
-    floor.material = this.material(`floor.${room.id}`, room.floorColour);
+    // Headless engines have no canvas to draw plating on; the flat colour serves.
+    const plating = typeof window === "undefined" ? null : this.plateTexture(room);
+    const floorMaterial = this.material(`floor.${room.id}`, plating ? [1, 1, 1] : room.floorColour);
+    if (plating) floorMaterial.diffuseTexture = plating;
+    floorMaterial.specularColor = new Color3(0.14, 0.15, 0.17);
+    floorMaterial.specularPower = 32;
+    floor.material = floorMaterial;
     floor.receiveShadows = true;
     this.track(floor, 4 * 32);
 
@@ -324,15 +352,15 @@ export class InteriorView {
     // an industrial interior actually looks like, and it costs no extra lights.
     ceiling.material = this.material(
       `ceiling.${room.id}`,
-      [room.floorColour[0] * 1.1, room.floorColour[1] * 1.1, room.floorColour[2] * 1.2],
-      0.5,
+      [room.floorColour[0] * 0.7, room.floorColour[1] * 0.7, room.floorColour[2] * 0.75],
+      0.08,
     );
     this.track(ceiling, 4 * 32);
 
     const wallMaterial = this.material(`wall.${room.id}`, [
-      room.floorColour[0] * 1.25,
-      room.floorColour[1] * 1.25,
-      room.floorColour[2] * 1.3,
+      room.floorColour[0] * 0.85,
+      room.floorColour[1] * 0.88,
+      room.floorColour[2] * 1.0,
     ]);
     // Walls face inward: the player is inside the box, so the outward faces are
     // the ones that must not be drawn over the room.
@@ -408,7 +436,7 @@ export class InteriorView {
       mesh.material = this.material(
         `fixture.${room.id}.${kind}`,
         INTERACTABLE_COLOURS[kind],
-        INTERACTABLE_GLOW[kind],
+        INTERACTABLE_GLOW[kind] * 0.5,
       );
       const buffer = new Float32Array(entries.length * 16);
       entries.forEach((entry, index) => {
@@ -462,10 +490,32 @@ export class InteriorView {
    */
   private buildStaffPool(room: InteriorRoom): void {
     const capacity = Math.max(1, this.quality.maxInteriorStaff);
-    const mesh = MeshBuilder.CreateBox(`interior.staff.${room.id}`, { size: 1 }, this.scene);
-    // People are not light sources. A crew member reads as a person because of
-    // their silhouette and the way they move, not because they glow.
-    mesh.material = this.material(`staff.${room.id}`, [0.58, 0.5, 0.38]);
+    // A figure, not a pillar: a body with shoulders and a head on it, built in a
+    // unit-height box so the per-instance scale still means metres. People are
+    // not light sources; a crew member reads as a person because of their
+    // silhouette and the way they move, not because they glow.
+    const body = MeshBuilder.CreateBox(
+      `interior.staffBody.${room.id}`,
+      { width: 0.85, height: 0.72, depth: 0.7 },
+      this.scene,
+    );
+    body.position.y = -0.14;
+    const legs = MeshBuilder.CreateBox(
+      `interior.staffLegs.${room.id}`,
+      { width: 0.7, height: 0.4, depth: 0.55 },
+      this.scene,
+    );
+    legs.position.y = -0.3;
+    const head = MeshBuilder.CreateBox(
+      `interior.staffHead.${room.id}`,
+      { width: 0.4, height: 0.2, depth: 0.5 },
+      this.scene,
+    );
+    head.position.y = 0.38;
+    const merged = Mesh.MergeMeshes([legs, body, head], true, true, undefined, false, false);
+    const mesh = merged ?? MeshBuilder.CreateBox(`interior.staff.${room.id}`, { size: 1 }, this.scene);
+    mesh.name = `interior.staff.${room.id}`;
+    mesh.material = this.material(`staff.${room.id}`, [0.24, 0.26, 0.3]);
     this.staffBuffer = new Float32Array(capacity * 16);
     for (let index = 0; index < capacity; index += 1) {
       composeInto(this.staffBuffer, index, 0, -50, 0, 0, 0.55, 1.8, 0.4);
@@ -487,13 +537,90 @@ export class InteriorView {
       new Vector3(0, Math.min(room.heightMeters * 0.7, 14), room.depthMeters * 0.1),
       this.scene,
     );
-    lamp.diffuse = new Color3(room.accentColour[0], room.accentColour[1], room.accentColour[2]);
-    lamp.intensity = room.underConstruction ? 0.5 : 0.95;
+    // The accent, halfway to white: the room keeps its colour without the walls saturating.
+    lamp.diffuse = new Color3(
+      (room.accentColour[0] + 1) / 2,
+      (room.accentColour[1] + 1) / 2,
+      (room.accentColour[2] + 1) / 2,
+    );
+    lamp.intensity = room.underConstruction ? 0.6 : 1.0;
     // Range has to cover the room rather than stop halfway across it: at exactly
     // the room width, a Conn-Pod four metres deep read as a black void with one
     // glowing hatch in it.
     lamp.range = Math.max(room.widthMeters, room.depthMeters) * 1.6;
     this.lights.push(lamp);
+
+    // A cool fill from the far end so the accent has something to contrast with.
+    const fill = new PointLight(
+      `interior.fill.${room.id}`,
+      new Vector3(0, Math.min(room.heightMeters * 0.8, 12), -room.depthMeters * 0.3),
+      this.scene,
+    );
+    fill.diffuse = new Color3(0.55, 0.7, 0.92);
+    fill.intensity = room.underConstruction ? 0.35 : 0.6;
+    fill.range = lamp.range;
+    this.lights.push(fill);
+
+    // Strip lights across the deckhead: rows of thin emissive bars. They are
+    // geometry, not lights, so a big bay costs the same as a small one.
+    const strip = MeshBuilder.CreateBox(`interior.strip.${room.id}`, { size: 1 }, this.scene);
+    strip.material = this.material(`strip.${room.id}`, [0.8, 0.88, 1], 0.55);
+    const columns = Math.max(1, Math.round(room.widthMeters / 8));
+    const rows = Math.max(1, Math.round(room.depthMeters / 7));
+    const buffer = new Float32Array(columns * rows * 16);
+    let index = 0;
+    for (let column = 0; column < columns; column += 1) {
+      for (let row = 0; row < rows; row += 1) {
+        const x = ((column + 0.5) / columns) * room.widthMeters - room.widthMeters / 2;
+        const z = ((row + 0.5) / rows) * room.depthMeters - room.depthMeters / 2;
+        const length = Math.min(4, (room.depthMeters / rows) * 0.6);
+        composeInto(buffer, index, x, room.heightMeters - 0.12, z, 0, 0.35, 0.08, length);
+        index += 1;
+      }
+    }
+    strip.thinInstanceSetBuffer("matrix", buffer, 16);
+    strip.thinInstanceCount = index;
+    this.track(strip, index * 64 + 24 * 32);
+  }
+
+  /** Deck plating: the room's floor colour with seams every two metres and a little wear. */
+  private plateTexture(room: InteriorRoom): DynamicTexture {
+    const size = 128;
+    const texture = new DynamicTexture(
+      `interior.plate.${room.id}`,
+      { width: size, height: size },
+      this.scene,
+      true,
+    );
+    const context = texture.getContext();
+    const [r, g, b] = room.floorColour;
+    // Lifted: the grade's tone curve and the low ambient both pull the floor down.
+    context.fillStyle = `rgb(${Math.round(Math.min(1, r * 1.5) * 255)}, ${Math.round(Math.min(1, g * 1.5) * 255)}, ${Math.round(Math.min(1, b * 1.5) * 255)})`;
+    context.fillRect(0, 0, size, size);
+    // Wear before seams, so the seams stay crisp.
+    context.fillStyle = "rgba(255, 255, 255, 0.045)";
+    for (let scuff = 0; scuff < 7; scuff += 1) {
+      context.fillRect((scuff * 41) % size, (scuff * 67 + 13) % size, 30 + (scuff % 3) * 12, 5);
+    }
+    context.strokeStyle = "rgba(0, 0, 0, 0.5)";
+    context.lineWidth = 4;
+    context.strokeRect(2, 2, size - 4, size - 4);
+    context.fillStyle = "rgba(0, 0, 0, 0.35)";
+    const bolts: ReadonlyArray<readonly [number, number]> = [
+      [10, 10],
+      [size - 14, 10],
+      [10, size - 14],
+      [size - 14, size - 14],
+    ];
+    for (const [x, y] of bolts) context.fillRect(x, y, 4, 4);
+    texture.update();
+    texture.uScale = room.widthMeters / 2;
+    texture.vScale = room.depthMeters / 2;
+    // Dynamic textures clamp by default; a clamped seam painted the whole floor black.
+    texture.wrapU = Texture.WRAP_ADDRESSMODE;
+    texture.wrapV = Texture.WRAP_ADDRESSMODE;
+    this.textures.push(texture);
+    return texture;
   }
 
   /**

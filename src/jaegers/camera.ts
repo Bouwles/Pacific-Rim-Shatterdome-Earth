@@ -49,8 +49,8 @@ const RIGS: readonly CameraRig[] = [
   {
     id: "third-person",
     displayName: "Exploration",
-    distanceMeters: 2.6,
-    heightMeters: 1.35,
+    distanceMeters: 2.1,
+    heightMeters: 1.05,
     lookAtHeightMeters: 0.72,
     fovDeg: 62,
     followRate: 2.6,
@@ -61,8 +61,8 @@ const RIGS: readonly CameraRig[] = [
   {
     id: "combat",
     displayName: "Combat",
-    distanceMeters: 1.75,
-    heightMeters: 0.95,
+    distanceMeters: 1.5,
+    heightMeters: 0.85,
     lookAtHeightMeters: 0.82,
     fovDeg: 54,
     followRate: 4.2,

@@ -4,6 +4,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## What currently works
 
+- **Presentation rescue (2026-08-28).** A title composition in the engine (`src/engine/titleView.ts`), articulated hero rigs (`src/engine/jaegerRig.ts`, `src/engine/creatureRig.ts`) wired into the pilot and combat views under the resolver, a grade over every camera (`src/engine/postPipeline.ts`) gated by quality preset, a relit Shatterdome interior with plating, strip lights and crew figures, a design system in `index.html`, and every debug surface behind the dev server or `?debug=1`. Screens verified in the production build at 1920×1080 and 1366×768 with zero console errors: title, interior, world map, sandbox fight, campaign sortie.
 - `npm install` → `npm run dev` boots a Vite dev server. WebGPU-first engine selection with a WebGL fallback, both paths observed rendering (WebGPU manually, WebGL via Playwright's Chromium).
 - Application state machine with 8 states and a data-driven transition graph; reachable today: Boot → MainMenu → Loading → Shatterdome → MainMenu, MainMenu ↔ AssetGallery / Saves / WorldMap, Shatterdome ↔ Saves, plus Boot → Error on fatal boot failure.
 - **Deterministic simulation kernel** running live in the app, independent of Babylon and the DOM:
@@ -389,6 +390,9 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## Known issues
 
+- The chase camera still obeys terrain obstruction, so on a shelf under cliffs (Lima) it closes to a few tens of metres behind the machine. Flat regions frame correctly.
+- The world panel's war section stays visible while piloting so the sortie controls remain reachable; its incident list can be long.
+- Rigs are parameterised by height only; every chassis and creature category shares a silhouette. Distinct silhouettes per definition are content work on the same builders.
 - Production bundle still ships one >5 MB chunk (full Babylon core). Deferred — see TECH_DECISIONS.md.
 - GPU context loss is wired but never exercised end-to-end; no way to force a real device loss here.
 - Genuine tab-suspension freeze untested (the browser never actually reported the tab hidden under automation). The 4-second main-thread stall exercises the same resume-delta code path and stayed bounded.

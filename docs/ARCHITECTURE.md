@@ -1725,3 +1725,15 @@ growth, then holds three combat cycles to a zero diff.
 the three simulation-heavy ones run headless and deterministic, and the
 browser runner (`debugRunStress`) refuses any id the catalogue does not list,
 resets the profiler window, waits the requested frames and returns the report.
+
+## Presentation: the title, the rigs and the grade
+
+Added in the rescue pass. Three modules, all owned by `bootstrap.ts` and disposed with everything else.
+
+**`engine/titleView.ts`.** Borrows the boot scene while `AppState.MainMenu` is active: dark clear colour, exponential fog, the boot placeholder and pad hidden, a wet pad, a `JaegerRig` at 75 m, gantry uprights and a beam, a cold spot key on the camera side, a warm point lamp on the other, an orbiting beacon, a 500-particle rain system on a generated sprite, and a drifting camera target placed so the machine sits right of centre. `dispose()` puts back every scene property it changed. The render loop drives `update()`; the state machine creates and disposes it so nothing else that borrows the stage (gallery, globe) sees it.
+
+**`engine/jaegerRig.ts` and `engine/creatureRig.ts`.** Part builders parameterised by height. Each returns a `root` TransformNode with named joints (`<name>.torsoNode`, `<name>.thighL`, ...) so a test can read a pose, and drives them from a pose record each frame: stride phase and speed for the walk, an attack phase and progress for the arms, guard, damage, and a recoil kick that burns down at 4 per second. Materials come from the palette tokens with the albedo scaled down for a full sun. Every mesh is `isPickable = false` so the camera's obstruction ray ignores the body. `JaegerView` and `CombatView` build a rig beside the old invisible placeholder box (kept so the styling and replacement contracts still find it), feed it from the locomotion pose and the arena view, and dispose it when the resolver delivers a real model; a generator stand-in does not replace it and is attached hidden.
+
+**`engine/postPipeline.ts`.** One `DefaultRenderingPipeline` for the shared scene, following `scene.activeCamera` from the render loop and rebuilt from scratch whenever the camera changes hands, because moving a live pipeline between cameras left bloom's highlight target destroyed but bound on WebGPU. The grade per preset is a lookup: Low disabled, Medium FXAA and vignette, High and Cinematic add a high-threshold bloom. ACES tone mapping at a fixed exposure everywhere it runs. `applyQuality` calls `setLevel`, and `debugPostStatus()` reports what is on.
+
+**Debug gating.** `bootstrap.ts` computes `debugMode` (dev server or `?debug=1`) once and stamps `data-debug="1"` on the document. Screens read that rather than being handed a flag: the debug overlay starts hidden otherwise, the room panel drops its coordinates and counts, the pilot panel folds its systems drawer and hides its diagnostics, and the world panel hides its instrumentation rows through `dev(row(...))`. Playwright runs on the dev server, so every selector the suite uses stays visible under test.

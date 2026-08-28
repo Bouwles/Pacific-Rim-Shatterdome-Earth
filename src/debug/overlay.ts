@@ -7,6 +7,11 @@ const REFRESH_INTERVAL_MS = 250;
 export const TOGGLE_KEY = "F3";
 
 export interface DebugOverlaySources {
+  /**
+   * True hides the whole overlay until the shortcut is pressed. Production
+   * defaults to hidden: diagnostics are a tool, not a HUD.
+   */
+  readonly startHidden?: boolean;
   readonly backend: string;
   readonly babylonVersion: string;
   readonly scene: Scene;
@@ -146,6 +151,7 @@ export class DebugOverlay {
 
     controls.append(this.pauseButton, stepButton, scaleSelect);
     this.root.append(readout, controls);
+    if (sources.startHidden) this.root.hidden = true;
     container.appendChild(this.root);
 
     this.keyHandler = (event: KeyboardEvent) => {

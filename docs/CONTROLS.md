@@ -14,6 +14,8 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 
 ## Debug overlay
 
+Present only on the dev server or with `?debug=1` in the address. A production build renders no diagnostics bar, no transport, no coordinate readouts, and no pilot diagnostics drawer; the pilot panel's systems drawer starts closed there and open in a debug build.
+
 | Input                  | Action                                                              |
 | ---------------------- | ------------------------------------------------------------------- |
 | `F3`                   | Toggle overlay visibility                                           |

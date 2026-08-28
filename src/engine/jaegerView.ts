@@ -19,6 +19,7 @@ import type { JaegerDefinition } from "../data/jaegers";
 import type { CameraPlacement } from "../jaegers/camera";
 import type { JaegerPose, LocomotionEvent } from "../jaegers/locomotion";
 import { SPEED_OF_SOUND_MPS, type AmbientAudio } from "./ambientAudio";
+import { JaegerRig, type JaegerRigPose } from "./jaegerRig";
 
 /**
  * The piloted machine, drawn.
@@ -118,6 +119,15 @@ export class JaegerView {
   private readonly previousCamera: Camera | null;
   private resolved: ResolvedAsset | null = null;
   private placeholder: Mesh | null = null;
+  /** The articulated body that stands in until a real model resolves. */
+  private rig: JaegerRig | null = null;
+  /** What the fight says the body is doing, fed from outside each frame. */
+  private combatPose: Pick<JaegerRigPose, "attack" | "guarding" | "damage"> = {
+    attack: null,
+    guarding: false,
+    damage: 0,
+  };
+  private worldSeconds = 0;
 
   private readonly decalMesh: Mesh;
   private readonly decalBuffer: Float32Array;
@@ -168,6 +178,9 @@ export class JaegerView {
 
     // Something stands here from the first frame. The resolved model replaces it
     // when it arrives, so a slow asset never leaves the player driving nothing.
+    // An invisible stand-in keeps the old contract (something named
+    // placeholderBody exists and can be styled or replaced); the articulated
+    // rig is what is actually seen.
     const placeholder = MeshBuilder.CreateBox(
       "jaeger.placeholderBody",
       { width: height * 0.22, height, depth: height * 0.16 },
@@ -176,7 +189,10 @@ export class JaegerView {
     placeholder.position.y = height * 0.5;
     placeholder.material = this.material("jaeger.placeholderBody", new Color3(0.35, 0.38, 0.42));
     placeholder.parent = this.machineRoot;
+    placeholder.isVisible = false;
     this.placeholder = placeholder;
+    this.rig = new JaegerRig(this.scene, height, "jaeger.rig");
+    this.rig.root.parent = this.machineRoot;
 
     // Footstep decals: one pooled quad mesh, oldest slot reused. A decal is a
     // stride's worth of ground the player can measure the machine against.
@@ -292,6 +308,15 @@ export class JaegerView {
       this.resolved = resolved;
       this.placeholder?.dispose();
       this.placeholder = null;
+      // A real model replaces the rig exactly as it replaced the box. The
+      // generator's own stand-in does not: the rig is the better placeholder,
+      // so the generated meshes stay attached for their sockets but unseen.
+      if (resolved.origin === "model") {
+        this.rig?.dispose();
+        this.rig = null;
+      } else {
+        resolved.root.setEnabled(false);
+      }
     } catch {
       // A missing model is a content gap, not a crash: the placeholder body is
       // already standing and the machine keeps walking.
@@ -305,6 +330,19 @@ export class JaegerView {
 
   get activeCamera(): UniversalCamera {
     return this.camera;
+  }
+
+  /**
+   * What the fight says the body is doing. Fed each combat tick from the arena
+   * snapshot, so the arm that swings is the arm the resolver is checking.
+   */
+  setCombatPose(pose: Partial<Pick<JaegerRigPose, "attack" | "guarding" | "damage">>): void {
+    this.combatPose = { ...this.combatPose, ...pose };
+  }
+
+  /** A hit landed on the machine. The body kicks and settles. */
+  addRecoil(strength: number): void {
+    this.rig?.addRecoil(strength);
   }
 
   /** Places the machine and the camera, and turns this frame's events into things to see and hear. */
@@ -325,6 +363,18 @@ export class JaegerView {
     const height = this.jaeger.locomotion.heightMeters;
     const settle = Math.sin(pose.stridePhase * Math.PI * 2) * height * 0.004;
     this.machineRoot.position.y += settle;
+    this.worldSeconds += deltaSeconds;
+    this.rig?.update(
+      {
+        stridePhase: pose.stridePhase,
+        speedMps: pose.speedMps,
+        timeSeconds: this.worldSeconds,
+        attack: this.combatPose.attack,
+        guarding: this.combatPose.guarding,
+        damage: this.combatPose.damage,
+      },
+      deltaSeconds,
+    );
 
     this.camera.position.set(placement.east, placement.up, placement.north);
     this.camera.setTarget(new Vector3(placement.targetEast, placement.targetUp, placement.targetNorth));
@@ -629,6 +679,8 @@ export class JaegerView {
     this.resolved = null;
     this.placeholder?.dispose();
     this.placeholder = null;
+    this.rig?.dispose();
+    this.rig = null;
     for (const mesh of [this.decalMesh, this.dustMesh, this.lightMesh, this.flyerMesh]) mesh.dispose();
     for (const material of this.materials) material.dispose();
     this.materials.length = 0;

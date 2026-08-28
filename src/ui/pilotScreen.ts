@@ -142,6 +142,14 @@ export interface PilotScreenState {
   readonly audio: AudioPanelState | null;
   /** Second-player state, or null where co-op is not available at all. */
   readonly coop: CoopPanelState | null;
+  /**
+   * How the encounter row presents.
+   *
+   * In the simulator, starting the fight the player built is a real game
+   * action and reads as one. In a campaign it is a developer tool and exists
+   * only in debug builds. Hidden removes the row outright.
+   */
+  readonly encounterControls: "sandbox" | "debug" | "hidden";
   /** The effect accessibility settings, as currently applied. */
   readonly vfx: VfxPanelState;
 }
@@ -995,29 +1003,44 @@ export function renderPilotScreen(
     coopLog,
   );
 
-  panel.append(
-    header,
-    hud,
-    cameraRow,
-    displayRow,
-    vfxRow,
-    audioRow,
-    coopRow,
-    rosterRow,
-    comfortRow,
-    combatRow,
-    readout,
-    combat,
-    squadPanel,
-    moves,
-    hint,
-  );
+  // The layer order is the priority order: what a pilot needs while fighting
+  // sits at the top and stays open; everything else folds into drawers. In a
+  // debug build the drawers start open, so nothing a test looks for is folded.
+  const debugBuild = document.documentElement.dataset["debug"] === "1";
+  const drawer = (id: string, label: string, open: boolean): HTMLDetailsElement => {
+    const details = document.createElement("details");
+    details.className = "pilot-drawer";
+    details.dataset["section"] = id;
+    details.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = label;
+    details.appendChild(summary);
+    return details;
+  };
+  const fightRow = document.createElement("div");
+  fightRow.className = "pilot-row";
+  fightRow.append(movesButton);
+
+  const systems = drawer("systems", "Systems", debugBuild);
+  systems.append(fightRow, cameraRow, rosterRow, comfortRow, displayRow, vfxRow, audioRow, coopRow, hint);
+
+  const diagnostics = drawer("diagnostics", "Diagnostics", true);
+  diagnostics.hidden = !debugBuild;
+  diagnostics.append(combatRow, readout, combat);
+
+  panel.append(header, hud, squadPanel, moves, systems, diagnostics);
   container.appendChild(panel);
 
   let lastMode: CameraMode | null = null;
 
   return {
     update(state: PilotScreenState): void {
+      // The encounter row is a real control in the simulator, a developer
+      // tool in a debug build, and absent everywhere else.
+      combatRow.hidden = state.encounterControls === "hidden";
+      spawnButton.textContent =
+        state.encounterControls === "sandbox" ? "Begin encounter" : "Spawn test kaiju";
+
       // Sound first, because the subtitle band belongs to the HUD and has to be
       // drawn whether or not there is a machine out.
       const audio = state.audio;

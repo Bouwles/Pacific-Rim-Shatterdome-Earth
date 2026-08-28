@@ -407,8 +407,8 @@ export interface ShatterdomeScreenState {
   readonly timeLabel: string;
   readonly powerText: string;
   readonly crewText: string;
-  /** Where the player is standing in the room, metres from its centre. */
-  readonly positionText: string;
+  /** Where the player is standing. Null hides the line: it is debug data. */
+  readonly positionText: string | null;
   /**
    * What is actually on screen: staff drawn against the budget, and mesh count.
    * Null before the view reports, so the panel says nothing rather than zero.
@@ -588,7 +588,8 @@ export function renderShatterdomeScreen(
       staffLine.textContent = `${state.staffOnShift}/${state.staffSlots} on shift`;
       powerLine.textContent = state.powerText;
       crewLine.textContent = state.crewText;
-      positionLine.textContent = state.positionText;
+      positionLine.textContent = state.positionText ?? "";
+      positionLine.hidden = state.positionText === null;
       drawnLine.textContent = state.drawnText ?? "";
       drawnLine.hidden = state.drawnText === null;
 

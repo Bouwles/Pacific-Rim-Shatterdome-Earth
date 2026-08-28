@@ -33,19 +33,19 @@ Headless stress runs deterministic in the suite: four combatants (192 events), a
 
 ## Content completeness
 
-| Area      | State                                                                                          |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| Core loop | Complete: alert, deploy, fight, damage, results, repair, research, progression                 |
-| World     | 8 regions, 7 with full procedural cities and distinct identities, seeded sites and exploration |
-| Combat    | Melee, ranged, grapples, finishers, statuses, countermeasures, squads, creature AI             |
-| Machines  | 5 chassis, levels, passives, modules, uncapped prestige, custom builder (1 per campaign)       |
-| Creatures | 4 categories with mutations; more variety is content work, not systems work                    |
-| People    | Pilots, copilots, drift, injury, allied crews with learning                                    |
-| Economy   | 6 resources, ledger, contracts, salvage, repair bills, difficulty levels                       |
-| Sound     | Buses, adaptive score, radio with saved transcript, synthesised placeholders throughout        |
-| Modes     | Campaign, simulator sandbox, same-machine two-player, manual-signal direct co-op               |
-| Platform  | Installable PWA, offline after one load, safe updates, optional packs                          |
-| Art       | Deliberately placeholder: boxes and procedural texture in clearly named slots for real assets  |
+| Area      | State                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| Core loop | Complete: alert, deploy, fight, damage, results, repair, research, progression                    |
+| World     | 8 regions, 7 with full procedural cities and distinct identities, seeded sites and exploration    |
+| Combat    | Melee, ranged, grapples, finishers, statuses, countermeasures, squads, creature AI                |
+| Machines  | 5 chassis, levels, passives, modules, uncapped prestige, custom builder (1 per campaign)          |
+| Creatures | 4 categories with mutations; more variety is content work, not systems work                       |
+| People    | Pilots, copilots, drift, injury, allied crews with learning                                       |
+| Economy   | 6 resources, ledger, contracts, salvage, repair bills, difficulty levels                          |
+| Sound     | Buses, adaptive score, radio with saved transcript, synthesised placeholders throughout           |
+| Modes     | Campaign, simulator sandbox, same-machine two-player, manual-signal direct co-op                  |
+| Platform  | Installable PWA, offline after one load, safe updates, optional packs                             |
+| Art       | Procedural: articulated rigs, generated plating and a grade, in named slots a real asset replaces |
 
 ## Known issues
 
@@ -56,7 +56,8 @@ Headless stress runs deterministic in the suite: four combatants (192 events), a
 - Facility module slots exist and count, but nothing can be fitted into them.
 - One pre-existing browser test in the builder suite times out on its construction wait and blocks three tests behind it; tracked since Milestone 29, not a regression.
 - Chromium-family verification only; no Firefox or Safari pass yet.
-- Real models, textures, animations and recordings are absent by design. Every slot is named and waiting.
+- Real models, textures, animations and recordings are absent by design. Every slot is named and waiting; the rigs and generated surfaces stand in until then.
+- The chase camera obeys terrain obstruction, so under cliffs it closes in behind the machine. Flat regions frame correctly.
 
 ## Next phase
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-28, Rescue pass: the look of a game
+
+The systems were finished; the game did not look like one. This pass is presentation, feel and cohesion, with no new content and no simulation change (every golden hash is untouched).
+
+- Production builds carry no debug surface. The diagnostics bar, the simulation transport, the coordinate and mesh readouts, the spawn and hit-volume controls, and the pilot diagnostics drawer exist only on the dev server or with `?debug=1`; F3 still toggles the overlay there.
+- A title composition instead of a grey box: an articulated machine standing in a dark bay under a cold key and a warm work lamp, a sweeping beacon, rain, fog and a slow camera drift, restored to the boot stage on leaving.
+- One design system in index.html: palette tokens, uppercase display type, cut-corner panel chrome, amber-edged buttons, focus states, styled selects and sliders, a fade on every screen mount that respects reduced motion.
+- Hero geometry: `JaegerRig` builds a jointed humanoid from parts (helmeted head with visor, chest with a reactor core, pauldrons, jointed arms and legs, feet) with a stride-driven walk, attack windup and recovery poses, a guard, hit recoil and a damage slump; `CreatureRig` builds a skull with a jaw and eyes, dorsal plates, limbs with claws, a lashing tail and bioluminescent veins, with breathing, a windup rear, a strike lunge, flinches and a death slump. Both are parameterised by height, replace the placeholder boxes in the pilot and combat views, and still give way to a real GLB through the resolver. The generator's own stand-in stays attached for its sockets but unseen.
+- Combat feel: the arena's active move drives the arm that swings, the guard and the posture; hits kick the body back scaled by the impact grammar; heavy contact fires the low-frequency audio impact at its real distance. The chase and combat cameras sit closer and lower so a machine reads at scale, and the rigs are never pick targets, so the camera's obstruction ray passes through the body it follows.
+- The Shatterdome interior: deck plating with seams and wear, strip-lit deckheads, a low ambient with an accent lamp and a cool fill per room, haze, crew drawn as figures with shoulders and heads rather than pillars, and a room panel that leads with the room rather than its coordinates.
+- A grade over every camera: ACES tone mapping, FXAA from Medium, a high-threshold bloom on High and Cinematic so only the reactor, visors and plasma bleed, and a faint vignette. Low runs bare. The pipeline is rebuilt when the camera changes hands, which is what WebGPU needs.
+- Interface: the pilot panel is HUD first, with systems in a collapsed drawer and diagnostics only in a debug build; the world panel folds to the sortie while a machine is out; instrumentation rows on the map are hidden from players; the update banner stacks instead of squeezing.
+- Fixes found by playing: the render loop read the title view before its declaration (a startup crash in production), a clamped dynamic texture painted every interior floor black, a refused pointer lock surfaced as an unhandled rejection, and headless engines no longer try to draw plating.
+
 ## 2026-09-10, Milestone 35: release candidate
 
 1.0.0-rc.1. The vertical slices became one game.

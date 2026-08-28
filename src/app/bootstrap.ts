@@ -93,6 +93,8 @@ import { LeakTracker, type ResourceInventory } from "../perf/leakTracker";
 import { budgetFor } from "../data/perfBudgets";
 import { createStressRegistry } from "../debug/perfScenario";
 import { EffectsView } from "../engine/effectsView";
+import { TitleView } from "../engine/titleView";
+import { PostPipeline } from "../engine/postPipeline";
 import { ImpactDirector } from "../vfx/impactLanguage";
 import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
 import type { SoundscapeInput } from "../audio/soundscape";
@@ -333,6 +335,27 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let frameHook: ((deltaMs: number) => void) | null = null;
 
   /**
+   * Whether developer surfaces are shown at all.
+   *
+   * Development builds keep them, because that is what development is for and
+   * the browser test suite drives the game through them. A production build
+   * hides every one of them unless the player explicitly asks with ?debug=1
+   * or presses the overlay shortcut. Nothing developer-facing may appear in
+   * ordinary play by accident.
+   */
+  const debugMode = import.meta.env.DEV || new URLSearchParams(window.location.search).has("debug");
+  // Screens read this rather than being handed a flag each: a debug build
+  // opens its drawers and shows its diagnostics; a player build does not.
+  if (debugMode) document.documentElement.dataset["debug"] = "1";
+  /**
+   * The title composition. Alive only while the menu is on screen. Declared
+   * here, before the render loop starts, because the loop reads it every frame.
+   */
+  let titleView: TitleView | undefined;
+  /** The grade over whichever camera is active. */
+  let post: PostPipeline | undefined;
+
+  /**
    * The performance instruments. Alive for the whole session and cheap enough
    * to leave on: the profiler accumulates a rolling window, the adaptive
    * controller judges frames, and the leak tracker only does arithmetic when a
@@ -356,6 +379,15 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     adapterDispose = adapter.dispose;
 
     bootScene = buildBootScene(adapter.engine, canvas, quality.shadowMapSize);
+    // A software rasteriser (headless Chromium, a machine with no GPU driver)
+    // cannot afford a full-screen grade, and on it the grade would push every
+    // frame over budget and drag the adaptive controller down mid-fight. It
+    // runs bare there, exactly as Low does.
+    const glInfo = (adapter.engine as { getGlInfo?: () => { renderer?: string } }).getGlInfo?.();
+    const softwareRenderer = /swiftshader|llvmpipe|software|mesa offscreen/i.test(glInfo?.renderer ?? "");
+    post = softwareRenderer ? undefined : new PostPipeline(bootScene.scene, quality.id);
+    (globalThis as { debugPostStatus?: () => unknown }).debugPostStatus = () => post?.status() ?? null;
+    (globalThis as { debugScene?: () => unknown }).debugScene = () => bootScene.scene;
     // A read-only debug hook for the browser tests: the pooled-effects claim is
     // "a fight leaves the scene no heavier than it found it", and mesh count is
     // the number that holds it. Reads state, changes nothing.
@@ -472,6 +504,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     loop = activeLoop;
 
     overlay = new DebugOverlay(root, {
+      startHidden: !debugMode,
       backend: adapter.backend,
       babylonVersion: adapter.version,
       scene,
@@ -513,6 +546,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
       profiler.begin("frameHook");
       frameHook?.(deltaMs);
+      titleView?.update(Math.min(0.1, deltaMs / 1000));
+      post?.follow(bootScene.scene.activeCamera);
       profiler.end();
       profiler.endFrame();
       // Adaptive quality judges the same number the profiler recorded, and its
@@ -4142,6 +4177,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       squad: squadPanelState(),
       audio: audioPanelState(),
       coop: coopPanelState(),
+      encounterControls: sandboxRun ? "sandbox" : debugMode ? "debug" : "hidden",
       vfx: {
         flashes: vfxSettings.flashes,
         shakeScale: vfxSettings.shakeScale,
@@ -4286,6 +4322,46 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const impactFrame = impactDirector.advance(deltaSeconds, events);
     renderFreezeLeft = impactFrame.freezeSecondsLeft;
     if (impactFrame.impulseMeters > 0) session.addImpulse(Math.min(1, impactFrame.impulseMeters));
+
+    // The body does what the fight says. The arm that swings is the arm the
+    // resolver is checking, the guard is the guard that is up, the slump is
+    // the structure that is gone.
+    const mine = arena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (mine && jaegerView) {
+      const phase = mine.activePhase;
+      const move = mine.activeMove ? moveRegistry.get(mine.activeMove) : undefined;
+      const total = move
+        ? phase === "startup"
+          ? move.startupTicks
+          : phase === "active"
+            ? move.activeTicks
+            : move.recoveryTicks
+        : 1;
+      jaegerView.setCombatPose({
+        attack:
+          mine.activeMove && phase
+            ? {
+                phase: phase === "startup" ? "windup" : phase === "active" ? "active" : "recover",
+                progress: Math.min(1, mine.activeMoveTick / Math.max(1, total)),
+              }
+            : null,
+        guarding: mine.guarding,
+        damage: 1 - (pilotDamageState()?.integrityPercent ?? 100) / 100,
+      });
+      for (const event of events) {
+        if (event.targetId !== "jaeger" || event.damage <= 0) continue;
+        // Recoil scales with the impact grammar's exaggeration, so the same
+        // hit kicks harder on Cinematic and not at all under reduced motion.
+        jaegerView.addRecoil(Math.min(1, event.damage / 120) * (impactFrame.poseScale > 1 ? 1 : 0.6));
+      }
+    }
+    // Heavy contact is felt through the floor: the low impact the ambience
+    // already knows how to play, at the distance the hit actually happened.
+    for (const event of events) {
+      if (event.damage < 30 || !event.contact) continue;
+      const distance = Math.hypot(event.contact.east - pose.east, event.contact.north - pose.north);
+      ambientAudio?.impact(Math.min(1, event.damage / 160), distance);
+    }
     if (effectsView) {
       const snapshotForFx = arena.snapshot();
       const kaijuFx = snapshotForFx.fighters.find((fighter) => fighter.id === "kaiju");
@@ -4383,6 +4459,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const refreshWorld = (): void => {
     lookAround();
     if (!worldScreen) return;
+    // The map folds to its sortie while a machine is out: the fight owns the screen.
+    document
+      .getElementById("worldScreen")
+      ?.classList.toggle("is-piloting", document.getElementById("pilotScreen") !== null);
     const environmentSample = sampleEnvironment();
     const local = floatingOrigin.toLocal(worldState.playerPosition);
     const activeRegion = worldState.activeRegionId;
@@ -4758,6 +4838,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // whoever applied it, so their judgements are always against the live level.
     adaptive.levelApplied(next.id);
     profiler.setLongFrameThreshold(budgetFor(next.id).longFrameMs);
+    post?.setLevel(next.id);
     if (viewMode === "ground") {
       // Remember the machine so changing quality does not eject the player from
       // it: the view is rebuilt at the new budgets and handed back.
@@ -6285,8 +6366,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       timeLabel: worldState.environment.clock.timeOfDayLabel,
       powerText: `${power.drawMw}/${power.outputMw} MW`,
       crewText: `${crews.free}/${crews.capacity} crews`,
-      positionText: `x ${session.pose.x.toFixed(1)} z ${session.pose.z.toFixed(1)}`,
-      drawnText: interiorStats(),
+      // Coordinates and mesh counts are developer data. The fiction never
+      // shows them; the overlay build keeps them for the people who need them.
+      positionText: debugMode ? `x ${session.pose.x.toFixed(1)} z ${session.pose.z.toFixed(1)}` : null,
+      drawnText: debugMode ? interiorStats() : null,
       prompt: focus?.prompt ?? null,
       announcement: focus?.announcement ?? null,
       transitionLabel: transition ? `${TRANSIT_LABELS[transition.kind]}...` : null,
@@ -6988,6 +7071,16 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (state !== AppState.Shatterdome && shatterdomeScreen) closeShatterdome();
     if (state !== AppState.Sandbox && sandboxScreen) closeSandbox();
 
+    // The title composition lives exactly as long as the menu does. Anything
+    // else that borrows the boot stage (the gallery, the globe) gets it back
+    // in the state it was in.
+    if (state === AppState.MainMenu && !titleView) {
+      titleView = new TitleView(bootScene);
+    } else if (state !== AppState.MainMenu && titleView) {
+      titleView.dispose();
+      titleView = undefined;
+    }
+
     switch (state) {
       case AppState.MainMenu:
         renderMainMenu(
@@ -7080,6 +7173,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       cityView?.dispose();
       weatherView?.dispose();
       skyView?.dispose();
+      titleView?.dispose();
+      titleView = undefined;
+      post?.dispose();
+      post = undefined;
       effectsView?.dispose();
       soundStage?.dispose();
       ambientAudio?.dispose();

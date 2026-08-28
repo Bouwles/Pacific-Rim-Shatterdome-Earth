@@ -88,7 +88,7 @@ Create a separate simulator/sandbox mode. It can spawn unlocked Jaegers or kaiju
 
 ## PRESENTATION
 
-Use anime-influenced silhouettes, controlled outlines where performant, bold impact frames, expressive VFX, and readable color grouping, combined with industrial materials, rain, fog, ocean spray, warning lights, heat, grime, and machinery. The combat HUD should be cinematic and minimal. The Shatterdome interfaces should be detailed and legible. Cockpit instruments must function and react to real systems. Music should be original cinematic orchestral-industrial work or replaceable placeholders. Every Jaeger and kaiju needs a distinct sound identity. Use radio dialogue and text conversations; provide hooks for later recorded voices.
+Use anime-influenced silhouettes, controlled outlines where performant, bold impact frames, expressive VFX, and readable color grouping, combined with industrial materials, rain, fog, ocean spray, warning lights, heat, grime, and machinery. The combat HUD should be cinematic and minimal. The Shatterdome interfaces should be detailed and legible. Cockpit instruments must function and react to real systems. Music should be original cinematic orchestral-industrial work or replaceable placeholders. Every Jaeger and kaiju needs a distinct sound identity. Use radio dialogue and text conversations; provide hooks for later recorded voices. Debug readouts, developer controls and performance overlays never appear in a player build; they live behind the dev server, `?debug=1` and an explicit shortcut.
 
 ## QUALITY CONTRACT
 

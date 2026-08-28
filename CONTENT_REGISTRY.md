@@ -1014,3 +1014,7 @@ id not listed here.
 | stress.max-destruction    | headless | Zone damage, destruction events, debris accounting   |
 | stress.roster-gallery     | browser  | Asset resolution, material count, per-model overhead |
 | stress.rapid-traversal    | browser  | Terrain streaming, sector churn, origin rebases      |
+
+## Hero rigs (rescue pass, 2026-08-28)
+
+Not content. `JaegerRig` and `CreatureRig` in `src/engine/` are builders parameterised by the definition's height, used by the pilot view, the combat view and the title. No Jaeger, kaiju, region or system was added; the content freeze holds. A production GLB dropped into `public/assets/models` still replaces a rig through the resolver with no code change; the generator's stand-in is kept attached for its sockets and hidden.

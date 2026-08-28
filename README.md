@@ -8,6 +8,9 @@ You run one Shatterdome. You buy and research Jaegers, pick and develop copilots
 
 The project is built in numbered milestones. Everything listed here actually runs today. Nothing below is a mockup.
 
+- Opens on a title composition: a rigged machine in a dark bay under a cold key and a warm lamp, rain, fog and a slow drift, with a styled menu beside it
+- Machines and creatures are articulated rigs built from parts that walk, swing, guard, flinch and go down, standing in until a real model arrives through the resolver
+- One design system across every screen, a grade over every camera on Medium and above, and no debug surface in a player build (the dev server or `?debug=1` brings it back, F3 toggles it)
 - Boots into a real 3D scene, WebGPU when the browser supports it, WebGL otherwise, with no gameplay difference between the two
 - Application state machine covering Boot, MainMenu, Loading, Shatterdome, Deployment, Combat, Results and Error
 - Main menu with a working New Game flow that puts you on the command floor of the Shatterdome, on foot
@@ -272,7 +275,7 @@ npm run dev
 
 Then open the address it prints, usually http://localhost:5173.
 
-Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines, the same cities and the same storm at the same minute. Press F3 to toggle the debug overlay.
+Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines, the same cities and the same storm at the same minute. Debug readouts are only present on the dev server or with `?debug=1`; F3 toggles the overlay there. A production build shows none of it.
 
 Add `?quality=low` to start on a different quality level. Low, medium, high and cinematic are all accepted, and you can change it from the world panel while the game runs.
 
@@ -286,6 +289,15 @@ npm run format        Prettier
 npm test              unit and integration tests
 npm run smoke         Playwright browser tests
 ```
+
+To play the finished build rather than the dev server:
+
+```
+npm run build
+npx vite preview
+```
+
+Then open the address it prints, usually http://localhost:4173.
 
 ## Layout
 

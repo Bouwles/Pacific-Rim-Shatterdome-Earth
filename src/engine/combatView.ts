@@ -16,6 +16,7 @@ import type { KaijuDefinition } from "../data/kaiju";
 import type { QualityPreset } from "../data/quality";
 import type { ArenaFighterView, CombatEvent } from "../combat/arena";
 import { zonePosition, type TargetingPose } from "../combat/targeting";
+import { CreatureRig } from "./creatureRig";
 
 /**
  * Combat, drawn.
@@ -82,6 +83,11 @@ export class CombatView {
   private readonly materials: StandardMaterial[] = [];
   private placeholder: Mesh | null = null;
   private resolved: ResolvedAsset | null = null;
+  private rig: CreatureRig | null = null;
+  private worldSeconds = 0;
+  private flinch = 0;
+  private lastEast = 0;
+  private lastNorth = 0;
   private readonly ready: Promise<void>;
 
   private readonly zoneMesh: Mesh;
@@ -117,7 +123,10 @@ export class CombatView {
     placeholder.position.y = height * 0.5;
     placeholder.material = this.material("combat.placeholderBody", new Color3(0.3, 0.35, 0.32));
     placeholder.parent = this.bodyRoot;
+    placeholder.isVisible = false;
     this.placeholder = placeholder;
+    this.rig = new CreatureRig(this.scene, height, "combat.rig");
+    this.rig.root.parent = this.bodyRoot;
 
     // Zone markers. Off by default, and the whole point of them is that they sit
     // exactly where the resolver believes the zones are.
@@ -176,6 +185,13 @@ export class CombatView {
       this.resolved = resolved;
       this.placeholder?.dispose();
       this.placeholder = null;
+      // Only a real model replaces the rig; the generator's stand-in stays hidden.
+      if (resolved.origin === "model") {
+        this.rig?.dispose();
+        this.rig = null;
+      } else {
+        resolved.root.setEnabled(false);
+      }
     } catch {
       // A missing model leaves the placeholder body standing rather than
       // leaving the player fighting nothing.
@@ -203,8 +219,30 @@ export class CombatView {
 
     this.bodyRoot.position.set(pose.east, pose.up, pose.north);
     this.bodyRoot.rotation.y = (pose.yawDeg * Math.PI) / 180;
-    // A defeated creature goes down rather than standing there dead.
-    this.bodyRoot.rotation.x = view.defeated ? Math.PI / 2.2 : 0;
+    // The rig handles going down; the invisible box tilts for the old contract.
+    this.bodyRoot.rotation.x = 0;
+
+    // Speed from displacement, so the gait follows what it actually did.
+    const moved = Math.hypot(view.east - this.lastEast, view.north - this.lastNorth);
+    const speed = deltaSeconds > 0 ? Math.min(20, moved / deltaSeconds) : 0;
+    this.lastEast = view.east;
+    this.lastNorth = view.north;
+    this.worldSeconds += deltaSeconds;
+    for (const event of events) {
+      if (event.targetId === "kaiju" && event.damage > 0) this.flinch = Math.min(1, this.flinch + 0.5);
+    }
+    this.flinch = Math.max(0, this.flinch - deltaSeconds * 3);
+    const phase = view.activePhase ?? "";
+    const health = view.zones.reduce((sum, zone) => sum + zone.health / Math.max(1, zone.maxHealth), 0);
+    this.rig?.update({
+      timeSeconds: this.worldSeconds,
+      speedMps: speed,
+      windup: phase === "startup" || phase === "windup" ? 1 : 0,
+      striking: phase === "active" ? 1 : 0,
+      flinch: this.flinch,
+      damage: 1 - health / Math.max(1, view.zones.length),
+      defeated: view.defeated,
+    });
 
     if (this.debugVolumesValue) {
       let index = 0;
@@ -313,6 +351,8 @@ export class CombatView {
     this.resolved = null;
     this.placeholder?.dispose();
     this.placeholder = null;
+    this.rig?.dispose();
+    this.rig = null;
     this.zoneMesh.dispose();
     this.hitMesh.dispose();
     this.roundMesh.dispose();

@@ -820,3 +820,14 @@ the steady-state claim the test now makes after a warm-up cycle.
 | Golden scenarios and state hashes                                | Eight digests pinned in tests/integration/golden.test.ts, covering the kernel, economy, co-op, sandbox, audio and three stress scenes                                        |
 | Accessibility review                                             | tests/e2e/accessibility.spec.ts, plus the pre-existing hud, vfx and audio coverage it frames                                                                                 |
 | Performance on every preset                                      | Dense-city at 180 frames per preset on the production build, recorded in RELEASE_NOTES.md, zero long frames and zero breaches on the reference machine                       |
+
+## Rescue pass evidence (2026-08-28)
+
+Production build (`npm run build`, `npx vite preview`), WebGPU, seed 20260930, Chrome at 1920×1080 and an emulated 1366×768 viewport.
+
+- Title: rigged machine, gantry, rain, fog, beacon sweep and drift render with the styled menu; no diagnostics bar and no transport in the production build; the update banner stacks. Zero console errors.
+- Shatterdome: LOCCENT Command renders plated deck, strip-lit deckhead, accent lamp pool, crew figures; the room panel leads with the room and carries no coordinates or mesh counts.
+- Campaign sortie: deploy from the map, skip the carrier, the pilot view shows the machine rig at chase and combat framing, hits register on the HUD, the world panel folds to the sortie. Zero console errors after the grade rebuild fix (the earlier re-attach path produced a WebGPU "destroyed texture used in a submit" warning every frame and a black view).
+- Sandbox: run, ground view, take the machine out, begin encounter; machine and creature rigs fight at seven metres, attack poses and flinches visible, creature veins and eyes glow.
+- Unit: `tests/unit/rigs.test.ts` covers part counts, stride, recoil settling, defeated slump, disposal cleanliness and the grade table. `tests/integration/shatterdome.test.ts` passes headless because plating is skipped without a window.
+- Playwright: the full suite run against the dev server; the one pre-existing builder failure (construction wait) remains and is tracked in RELEASE_NOTES.md.
