@@ -103,19 +103,20 @@ export class TitleView {
     this.gantryMaterial = new StandardMaterial("title.gantry", scene);
     this.gantryMaterial.diffuseColor = new Color3(0.1, 0.11, 0.12);
     this.gantryMaterial.specularColor = Color3.Black();
-    // Wide enough that the drifting camera never puts an upright across the body.
+    // Outside the camera's orbit (radius 150 about a point near the machine), so
+    // the drift never passes behind an upright and puts it across the body.
     for (const [x, z] of [
-      [-84, 44],
-      [84, 44],
-      [-90, -40],
-      [90, -40],
+      [-200, 190],
+      [200, 190],
+      [-210, -190],
+      [210, -190],
     ] as const) {
       const upright = MeshBuilder.CreateBox("title.upright", { width: 3, height: 110, depth: 3 }, scene);
       upright.position.set(x, 55, z);
       upright.material = this.gantryMaterial;
       this.gantry.push(upright);
     }
-    const beam = MeshBuilder.CreateBox("title.beam", { width: 176, height: 3, depth: 90 }, scene);
+    const beam = MeshBuilder.CreateBox("title.beam", { width: 424, height: 3, depth: 384 }, scene);
     beam.position.set(0, 108, 4);
     beam.material = this.gantryMaterial;
     this.gantry.push(beam);
