@@ -22,6 +22,8 @@ import type { QualityPreset } from "../data/quality";
 import type { InteriorRoom, ObstacleKind, InteractableKind } from "../shatterdome/interiorLayout";
 import { activeStaffPoses, shiftLoadFor } from "../shatterdome/staff";
 import { ON_FOOT, eyeHeightOf, type OnFootPose } from "../shatterdome/onFoot";
+import { PeopleLibrary, type Person, type PersonModelId } from "../assets/people";
+import { PropLibrary, type PlacedProp, type PropPlacement } from "../assets/props";
 
 /**
  * The Shatterdome interior, drawn.
@@ -51,6 +53,52 @@ const OBSTACLE_COLOURS: Readonly<Record<ObstacleKind, readonly [number, number, 
   berth: [0.22, 0.24, 0.28],
   crate: [0.33, 0.29, 0.22],
   rail: [0.44, 0.46, 0.5],
+};
+
+/**
+ * Who works where. Command rooms are operators and an officer; bays are
+ * technicians and welders with security at the door; medical has medics.
+ */
+function castFor(facilityId: string): readonly PersonModelId[] {
+  if (facilityId.includes("command") || facilityId.includes("loccent") || facilityId.includes("research")) {
+    return ["operator-f", "operator-m", "officer", "operator-f", "technician", "operator-m", "security"];
+  }
+  if (facilityId.includes("medical") || facilityId.includes("quarters") || facilityId.includes("kwoon")) {
+    return ["medic", "officer", "technician", "operator-m", "medic"];
+  }
+  return ["technician", "welder", "technician", "pilot", "welder", "security", "technician", "operator-m"];
+}
+
+const ROLE_COLOURS: Readonly<Record<PersonModelId, Color3>> = {
+  "operator-f": new Color3(0.2, 0.32, 0.5),
+  "operator-m": new Color3(0.2, 0.32, 0.5),
+  officer: new Color3(0.16, 0.18, 0.24),
+  technician: new Color3(0.85, 0.45, 0.12),
+  welder: new Color3(0.85, 0.45, 0.12),
+  security: new Color3(0.22, 0.24, 0.28),
+  medic: new Color3(0.9, 0.9, 0.92),
+  pilot: new Color3(0.3, 0.32, 0.36),
+};
+
+/** Kit pieces per obstacle kind, cycled so a row of crates is not one crate repeated. */
+const OBSTACLE_MODELS: Readonly<Partial<Record<ObstacleKind, readonly string[]>>> = {
+  fixture: [
+    "machine",
+    "machine-window",
+    "scanner-high",
+    "machine-fortified",
+    "screen-panel-wide",
+    "hopper-square",
+  ],
+  crate: ["box-large", "box-wide", "box-long", "box-small"],
+  scaffold: ["structure-yellow-tall", "structure-yellow-medium", "structure-yellow-high"],
+  rail: ["conveyor-bars-fence", "conveyor-bars-stripe-fence"],
+};
+
+const INTERACTABLE_MODELS: Readonly<Partial<Record<InteractableKind, readonly string[]>>> = {
+  terminal: ["screen-panel-wide", "screen-panel-flat", "screen-wide"],
+  "staff-post": ["machine-window", "screen-panel-small", "lever-double"],
+  "conn-pod": ["machine-fortified"],
 };
 
 const INTERACTABLE_COLOURS: Readonly<Record<InteractableKind, readonly [number, number, number]>> = {
@@ -123,8 +171,14 @@ export class InteriorView {
   private readonly lights: Array<HemisphericLight | PointLight> = [];
   private readonly resolvedAssets: ResolvedAsset[] = [];
 
-  private staffMesh: Mesh | null = null;
-  private staffBuffer: Float32Array = new Float32Array(0);
+  /** The crew: imported animated characters, one per staff post drawn. */
+  private readonly people: PeopleLibrary;
+  /** The dressing: imported kit pieces standing in for the collision boxes. */
+  private readonly props: PropLibrary;
+  private readonly roomProps: PlacedProp[] = [];
+  private readonly crew: Array<{ readonly person: Person; readonly slot: number }> = [];
+  private crewCapacity = 0;
+  private lastUpdateMs: number | null = null;
   private roomValue: InteriorRoom | null = null;
   private staffDrawnValue = 0;
   private staffOnShiftValue = 0;
@@ -141,6 +195,8 @@ export class InteriorView {
 
     this.root = new TransformNode("interiorRoot", this.scene);
     this.previousCamera = this.scene.activeCamera;
+    this.people = new PeopleLibrary(this.scene);
+    this.props = new PropLibrary(this.scene);
 
     this.camera = new UniversalCamera(
       "interiorCamera",
@@ -198,6 +254,7 @@ export class InteriorView {
     this.buildInteractables(room);
     this.buildStaffPool(room);
     this.buildLights(room);
+    this.dressRoom(room, token);
 
     await this.buildBerthModels(room, token);
   }
@@ -211,45 +268,34 @@ export class InteriorView {
     this.camera.rotation.set((-pose.pitchDeg * Math.PI) / 180, (pose.yawDeg * Math.PI) / 180, 0);
 
     const room = this.roomValue;
-    const mesh = this.staffMesh;
-    if (!room || !mesh) return;
+    if (!room) return;
+
+    const now = typeof performance === "undefined" ? Date.now() : performance.now();
+    const deltaSeconds =
+      this.lastUpdateMs === null ? 1 / 60 : Math.min(0.1, (now - this.lastUpdateMs) / 1000);
+    this.lastUpdateMs = now;
 
     const poses = activeStaffPoses(room, tick, dayFraction, this.quality.maxInteriorStaff);
     // What the room is staffed at, against what the budget lets us draw. Reporting
     // only the drawn figure would hide a room whose crew is over budget.
     this.staffOnShiftValue = shiftLoadFor(room.facilityId, room.staffSlots, dayFraction).onShift;
-    const count = Math.min(poses.length, this.staffBuffer.length / 16);
-    for (let index = 0; index < count; index += 1) {
-      const staff = poses[index];
-      if (!staff) continue;
-      composeInto(
-        this.staffBuffer,
-        index,
-        staff.x,
-        0.9,
-        staff.z,
-        (staff.yawDeg * Math.PI) / 180,
-        0.55,
-        1.8,
-        0.4,
-      );
+    let drawn = 0;
+    for (const member of this.crew) {
+      const staff = poses[member.slot];
+      const person = member.person;
+      if (!staff) {
+        // Off shift: parked out of sight rather than standing frozen at a post.
+        person.root.setEnabled(false);
+        continue;
+      }
+      drawn += 1;
+      person.root.setEnabled(true);
+      person.root.position.set(staff.x, 0, staff.z);
+      person.root.rotation.y = (staff.yawDeg * Math.PI) / 180;
+      person.play(staff.activity === "walking" ? "walk" : staff.activity === "working" ? "work" : "idle");
     }
-    mesh.thinInstanceCount = count;
-    if (count !== this.staffDrawnValue) {
-      // Re-registering the buffer rather than marking it updated.
-      //
-      // The pool is allocated with a count of zero, and on WebGPU a thin-instance
-      // buffer whose count grows from zero is not picked up by
-      //  alone: the room reported six people drawn and
-      // rendered none of them. Setting the buffer again rebuilds the instance
-      // binding. It happens when the number of people changes, not every frame.
-      mesh.thinInstanceSetBuffer("matrix", this.staffBuffer, 16);
-      mesh.thinInstanceCount = count;
-      mesh.thinInstanceRefreshBoundingInfo(false);
-    } else if (count > 0) {
-      mesh.thinInstanceBufferUpdated("matrix");
-    }
-    this.staffDrawnValue = count;
+    this.people.update(deltaSeconds);
+    this.staffDrawnValue = drawn;
   }
 
   stats(): InteriorViewStats {
@@ -274,6 +320,8 @@ export class InteriorView {
     for (const light of this.lights) light.dispose();
     this.lights.length = 0;
     this.root.dispose();
+    this.people.dispose();
+    this.props.dispose();
     this.scene.fogMode = this.savedFog.mode;
     this.scene.fogDensity = this.savedFog.density;
     this.scene.fogColor = this.savedFog.colour;
@@ -298,8 +346,11 @@ export class InteriorView {
       const light = this.lights.pop();
       light?.dispose();
     }
-    this.staffMesh = null;
-    this.staffBuffer = new Float32Array(0);
+    for (const member of this.crew) this.people.release(member.person);
+    this.crew.length = 0;
+    for (const prop of this.roomProps) prop.dispose();
+    this.roomProps.length = 0;
+    this.crewCapacity = 0;
     this.staffDrawnValue = 0;
     this.staffOnShiftValue = 0;
     this.gpuBytes = 0;
@@ -397,6 +448,9 @@ export class InteriorView {
       if (obstacles.length === 0) continue;
       const mesh = MeshBuilder.CreateBox(`interior.obstacle.${room.id}.${kind}`, { size: 1 }, this.scene);
       mesh.material = this.material(`obstacle.${room.id}.${kind}`, OBSTACLE_COLOURS[kind]);
+      // The box is the collision shape and the headless fallback; on a real
+      // engine a kit piece stands in it and the box goes unseen.
+      if (typeof window !== "undefined" && kind !== "berth") mesh.isVisible = false;
       const buffer = new Float32Array(obstacles.length * 16);
       obstacles.forEach((obstacle, index) => {
         composeInto(
@@ -438,6 +492,12 @@ export class InteriorView {
         INTERACTABLE_COLOURS[kind],
         INTERACTABLE_GLOW[kind] * 0.5,
       );
+      if (
+        typeof window !== "undefined" &&
+        (kind === "terminal" || kind === "staff-post" || kind === "conn-pod")
+      ) {
+        mesh.isVisible = false;
+      }
       const buffer = new Float32Array(entries.length * 16);
       entries.forEach((entry, index) => {
         composeInto(
@@ -488,46 +548,186 @@ export class InteriorView {
    * Nobody outside this room exists as anything but a number, and nobody inside
    * it has state: a staff member is an index and a tick.
    */
+  /**
+   * Hires the crew: one imported character per staff post the budget allows,
+   * cast by the room's work. Loading is asynchronous and guarded by the build
+   * token, so a room left while its people were still loading gets nobody.
+   */
   private buildStaffPool(room: InteriorRoom): void {
-    const capacity = Math.max(1, this.quality.maxInteriorStaff);
-    // A figure, not a pillar: a body with shoulders and a head on it, built in a
-    // unit-height box so the per-instance scale still means metres. People are
-    // not light sources; a crew member reads as a person because of their
-    // silhouette and the way they move, not because they glow.
-    const body = MeshBuilder.CreateBox(
-      `interior.staffBody.${room.id}`,
-      { width: 0.85, height: 0.72, depth: 0.7 },
-      this.scene,
-    );
-    body.position.y = -0.14;
-    const legs = MeshBuilder.CreateBox(
-      `interior.staffLegs.${room.id}`,
-      { width: 0.7, height: 0.4, depth: 0.55 },
-      this.scene,
-    );
-    legs.position.y = -0.3;
-    const head = MeshBuilder.CreateBox(
-      `interior.staffHead.${room.id}`,
-      { width: 0.4, height: 0.2, depth: 0.5 },
-      this.scene,
-    );
-    head.position.y = 0.38;
-    const merged = Mesh.MergeMeshes([legs, body, head], true, true, undefined, false, false);
-    const mesh = merged ?? MeshBuilder.CreateBox(`interior.staff.${room.id}`, { size: 1 }, this.scene);
-    mesh.name = `interior.staff.${room.id}`;
-    mesh.material = this.material(`staff.${room.id}`, [0.24, 0.26, 0.3]);
-    this.staffBuffer = new Float32Array(capacity * 16);
-    for (let index = 0; index < capacity; index += 1) {
-      composeInto(this.staffBuffer, index, 0, -50, 0, 0, 0.55, 1.8, 0.4);
+    const capacity = Math.min(Math.max(0, this.quality.maxInteriorStaff), room.staffPosts.length, 15);
+    this.crewCapacity = capacity;
+    const token = this.buildToken;
+    const cast = castFor(room.facilityId);
+    for (let slot = 0; slot < capacity; slot += 1) {
+      const model = cast[slot % cast.length] ?? "technician";
+      void this.people.spawn(model, ROLE_COLOURS[model]).then((person) => {
+        if (!person) return;
+        if (this.disposed || token !== this.buildToken) {
+          this.people.release(person);
+          return;
+        }
+        person.root.parent = this.root;
+        person.root.setEnabled(false);
+        this.crew.push({ person, slot });
+      });
     }
-    mesh.thinInstanceSetBuffer("matrix", this.staffBuffer, 16);
-    mesh.thinInstanceCount = 0;
-    // The pool is allocated with every instance parked below the floor and moves
-    // every frame, so its bounding box is never a useful culling test. Keeping it
-    // always active is one mesh, and the alternative was a room that reported six
-    // people on shift and drew none of them.
-    mesh.alwaysSelectAsActiveMesh = true;
-    this.staffMesh = this.track(mesh, capacity * 64 + 24 * 32);
+  }
+
+  /**
+   * Dresses the room with kit pieces: a console for every terminal, a
+   * machine or crate for every obstacle, pipes and a catwalk along the walls,
+   * bollards at the doors, and a crane over anything big enough to need one.
+   * Loading is asynchronous and guarded by the build token.
+   */
+  private dressRoom(room: InteriorRoom, token: number): void {
+    if (typeof window === "undefined") return;
+    const placements: PropPlacement[] = [];
+    const pick = <T>(list: readonly T[], index: number): T => list[index % list.length] as T;
+
+    let index = 0;
+    for (const obstacle of room.obstacles) {
+      const width = obstacle.halfWidth * 2;
+      const depth = obstacle.halfDepth * 2;
+      const height = obstacle.heightMeters;
+      const fit = { width, depth, height };
+      const models = OBSTACLE_MODELS[obstacle.kind];
+      if (!models) continue;
+      placements.push({ kit: "factory", model: pick(models, index), x: obstacle.x, z: obstacle.z, fit });
+      index += 1;
+    }
+    for (const entry of room.interactables) {
+      if (entry.sealedReason !== null) continue;
+      const models = INTERACTABLE_MODELS[entry.kind];
+      if (!models) continue;
+      const size = INTERACTABLE_SIZES[entry.kind];
+      placements.push({
+        kit: "factory",
+        model: pick(models, index),
+        x: entry.position.x,
+        z: entry.position.z,
+        yawDeg: entry.facingDeg,
+        fit: { width: size[0] * 1.15, height: size[1] * 1.15, depth: size[2] * 1.15 },
+      });
+      index += 1;
+    }
+
+    // Pipes high on the long walls, a catwalk along the north wall, columns.
+    const halfW = room.widthMeters / 2;
+    const halfD = room.depthMeters / 2;
+    const pipeY = Math.min(room.heightMeters - 1.6, 4.2);
+    for (let x = -halfW + 2; x < halfW - 2; x += 4) {
+      placements.push({
+        kit: "factory",
+        model: "pipe-large-long",
+        x,
+        y: pipeY,
+        z: halfD - 0.8,
+        yawDeg: 0,
+        scale: 2,
+      });
+      placements.push({
+        kit: "factory",
+        model: "pipe-large-long",
+        x,
+        y: pipeY - 1.2,
+        z: -halfD + 0.8,
+        yawDeg: 0,
+        scale: 2,
+      });
+    }
+    if (room.heightMeters >= 6) {
+      const walkY = Math.min(room.heightMeters - 2.6, 3.6);
+      for (let x = -halfW + 3; x < halfW - 3; x += 2.5) {
+        placements.push({
+          kit: "factory",
+          model: "catwalk-straight",
+          x,
+          y: walkY,
+          z: halfD - 1.6,
+          yawDeg: 90,
+          scale: 2.5,
+        });
+      }
+      placements.push({
+        kit: "factory",
+        model: "catwalk-stairs",
+        x: halfW - 4.5,
+        y: 0,
+        z: halfD - 1.6,
+        yawDeg: 90,
+        scale: 2.5,
+      });
+    }
+    for (let x = -halfW + 4; x < halfW - 3; x += 8) {
+      placements.push({
+        kit: "factory",
+        model: "structure-tall",
+        x,
+        z: halfD - 0.35,
+        fit: { height: Math.min(room.heightMeters, 7) },
+      });
+      placements.push({
+        kit: "factory",
+        model: "structure-tall",
+        x,
+        z: -halfD + 0.35,
+        fit: { height: Math.min(room.heightMeters, 7) },
+      });
+    }
+    // Bollards either side of each doorway.
+    for (const entry of room.interactables) {
+      if (entry.kind !== "transit") continue;
+      const along = (entry.facingDeg * Math.PI) / 180;
+      const dx = Math.cos(along) * 1.6;
+      const dz = -Math.sin(along) * 1.6;
+      placements.push({
+        kit: "factory",
+        model: "warning-orange",
+        x: entry.position.x + dx,
+        z: entry.position.z + dz,
+        scale: 1,
+      });
+      placements.push({
+        kit: "factory",
+        model: "warning-orange",
+        x: entry.position.x - dx,
+        z: entry.position.z - dz,
+        scale: 1,
+      });
+    }
+    // Big rooms get a crane and hoppers: something heavy is worked on here.
+    if (room.widthMeters >= 28 && room.heightMeters >= 12) {
+      placements.push({
+        kit: "factory",
+        model: "crane",
+        x: 0,
+        z: -halfD * 0.35,
+        yawDeg: 90,
+        fit: { height: room.heightMeters * 0.85 },
+      });
+      placements.push({
+        kit: "factory",
+        model: "hopper-high-square",
+        x: -halfW + 3,
+        z: -halfD + 3,
+        scale: 2.4,
+      });
+      placements.push({
+        kit: "factory",
+        model: "hopper-high-square",
+        x: halfW - 3,
+        z: -halfD + 3,
+        scale: 2.4,
+      });
+    }
+
+    void this.props.placeAll(placements, this.root).then((placed) => {
+      if (this.disposed || token !== this.buildToken) {
+        for (const prop of placed) prop.dispose();
+        return;
+      }
+      this.roomProps.push(...placed);
+    });
   }
 
   /** Working light, plus a warmer lamp over the fixtures so a room has a direction. */

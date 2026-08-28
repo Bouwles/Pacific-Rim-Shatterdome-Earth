@@ -1,0 +1,937 @@
+/*
+ * The interface system for the production path.
+ *
+ * One palette, one type scale, one panel language, shared by the title, the
+ * command screen, the briefing, the bay, the HUD, the results and the pause
+ * and settings screens. Graphite and navy grounds, steel structure, amber for
+ * action and caution, cyan for information, red only for danger. Condensed
+ * display type over a compact monospace for data. Fine lines, cropped
+ * corners, brackets, no rounded cards, no glow walls.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+  --c-ink: #06090d;
+  --c-graphite: #0e141b;
+  --c-navy: #101a27;
+  --c-panel: rgba(12, 18, 26, 0.92);
+  --c-panel-2: rgba(18, 26, 36, 0.94);
+  --c-steel: #4d5b6a;
+  --c-steel-2: #2b3644;
+  --c-line: rgba(126, 148, 172, 0.28);
+  --c-line-2: rgba(126, 148, 172, 0.12);
+  --c-text: #d6dee8;
+  --c-text-2: #8fa0b3;
+  --c-text-3: #5d6c7d;
+  --c-amber: #f0a938;
+  --c-amber-2: #b77a1c;
+  --c-cyan: #6cc6e6;
+  --c-cyan-2: #2f8fb0;
+  --c-red: #e0433f;
+  --c-green: #5fbf8a;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --f-body: "Barlow", "Segoe UI", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, monospace;
+  --cut: 10px;
+  --clip-panel: polygon(
+    var(--cut) 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%,
+    0 var(--cut)
+  );
+}
+
+/* ------------------------------------------------------------------ base */
+
+#uiRoot .op {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--f-body);
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+#uiRoot .op * {
+  box-sizing: border-box;
+}
+#uiRoot .op > * {
+  pointer-events: auto;
+}
+#uiRoot .op h1,
+#uiRoot .op h2,
+#uiRoot .op h3 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--c-text);
+  text-shadow: none;
+}
+#uiRoot .op h1 {
+  font-size: 44px;
+  line-height: 0.98;
+  font-weight: 700;
+}
+#uiRoot .op h2 {
+  font-size: 22px;
+  line-height: 1.1;
+}
+#uiRoot .op h2::before {
+  content: none;
+}
+#uiRoot .op h3 {
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--c-text-2);
+}
+#uiRoot .op p {
+  margin: 0;
+}
+#uiRoot .op .mono {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+#uiRoot .op .dim {
+  color: var(--c-text-2);
+}
+#uiRoot .op .faint {
+  color: var(--c-text-3);
+}
+#uiRoot .op .amber {
+  color: var(--c-amber);
+}
+#uiRoot .op .cyan {
+  color: var(--c-cyan);
+}
+#uiRoot .op .red {
+  color: var(--c-red);
+}
+#uiRoot .op .green {
+  color: var(--c-green);
+}
+
+/* --------------------------------------------------------------- panels */
+
+#uiRoot .op .panel {
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  clip-path: var(--clip-panel);
+  padding: 14px 16px;
+  position: relative;
+}
+#uiRoot .op .panel::before,
+#uiRoot .op .panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--c-amber);
+  border-style: solid;
+  opacity: 0.8;
+  pointer-events: none;
+}
+#uiRoot .op .panel::before {
+  top: -1px;
+  right: -1px;
+  border-width: 1px 1px 0 0;
+}
+#uiRoot .op .panel::after {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 1px 1px;
+}
+#uiRoot .op .panel.quiet::before,
+#uiRoot .op .panel.quiet::after {
+  border-color: var(--c-steel);
+}
+#uiRoot .op .rule {
+  height: 1px;
+  background: var(--c-line);
+  margin: 10px 0;
+}
+#uiRoot .op .kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+#uiRoot .op .kv .k {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+}
+#uiRoot .op .kv .v {
+  font-size: 14px;
+}
+#uiRoot .op .tag {
+  display: inline-block;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid var(--c-line);
+  color: var(--c-text-2);
+  margin-right: 6px;
+}
+#uiRoot .op .tag.amber {
+  border-color: var(--c-amber-2);
+  color: var(--c-amber);
+}
+#uiRoot .op .tag.red {
+  border-color: var(--c-red);
+  color: var(--c-red);
+}
+#uiRoot .op .tag.cyan {
+  border-color: var(--c-cyan-2);
+  color: var(--c-cyan);
+}
+
+/* meter: a thin bar with a bracketed track */
+#uiRoot .op .meter {
+  position: relative;
+  height: 6px;
+  background: var(--c-steel-2);
+  border-left: 1px solid var(--c-line);
+  border-right: 1px solid var(--c-line);
+}
+#uiRoot .op .meter > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--c-cyan);
+  transition: width 240ms ease-out;
+}
+#uiRoot .op .meter.amber > i {
+  background: var(--c-amber);
+}
+#uiRoot .op .meter.red > i {
+  background: var(--c-red);
+}
+#uiRoot .op .meter.green > i {
+  background: var(--c-green);
+}
+
+/* -------------------------------------------------------------- buttons */
+
+#uiRoot .op button {
+  appearance: none;
+  font-family: var(--f-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  background: linear-gradient(180deg, rgba(45, 58, 72, 0.9), rgba(24, 32, 42, 0.95));
+  border: 1px solid var(--c-line);
+  border-left: 2px solid var(--c-steel);
+  padding: 9px 18px;
+  cursor: pointer;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  transition:
+    background 120ms,
+    border-color 120ms,
+    transform 60ms;
+  margin: 0;
+  width: auto;
+  display: inline-block;
+  text-align: left;
+  box-shadow: none;
+}
+#uiRoot .op button:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(62, 78, 96, 0.95), rgba(30, 40, 52, 0.98));
+  border-color: var(--c-cyan-2);
+}
+#uiRoot .op button:focus-visible {
+  outline: 1px solid var(--c-cyan);
+  outline-offset: 2px;
+}
+#uiRoot .op button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+#uiRoot .op button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#uiRoot .op button.primary {
+  border-left-color: var(--c-amber);
+  background: linear-gradient(180deg, rgba(240, 169, 56, 0.22), rgba(120, 80, 20, 0.25));
+  color: #fbe6c2;
+}
+#uiRoot .op button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(240, 169, 56, 0.38), rgba(120, 80, 20, 0.35));
+  border-color: var(--c-amber);
+}
+#uiRoot .op button.danger {
+  border-left-color: var(--c-red);
+}
+#uiRoot .op button.small {
+  font-size: 12px;
+  padding: 5px 11px;
+  letter-spacing: 0.1em;
+}
+#uiRoot .op button.ghost {
+  background: transparent;
+  border-color: var(--c-line-2);
+  border-left-color: var(--c-steel-2);
+  color: var(--c-text-2);
+}
+#uiRoot .op .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+#uiRoot .op .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#uiRoot .op .stack > button {
+  width: 100%;
+}
+#uiRoot .op select,
+#uiRoot .op input[type="range"] {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--c-text);
+  background: var(--c-graphite);
+  border: 1px solid var(--c-line);
+  padding: 4px 8px;
+}
+#uiRoot .op label {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------- title */
+
+#uiRoot .op.title-screen .menu {
+  position: absolute;
+  left: clamp(40px, 7vw, 140px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 300px;
+}
+#uiRoot .op.title-screen h1 {
+  font-size: clamp(38px, 4.2vw, 60px);
+  margin-bottom: 4px;
+}
+#uiRoot .op.title-screen .strap {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+  margin-bottom: 26px;
+}
+#uiRoot .op.title-screen .menu .stack button {
+  padding: 11px 18px;
+  font-size: 16px;
+}
+#uiRoot .op.title-screen .save-summary {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--c-text-2);
+  margin: -2px 0 6px 2px;
+  letter-spacing: 0.04em;
+}
+#uiRoot .op.title-screen .version {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--c-text-3);
+}
+#uiRoot .op.title-screen .notice {
+  margin-top: 16px;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--c-text-3);
+  line-height: 1.5;
+}
+#uiRoot .op.title-screen .update {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-amber-2);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--c-text-2);
+}
+#uiRoot .op.title-screen .update .row {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------------------- command */
+
+#uiRoot .op.command .sidebar {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  bottom: 20px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#uiRoot .op.command .mission-card {
+  flex: 0 0 auto;
+}
+#uiRoot .op.command .mission-card h2 {
+  margin-bottom: 4px;
+}
+#uiRoot .op.command .mission-card .where {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--c-cyan);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+#uiRoot .op.command .threat {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+#uiRoot .op.command .threat > div {
+  border: 1px solid var(--c-line-2);
+  padding: 6px 8px;
+}
+#uiRoot .op.command .threat .k {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+}
+#uiRoot .op.command .threat .v {
+  font-family: var(--f-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+#uiRoot .op.command .topbar {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+}
+#uiRoot .op.command .status {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  width: 300px;
+}
+#uiRoot .op.command .quiet-list {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--c-text-2);
+  line-height: 1.6;
+}
+
+/* -------------------------------------------------------------- briefing */
+
+#uiRoot .op.briefing .sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(920px, calc(100vw - 80px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+#uiRoot .op.briefing .sheet > .panel {
+  min-width: 0;
+}
+#uiRoot .op.briefing .head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+#uiRoot .op.briefing .objective {
+  font-size: 16px;
+  margin: 6px 0;
+}
+#uiRoot .op.briefing .objective strong {
+  color: var(--c-amber);
+  font-weight: 600;
+}
+#uiRoot .op.briefing .radio {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+}
+#uiRoot .op.briefing .radio b {
+  color: var(--c-cyan);
+  font-weight: 500;
+}
+#uiRoot .op.briefing .actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------------- bay */
+
+#uiRoot .op.bay .left,
+#uiRoot .op.bay .right {
+  position: absolute;
+  top: 20px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#uiRoot .op.bay .left {
+  left: 20px;
+}
+#uiRoot .op.bay .right {
+  right: 20px;
+}
+#uiRoot .op.bay .bottom {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+#uiRoot .op.bay .name h1 {
+  font-size: 36px;
+}
+#uiRoot .op.bay .limbs {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: 5px 10px;
+  align-items: center;
+  font-family: var(--f-mono);
+  font-size: 11px;
+}
+#uiRoot .op.bay .limbs .meter {
+  height: 5px;
+}
+#uiRoot .op.bay .pilots .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+#uiRoot .op.bay .pilots .pair > div {
+  border: 1px solid var(--c-line-2);
+  padding: 8px;
+}
+#uiRoot .op.bay .pilots .name {
+  font-family: var(--f-display);
+  font-size: 18px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+#uiRoot .op.bay .weapons li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--c-line-2);
+}
+#uiRoot .op.bay ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------- cinematic */
+
+#uiRoot .op.cinematic .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11vh;
+  background: var(--c-ink);
+}
+#uiRoot .op.cinematic .bar.top {
+  top: 0;
+}
+#uiRoot .op.cinematic .bar.bottom {
+  bottom: 0;
+}
+#uiRoot .op.cinematic .caption {
+  position: absolute;
+  left: 50%;
+  bottom: 13vh;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 15px;
+  color: var(--c-text);
+  text-align: center;
+  max-width: 70vw;
+  text-shadow: 0 1px 2px #000;
+}
+#uiRoot .op.cinematic .caption b {
+  color: var(--c-cyan);
+  font-weight: 500;
+}
+#uiRoot .op.cinematic .skip {
+  position: absolute;
+  right: 24px;
+  bottom: 3vh;
+}
+#uiRoot .op.cinematic .stage {
+  position: absolute;
+  left: 24px;
+  top: 3vh;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+}
+
+/* ------------------------------------------------------------------- HUD */
+
+#uiRoot .op.hud .corner {
+  position: absolute;
+  width: 300px;
+}
+#uiRoot .op.hud .corner.bl {
+  left: 20px;
+  bottom: 20px;
+}
+#uiRoot .op.hud .corner.br {
+  right: 20px;
+  bottom: 20px;
+}
+#uiRoot .op.hud .corner.tl {
+  left: 20px;
+  top: 20px;
+  width: 360px;
+}
+#uiRoot .op.hud .corner.tr {
+  right: 20px;
+  top: 20px;
+  width: 280px;
+}
+#uiRoot .op.hud .silhouette {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: repeat(4, 14px);
+  gap: 3px;
+  width: 96px;
+}
+#uiRoot .op.hud .silhouette > i {
+  display: block;
+  background: var(--c-steel-2);
+  border: 1px solid var(--c-line-2);
+}
+#uiRoot .op.hud .silhouette > i.ok {
+  background: rgba(108, 198, 230, 0.55);
+}
+#uiRoot .op.hud .silhouette > i.hurt {
+  background: rgba(240, 169, 56, 0.7);
+}
+#uiRoot .op.hud .silhouette > i.crit {
+  background: rgba(224, 67, 63, 0.85);
+}
+#uiRoot .op.hud .silhouette > i.gone {
+  background: transparent;
+  border-color: var(--c-red);
+}
+#uiRoot .op.hud .silhouette .head {
+  grid-column: 2;
+  grid-row: 1;
+}
+#uiRoot .op.hud .silhouette .armL {
+  grid-column: 1;
+  grid-row: 2;
+}
+#uiRoot .op.hud .silhouette .torso {
+  grid-column: 2;
+  grid-row: 2 / 4;
+}
+#uiRoot .op.hud .silhouette .armR {
+  grid-column: 3;
+  grid-row: 2;
+}
+#uiRoot .op.hud .silhouette .legL {
+  grid-column: 1;
+  grid-row: 3 / 5;
+}
+#uiRoot .op.hud .silhouette .legR {
+  grid-column: 3;
+  grid-row: 3 / 5;
+}
+#uiRoot .op.hud .gauges {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: 6px 10px;
+  align-items: center;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-2);
+}
+#uiRoot .op.hud .enemy .name {
+  font-family: var(--f-display);
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#uiRoot .op.hud .objective {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--c-text);
+  transition: opacity 600ms;
+}
+#uiRoot .op.hud .objective.minimised {
+  opacity: 0.45;
+}
+#uiRoot .op.hud .warn {
+  position: absolute;
+  left: 50%;
+  top: 14vh;
+  transform: translateX(-50%);
+  font-family: var(--f-display);
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-red);
+  border: 1px solid var(--c-red);
+  padding: 4px 16px;
+  background: rgba(6, 9, 13, 0.7);
+}
+#uiRoot .op.hud .prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 16vh;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 13px;
+  color: var(--c-text);
+  background: rgba(6, 9, 13, 0.7);
+  border: 1px solid var(--c-line);
+  padding: 6px 14px;
+}
+#uiRoot .op.hud .prompt b {
+  color: var(--c-amber);
+  font-weight: 500;
+}
+#uiRoot .op.hud .phase {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--c-amber);
+}
+
+/* --------------------------------------------------------------- results */
+
+#uiRoot .op.results .sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(860px, calc(100vw - 80px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+}
+#uiRoot .op.results .grade {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+#uiRoot .op.results .grade .letter {
+  font-family: var(--f-display);
+  font-size: 96px;
+  line-height: 0.9;
+  font-weight: 700;
+  color: var(--c-amber);
+}
+#uiRoot .op.results .grade .outcome {
+  font-family: var(--f-display);
+  font-size: 30px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+#uiRoot .op.results .lines {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 24px;
+  margin-top: 12px;
+}
+#uiRoot .op.results .line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--c-line-2);
+  opacity: 0;
+  transform: translateY(6px);
+  animation: line-in 320ms ease-out forwards;
+}
+#uiRoot .op.results .line .v {
+  color: var(--c-text);
+}
+#uiRoot .op.results .line .v.plus {
+  color: var(--c-green);
+}
+#uiRoot .op.results .line .v.minus {
+  color: var(--c-red);
+}
+#uiRoot .op.results .actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+}
+@keyframes line-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------ pause/settings */
+
+#uiRoot .op.overlay {
+  background: rgba(6, 9, 13, 0.62);
+  pointer-events: auto;
+}
+#uiRoot .op.overlay .sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 60px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+}
+#uiRoot .op.overlay .sheet .stack {
+  margin-top: 10px;
+}
+#uiRoot .op .settings-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: 8px 12px;
+  align-items: center;
+}
+#uiRoot .op .settings-grid input[type="range"] {
+  width: 100%;
+}
+#uiRoot .op .settings-grid .val {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--c-text-2);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------- alert banner */
+
+#uiRoot .op .alert-band {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  transform: translateX(-50%);
+  border: 1px solid var(--c-red);
+  background: rgba(6, 9, 13, 0.85);
+  padding: 8px 18px;
+  font-family: var(--f-display);
+  font-size: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-red);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+#uiRoot .op .alert-band button {
+  font-size: 13px;
+  padding: 5px 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #uiRoot .op .alert-band::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: var(--c-red);
+    animation: blink 1s steps(2) infinite;
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* -------------------------------------------------------------- credits */
+
+#uiRoot .op.credits .sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100vw - 60px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+}
+#uiRoot .op.credits .sheet li {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* ---------------------------------------------------------- short screens */
+
+@media (max-height: 820px) {
+  #uiRoot .op.title-screen h1 {
+    font-size: clamp(30px, 3.4vw, 42px);
+  }
+  #uiRoot .op.title-screen .menu .stack button {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+  #uiRoot .op.command .sidebar {
+    width: 330px;
+  }
+  #uiRoot .op.bay .left,
+  #uiRoot .op.bay .right {
+    width: 280px;
+  }
+  #uiRoot .op.results .grade .letter {
+    font-size: 72px;
+  }
+}

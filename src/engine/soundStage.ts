@@ -91,6 +91,16 @@ export class SoundStage {
     return this.context !== null;
   }
 
+  /** The context the stage is attached to, or null before audio starts. */
+  get currentContext(): AudioContext | null {
+    return this.context;
+  }
+
+  /** A bus node for sample playback to route through. */
+  busNode(id: AudioBusId): GainNode | null {
+    return this.buses.get(id) ?? null;
+  }
+
   /** Applies the resolved mix. The ambience bed is scaled through its own bus. */
   applyMix(levels: MixerLevels, ducking: readonly DuckRequest[] = []): void {
     const resolved = resolveMix(levels, ducking);

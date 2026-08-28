@@ -95,6 +95,7 @@ import { createStressRegistry } from "../debug/perfScenario";
 import { EffectsView } from "../engine/effectsView";
 import { TitleView } from "../engine/titleView";
 import { PostPipeline } from "../engine/postPipeline";
+import { SampleLibrary } from "../audio/samples";
 import { ImpactDirector } from "../vfx/impactLanguage";
 import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
 import type { SoundscapeInput } from "../audio/soundscape";
@@ -303,6 +304,30 @@ async function captureThumbnail(scene: Scene): Promise<string | null> {
 export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const canvas = root.querySelector<HTMLCanvasElement>("#renderCanvas");
   const uiRoot = root.querySelector<HTMLElement>("#uiRoot");
+  // Interface sound by delegation: every button in every screen, without
+  // any screen knowing about audio. The verb in the action name picks the
+  // sound, so confirming and backing out never sound the same.
+  const uiSoundFor = (button: HTMLButtonElement): "ui.confirm" | "ui.back" | "ui.click" => {
+    const action = `${button.dataset["action"] ?? ""} ${button.textContent ?? ""}`.toLowerCase();
+    if (/deploy|confirm|launch|begin|run|save|new game|continue|take the machine|apply|order/.test(action))
+      return "ui.confirm";
+    if (/exit|back|abort|cancel|later|leave|close|stand down|resume/.test(action)) return "ui.back";
+    return "ui.click";
+  };
+  let lastRollover = 0;
+  uiRoot?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest("button");
+    if (!button || button.disabled) return;
+    samples?.play(uiSoundFor(button));
+  });
+  uiRoot?.addEventListener("pointerover", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest("button");
+    if (!button || button.disabled) return;
+    const now = performance.now();
+    if (now - lastRollover < 60) return;
+    lastRollover = now;
+    samples?.play("ui.rollover");
+  });
   const contextBanner = root.querySelector<HTMLElement>("#contextBanner");
   if (!canvas || !uiRoot || !contextBanner) {
     throw new Error("bootstrap: expected #renderCanvas, #uiRoot, #contextBanner in the root element");
@@ -354,6 +379,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let titleView: TitleView | undefined;
   /** The grade over whichever camera is active. */
   let post: PostPipeline | undefined;
+  /** Recorded transients: impacts, steps, doors, interface. */
+  let samples: SampleLibrary | undefined;
 
   /**
    * The performance instruments. Alive for the whole session and cheap enough
@@ -2128,6 +2155,22 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // there is one clock for the whole game. A browser that refused audio
       // leaves this unattached and everything upstream keeps working silently.
       soundStage = new SoundStage(bed);
+      samples = new SampleLibrary({
+        get context() {
+          return soundStage?.currentContext ?? null;
+        },
+        bus: (id) => soundStage?.busNode(id) ?? null,
+      });
+      samples.warm([
+        "ui.click",
+        "ui.rollover",
+        "ui.confirm",
+        "ui.back",
+        "impact.plate.heavy",
+        "impact.metal.medium",
+        "blast.low",
+      ]);
+      (globalThis as { debugSampleStats?: () => unknown }).debugSampleStats = () => samples?.stats() ?? null;
       if (!soundStage.attach()) soundStage = undefined;
       soundStage?.applyMix(mixerLevels, soundscape.radio.duckRequests());
     });
@@ -4233,6 +4276,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     lastPilotBlocked = frame.blocked;
 
     jaegerView?.update(frame.pose, frame.placement, frame.events, deltaSeconds, frame.camera.mode);
+    // A footfall is a plate hit an octave down with the floor under it.
+    for (const event of frame.events) {
+      if (event.kind === "footfall" || event.kind === "land") {
+        samples?.play("impact.plate.heavy", { rate: 0.42, gain: 0.35 + 0.5 * event.intensity });
+        if (event.intensity > 0.55 || event.kind === "land")
+          samples?.play("blast.low", { gain: 0.25 * event.intensity, rate: 0.8 });
+      } else if (event.kind === "booster") {
+        samples?.play("thruster", { gain: 0.8 });
+      } else if (event.kind === "knockdown") {
+        samples?.play("blast.crunch", { gain: 0.9 });
+        samples?.play("impact.plate.heavy", { rate: 0.5, gain: 1 });
+      }
+    }
 
     if (combatArena) advanceCombat(session, frame.pose, deltaSeconds);
 
@@ -4361,6 +4417,21 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       if (event.damage < 30 || !event.contact) continue;
       const distance = Math.hypot(event.contact.east - pose.east, event.contact.north - pose.north);
       ambientAudio?.impact(Math.min(1, event.damage / 160), distance);
+      // The recorded transient on top of the synthesised floor: plate for the
+      // machine, flesh for the creature, with a crunch when it is a big one.
+      const heavy = event.damage >= 60;
+      if (event.targetId === "jaeger") {
+        samples?.play(heavy ? "impact.plate.heavy" : "impact.metal.medium", {
+          distanceMeters: distance,
+          rate: heavy ? 0.7 : 0.9,
+        });
+      } else {
+        samples?.play(heavy ? "impact.punch.heavy" : "impact.soft.heavy", {
+          distanceMeters: distance,
+          rate: heavy ? 0.65 : 0.85,
+        });
+      }
+      if (heavy) samples?.play("blast.crunch", { distanceMeters: distance, gain: 0.7 });
     }
     if (effectsView) {
       const snapshotForFx = arena.snapshot();

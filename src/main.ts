@@ -1,3 +1,4 @@
+import "./ui/theme.css";
 import { startApp, type AppHandle } from "./app/bootstrap";
 
 const root = document.getElementById("appRoot");
