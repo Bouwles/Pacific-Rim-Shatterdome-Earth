@@ -1265,14 +1265,25 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     sectorRenderer?.rebase();
     movePlayerTo(worldState.playerPosition);
     switchViewMode("ground");
-    startPilot(active.plan.jaegerId);
-    // The incident's own creature, and far enough out that arriving is an
-    // approach through the district rather than a spawn inside a swing.
-    const incident = attackDirector.incident(active.incidentId);
-    const creatureId = incident?.combatants[0]?.kaijuId ?? "kaiju.biped-alpha";
-    spawnTarget(creatureId, production ? 460 : 120);
-    directorNotice = "On station.";
-    refreshWorld();
+    const stepOut = (): void => {
+      if (mission !== active) return;
+      startPilot(active.plan.jaegerId);
+      // The incident's own creature, and far enough out that arriving is an
+      // approach through the district rather than a spawn inside a swing.
+      const incident = attackDirector.incident(active.incidentId);
+      const creatureId = incident?.combatants[0]?.kaijuId ?? "kaiju.biped-alpha";
+      spawnTarget(creatureId, production ? 460 : 120);
+      directorNotice = "On station.";
+      refreshWorld();
+      if (production) enterFightHud();
+    };
+    if (production) {
+      // The district streams in under the carrier before the machine steps
+      // out of it, so the first frame on the ground is a city, not a sea.
+      opTimers.push(window.setTimeout(stepOut, 3200));
+    } else {
+      stepOut();
+    }
   };
 
   /**
@@ -5472,10 +5483,17 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   const enterFight = (): void => {
     clearOpTimers();
-    opCinematic?.dispose();
-    opCinematic = null;
+    opCinematic?.setStage("Arrival // district");
+    opCinematic?.setCaption("LOCCENT", "Feet down in thirty seconds. Hold the line at the shore.");
     mission?.skipCarrier();
     if (mission?.phase === "active" && !pilotSession) beginSortieOnTheGround();
+    else enterFightHud();
+  };
+
+  /** The machine is out: the cinematic goes, the HUD and the director come up. */
+  const enterFightHud = (): void => {
+    opCinematic?.dispose();
+    opCinematic = null;
     opScreen?.dispose();
     opScreen = null;
     opStage = "fight";

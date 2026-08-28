@@ -6,67 +6,81 @@ screenshots in `docs/screenshots/rebuild-baseline/`; final screenshots go in
 `docs/screenshots/rebuild-final/`.
 
 This file is the durable checklist across context compaction. Items are
-marked only when verified in the running production build.
+marked only when verified in the running production build (`npm run build`,
+`npx vite preview`, no `?debug`).
 
 ## Contract notes
 
 - The prompt names canon machines and creatures (Gipsy Danger, Knifehead and
   others). None are implemented; the repository uses original placeholder
   names by design, under the legal boundary in GAME_SPEC.md. Names are kept
-  as they are. The flagship pair for the slice is the Placeholder Sentinel
-  (Mk-0) and the Alpha Biped, the most complete pair.
+  as they are. The flagship pair for the slice is whatever the war raises in
+  a benchmark district, usually the Placeholder Sentinel against a
+  Category 4.
 - No CC0 model of a canon Jaeger or kaiju exists, so both heroes stay
-  procedural, redesigned rather than replaced: shaped armour, joints,
-  pistons, seams, and weight in motion.
+  procedural rigs. Improving their shape is on the list below.
+- Allied machines are out of the production sortie: their plasma fire from
+  behind the player destroyed the Conn-Pod before contact in every sortie.
+  They remain in the debug build until they hold their fire.
+- Debug means the dev server or `?debug=1`. Every Playwright test runs on the
+  dev server, so the old panels stay under test while players never see them.
 
-## Baseline (before)
+## Commits
 
-- Title: rigged machine in a bay, styled menu. Acceptable composition, thin.
-- Shatterdome: three lit box rooms with plated floors; crew are blocky
-  figures; rooms do not connect visually; nothing reads as a headquarters.
-- World map: globe plus a long readout column; every region deployable,
-  most of them empty.
-- Combat: rigs on flat terrain, camera close, boxes for the city, no
-  approach, no escalation structure, no finisher presentation, a wall of
-  HUD rows.
-- Results: a list of lines in the world panel.
-- Audio: synthesised buses, adaptive score and radio exist; no sampled
-  impacts.
+- `5ef37c5` stage one: imported people, kit props, sampled sound, screen
+  modules, encounter director.
+- `321fb75` stage two: the production path end to end.
 
 ## Asset acquisition
 
-- [ ] Characters (CC0, direct download) imported through the GLB pipeline
-- [ ] Sound library (CC0) imported for impacts, UI, machinery
-- [ ] City props (CC0) for the benchmark district
-- [ ] THIRD_PARTY_ASSETS.md with source, licence, modifications, destination
-- [ ] Credits screen carries attribution
+- [x] Characters (CC0 Quaternius via poly.pizza, direct GLB) imported through
+      an asset-container library, height-normalised, role-tinted
+- [x] Sound library (CC0 Kenney impact, sci-fi, interface, UI) through a
+      sample library on the existing buses
+- [x] Props (CC0 Kenney factory, city, roads) staged; palettes restyled to
+      an industrial scheme (originals kept beside them)
+- [x] THIRD_PARTY_ASSETS.md with source, licence, modifications, destination
+- [x] Credits screen carries attribution
 
-## Production path
+## Production path (verified in the build)
 
-- [ ] Title: moving background, Continue with save summary, version, settings
-- [ ] Command: globe as focus, only the benchmark mission selectable
-- [ ] Briefing: location, creature, weather, risk, objectives, rewards, deploy
-- [ ] Bay: live 3D machine with readiness, damage, pilots, weapons around it
-- [ ] Deployment: skippable cinematic
-- [ ] Approach: authored route with radio and environment events
-- [ ] Encounter: opening, spacing, signature ability, disruption, enrage,
-      posture break, finisher, aftermath
-- [ ] Results: graded, animated, skippable, replay and return
-- [ ] Return: persistent damage in the bay, staff react
+- [x] Title: rigged machine in the bay behind, Continue with the newest save
+      summary, New Game, Saves, Settings, Credits, version, update and pack
+      flow in a compact host
+- [x] Dome alert band with Respond once a breach is live (the war is moved
+      forward until a benchmark district has one)
+- [x] Command: globe as the focus, the one live breach as a card with time,
+      weather, damage risk, creature, reward; Review briefing
+- [x] Briefing: situation, objectives, machine, pilots, drift benefit and
+      drawback, rewards, radio; Inspect in the bay; Deploy
+- [x] Bay: live machine on the stage, readiness, six-part structure, pilots,
+      weapons, core figures, machine tabs, Confirm and deploy
+- [x] Deployment: letterboxed cinematic with radio captions, Skip
+- [x] Arrival 460 m from the incident's creature; approach phase with
+      objective and control prompt
+- [ ] Encounter phases observed live through to finisher and aftermath
+- [x] Results: grade, outcome, twelve lines, consequences, Replay, Return
+- [ ] Return to the dome with technicians on the damaged machine
+- [ ] Replay verified with a changed incident
 
 ## People
 
-- [ ] Imported animated characters replace block figures in the Shatterdome
-- [ ] 8 to 15 staff with roles and work targets; alert and damage states
+- [x] Imported animated characters replace block figures in every room
+- [ ] 8 to 15 staff in the command area with distinct work, conversation
+      pairs, alarm reactions
+- [ ] Staff face their work targets; no overlapping posts
 
 ## Shatterdome
 
-- [ ] Command, bay and pilot prep as connected, dense spaces
+- [x] Rooms dressed: consoles, machines, crates, pipes, catwalks, columns,
+      bollards, cranes, hoppers
+- [ ] Three connected spaces with sightlines to the machine
 - [ ] Machine glimpsed before the bay reveal
 
 ## Battlefield
 
-- [ ] One dense coastal district with shoreline, harbour, staging, weather
+- [ ] Dense coastal district with kit buildings near the fight, roads,
+      staging, weather, fires
 - [ ] Staged destruction with persistent aftermath
 
 ## Heroes
@@ -76,22 +90,25 @@ marked only when verified in the running production build.
 
 ## Interface
 
-- [ ] One system: graphite and navy, steel structure, amber action, cyan
-      information, red for danger; condensed type; SVG icons
-- [ ] HUD: centre clear, silhouette damage, reactor and weapon in corners
-- [ ] 1920x1080 and 1366x768 verified
+- [x] One system (theme.css): graphite and navy, steel structure, amber
+      action, cyan information, red danger; condensed display type over mono
+- [x] HUD: centre clear, six-part silhouette, integrity, heat, stamina, weapon
+      and stance, enemy condition and posture, objective, phase, warnings,
+      first-use prompts
+- [ ] 1920x1080 and 1366x768 verified on every screen of the path
+- [x] Interface sounds by verb (confirm, back, click, rollover)
 
 ## Combat
 
 - [ ] Sandbox tuning loop on production actors
-- [ ] Standard chain, heavy, guard/counter, evade, grapple, ranged,
-      signature weapon, finisher, each distinct
-- [ ] Telegraphs physical and audible
+- [ ] Move set reduced to the reliable core; telegraphs physical and audible
+- [ ] Hit stop, recoil, contact effects verified at the contact point
 
 ## Audio
 
-- [ ] Sampled impacts and UI sounds, layered footsteps and attacks
-- [ ] Score states through the whole slice
+- [x] Sampled impacts and footfalls layered on the synthesised floor
+- [x] Score follows the encounter phases (boss phase from the director)
+- [ ] Every scene of the path has an intentional soundscape
 
 ## Gates
 
