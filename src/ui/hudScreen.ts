@@ -111,7 +111,7 @@ export class HudScreen {
     this.reactor = meter("");
     this.heat = meter("amber");
     this.stamina = meter("green");
-    gauges.append(el("span", undefined, "Reactor"), this.reactor.track, el("span", "reactorText", ""));
+    gauges.append(el("span", undefined, "Integrity"), this.reactor.track, el("span", "reactorText", ""));
     gauges.append(el("span", undefined, "Heat"), this.heat.track, el("span", "heatText", ""));
     gauges.append(el("span", undefined, "Stamina"), this.stamina.track, el("span", "staminaText", ""));
     blRow.append(silhouette, gauges);

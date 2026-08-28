@@ -1,4 +1,4 @@
-import { Tools, Vector3, type Scene } from "@babylonjs/core";
+import { Color4, Tools, Vector3, type Scene } from "@babylonjs/core";
 import { createEngineAdapter } from "../engine/engineAdapter";
 import { buildBootScene, type BootScene } from "../engine/scene";
 import { DebugOverlay } from "../debug/overlay";
@@ -6,7 +6,7 @@ import { SimulationKernel } from "../simulation/kernel";
 import { SimulationLoop } from "../simulation/loop";
 import { resolveSeed } from "./config";
 import { AppState, AppStateMachine } from "./appState";
-import { renderErrorScreen, renderLoadingScreen, renderMainMenu, clearScreen } from "../ui/screens";
+import { renderErrorScreen, renderLoadingScreen, clearScreen } from "../ui/screens";
 import { renderGalleryScreen, type GalleryScreenHandle } from "../ui/galleryScreen";
 import { AssetGallery } from "../debug/gallery";
 import { AssetResolver } from "../assets/resolver";
@@ -96,6 +96,23 @@ import { EffectsView } from "../engine/effectsView";
 import { TitleView } from "../engine/titleView";
 import { PostPipeline } from "../engine/postPipeline";
 import { SampleLibrary } from "../audio/samples";
+import {
+  renderAlertBand,
+  renderBay,
+  renderBriefing,
+  renderCinematic,
+  renderCommand,
+  renderCredits,
+  renderPause,
+  renderResults,
+  renderSettings,
+  renderTitle,
+  type CinematicHandle,
+  type ScreenHandle,
+} from "../ui/opScreens";
+import { HudScreen, type LimbId } from "../ui/hudScreen";
+import { EncounterDirector, gradeSortie } from "../game/encounterDirector";
+import type { Incident } from "../world/director";
 import { ImpactDirector } from "../vfx/impactLanguage";
 import { loadVfxSettings, saveVfxSettings, vfxStorage, type VfxSettings } from "../vfx/vfxSettings";
 import type { SoundscapeInput } from "../audio/soundscape";
@@ -166,6 +183,7 @@ import { COMBAT_TICK_SECONDS, createMoveRegistry } from "../data/moves";
 import { createKaijuRegistry } from "../data/kaiju";
 import {
   CombatArena,
+  type ArenaFighterView,
   combatProfileFor,
   jaegerLayout,
   jaegerZones,
@@ -382,6 +400,34 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   /** Recorded transients: impacts, steps, doors, interface. */
   let samples: SampleLibrary | undefined;
 
+  // ------------------------------------------------------------------------
+  // The production path. One dense loop: title, dome, alert, command,
+  // briefing, bay, deployment, approach, fight, results, return. Debug builds
+  // keep every panel; a player build shows only these screens.
+  const production = !debugMode;
+  type OpStage = "command" | "briefing" | "bay" | "deploying" | "fight" | "results";
+  let opStage: OpStage | null = null;
+  let opScreen: ScreenHandle | null = null;
+  let opOverlay: ScreenHandle | null = null;
+  let opAlert: ScreenHandle | null = null;
+  let opBay: TitleView | null = null;
+  let opCinematic: CinematicHandle | null = null;
+  let opTimers: number[] = [];
+  let hud: HudScreen | null = null;
+  let encounter: EncounterDirector | null = null;
+  let encounterSeconds = 0;
+  let encounterEndAt: number | null = null;
+  let opIncidentId: string | null = null;
+  let opMachineId: string | null = null;
+  let opTitleSummary: string | null = null;
+  // Called from the render loop, which starts before the path's helpers below
+  // are defined; assigned once they exist.
+  let updateOpFrame: (deltaSeconds: number) => void = () => undefined;
+  const clearOpTimers = (): void => {
+    for (const id of opTimers) window.clearTimeout(id);
+    opTimers = [];
+  };
+
   /**
    * The performance instruments. Alive for the whole session and cheap enough
    * to leave on: the profiler accumulates a rolling window, the adaptive
@@ -415,6 +461,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     post = softwareRenderer ? undefined : new PostPipeline(bootScene.scene, quality.id);
     (globalThis as { debugPostStatus?: () => unknown }).debugPostStatus = () => post?.status() ?? null;
     (globalThis as { debugScene?: () => unknown }).debugScene = () => bootScene.scene;
+    (globalThis as { debugArena?: () => unknown }).debugArena = () => combatArena?.snapshot() ?? null;
+    (globalThis as { debugEncounter?: () => unknown }).debugEncounter = () => ({
+      stage: opStage,
+      phase: encounter?.current ?? null,
+      history: encounter?.history ?? [],
+      seconds: encounterSeconds,
+      hud: hud !== null,
+    });
     // A read-only debug hook for the browser tests: the pooled-effects claim is
     // "a fight leaves the scene no heavier than it found it", and mesh count is
     // the number that holds it. Reads state, changes nothing.
@@ -574,6 +628,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       profiler.begin("frameHook");
       frameHook?.(deltaMs);
       titleView?.update(Math.min(0.1, deltaMs / 1000));
+      opBay?.update(Math.min(0.1, deltaMs / 1000));
+      updateOpFrame(Math.min(0.1, deltaMs / 1000));
       post?.follow(bootScene.scene.activeCamera);
       profiler.end();
       profiler.endFrame();
@@ -1085,7 +1141,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       pilotIds: [pair[0]!, pair[1]!],
       weaponIds: weaponRegistry.all().map((weapon) => weapon.id),
       consumables: { "consumable.reload": 2 },
-      allyIds: availableAllies(),
+      // The slice is one machine against one creature. Allied fire from behind
+      // the player was taking the Conn-Pod off before contact; the squad stays
+      // in the debug build until it can hold its fire.
+      allyIds: production ? [] : availableAllies(),
       arrivalBearingDeg: incident.originBearingDeg,
       priorities: ["objective.defend"],
     };
@@ -1207,7 +1266,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     movePlayerTo(worldState.playerPosition);
     switchViewMode("ground");
     startPilot(active.plan.jaegerId);
-    spawnTarget();
+    // The incident's own creature, and far enough out that arriving is an
+    // approach through the district rather than a spawn inside a swing.
+    const incident = attackDirector.incident(active.incidentId);
+    const creatureId = incident?.combatants[0]?.kaijuId ?? "kaiju.biped-alpha";
+    spawnTarget(creatureId, production ? 460 : 120);
     directorNotice = "On station.";
     refreshWorld();
   };
@@ -2318,7 +2381,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * what it reports. Both fighters run the same resolver, which is the whole
    * point of the framework.
    */
-  const spawnTarget = (kaijuId = "kaiju.biped-alpha"): void => {
+  const spawnTarget = (kaijuId = "kaiju.biped-alpha", distanceMeters = 120): void => {
     const session = pilotSession;
     if (!session) return;
     clearTarget();
@@ -2331,8 +2394,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     const yaw = (pose.yawDeg * Math.PI) / 180;
     // A hundred and twenty metres ahead: outside every move's reach, so the
     // player has to close the distance rather than starting inside a swing.
-    const east = pose.east + Math.sin(yaw) * 120;
-    const north = pose.north + Math.cos(yaw) * 120;
+    const east = pose.east + Math.sin(yaw) * distanceMeters;
+    const north = pose.north + Math.cos(yaw) * distanceMeters;
 
     // One growth object for the whole fight, read from the roster rather than
     // recomputed per hit.
@@ -3353,7 +3416,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         pilotSession?.setComfort({ reducedMotion: reduced });
         refreshPilot();
       },
-      onExit: stopPilot,
+      onExit: () => (production && opStage === "fight" ? openOpPause() : stopPilot()),
       onAttack: pressAttack,
       onMelee: pressMelee,
       onWeapon: pressWeapon,
@@ -3473,7 +3536,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           combatView?.setDebugVolumes(enabled);
           refreshPilot();
         },
-        onExit: stopPilot,
+        onExit: () => (production && opStage === "fight" ? openOpPause() : stopPilot()),
       },
     );
 
@@ -3598,7 +3661,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         place,
         alertRaised: attackDirector.snapshot().incidents.length > 0 && !combat,
         combatIntensity: intensity,
-        bossPhase: combat !== null && (kaijuView?.finisherOpen ?? false),
+        bossPhase:
+          combat !== null && ((kaijuView?.finisherOpen ?? false) || (encounter?.cue().bossPhase ?? false)),
         outcome: missionResults ? (missionResults.outcome === "success" ? "victory" : "loss") : null,
         repairing: roster
           .all()
@@ -4411,6 +4475,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         jaegerView.addRecoil(Math.min(1, event.damage / 120) * (impactFrame.poseScale > 1 ? 1 : 0.6));
       }
     }
+    if (mine) advanceEncounter(arena, mine, pose, deltaSeconds);
     // Heavy contact is felt through the floor: the low impact the ambience
     // already knows how to play, at the distance the hit actually happened.
     for (const event of events) {
@@ -4937,6 +5002,756 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     refreshWorld();
   };
 
+  /** Moves the clock: weather, the city's recovery, the war. One path for the map and the alert. */
+  const advanceHours = (hours: number): void => {
+    const ticks = Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24);
+    worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
+    // Time passing over a damaged city is time the city spends recovering,
+    // and time the war spends happening.
+    const regionId = worldState.activeRegionId;
+    if (regionId) advanceRegionHours(regionId, hours);
+    updateFleetStrength();
+    advanceWar(ticks);
+    // Skipped time is still time the yards were building and the pad was
+    // costing money.
+    settleMarket();
+    refreshWorld();
+  };
+
+  // ========================================================================
+  // The production path
+  // ========================================================================
+
+  const pilotName = (id: string): string => pilotRegistry.get(id)?.name ?? id;
+  const creatureCategory = (category: string): string =>
+    /^category/i.test(category) ? category.replace(/^category[- ]?/i, "Category ") : `Category ${category}`;
+
+  const hoursLeft = (incident: Incident): string => {
+    const ticks = incident.arrivalTick - (kernel?.tick ?? 0);
+    const hours = (ticks / worldState.environment.clock.dayLengthTicks) * 24;
+    if (hours <= 0) return "Ashore now";
+    return hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`;
+  };
+
+  /** The one mission the slice offers: the first live breach with a city under it. */
+  /** The benchmark districts: flat harbour cities where a machine can stand and a district can burn. */
+  const BENCHMARK_REGIONS: readonly string[] = ["hong-kong", "tokyo", "sydney", "manila"];
+  const opIncident = (): Incident | null => {
+    const live = attackDirector.active();
+    for (const regionId of BENCHMARK_REGIONS) {
+      const match = live.find((incident) => incident.regionId === regionId);
+      if (match) return match;
+    }
+    return null;
+  };
+  /** Anything live at all, for when the benchmark districts stay quiet. */
+  const anyIncident = (): Incident | null =>
+    attackDirector.active().find((incident) => incident.regionId !== "breach-approach") ?? null;
+
+  /** Makes sure the war has produced something to answer, moving the clock if it has not. */
+  const ensureIncident = (): Incident | null => {
+    let incident = opIncident();
+    if (incident) return incident;
+    attackDirector.setCrisisFrequency(3);
+    for (let step = 0; step < 60 && !incident; step += 1) {
+      advanceHours(6);
+      incident = opIncident();
+    }
+    return incident ?? anyIncident();
+  };
+
+  const closeOpStage = (): void => {
+    clearOpTimers();
+    opScreen?.dispose();
+    opScreen = null;
+    opCinematic?.dispose();
+    opCinematic = null;
+    hud?.dispose();
+    hud = null;
+    encounter = null;
+    encounterEndAt = null;
+    if (opBay) {
+      opBay.dispose();
+      opBay = null;
+    }
+    opStage = null;
+  };
+
+  const renderOpTitle = (): void => {
+    const update = pwa?.flow.view();
+    renderTitle(
+      uiRoot,
+      {
+        version: `v${APP_VERSION}`,
+        continueSummary: opTitleSummary,
+        offlineNote: pwa ? "Installable. Works offline after one load." : null,
+        updateMessage: update?.message ?? null,
+        showUpdateOffer: update?.showOffer ?? false,
+        debug: debugMode,
+      },
+      {
+        onContinue: () => stateMachine.transition(AppState.Saves),
+        onNewOperation: () => stateMachine.transition(AppState.Loading),
+        onSettings: () => openOpSettings(),
+        onCredits: () => {
+          opOverlay?.dispose();
+          opOverlay = renderCredits(uiRoot, CREDITS, () => renderOpTitle());
+        },
+        onSaves: () => stateMachine.transition(AppState.Saves),
+        onApplyUpdate: () => void pwa?.accept(),
+        onPostponeUpdate: () => {
+          pwa?.flow.postpone();
+          renderOpTitle();
+        },
+        onDeveloper: (which) => {
+          if (which === "world") stateMachine.transition(AppState.WorldMap);
+          else if (which === "gallery") stateMachine.transition(AppState.AssetGallery);
+          else stateMachine.transition(AppState.Sandbox);
+        },
+      },
+    );
+    // The existing update and pack flow renders into this host.
+    const host = document.createElement("div");
+    host.id = "pwaPanel";
+    uiRoot.querySelector(".title-screen .menu")?.appendChild(host);
+  };
+
+  /** Reads the newest save so Continue can say what it will load. */
+  const refreshTitleSummary = async (): Promise<void> => {
+    try {
+      const slots = await saveService.listSlots();
+      const newest = [...slots].sort((a, b) => b.savedAt - a.savedAt)[0];
+      const summary = newest
+        ? `${newest.metadata.name} · ${new Date(newest.savedAt).toLocaleString()}`
+        : null;
+      if (summary !== opTitleSummary) {
+        opTitleSummary = summary;
+        if (stateMachine.state === AppState.MainMenu) {
+          renderOpTitle();
+          void refreshPwaPanel();
+        }
+      }
+    } catch {
+      opTitleSummary = null;
+    }
+  };
+
+  const CREDITS: readonly string[] = [
+    "Design, code, procedural art, music and sound design: the project author.",
+    "People: animated characters by Quaternius, CC0 1.0, via poly.pizza.",
+    "Factory Kit, City Kit (Commercial), City Kit (Roads): Kenney, CC0 1.0, www.kenney.nl.",
+    "Impact Sounds, Sci-Fi Sounds, Interface Sounds, UI Audio: Kenney, CC0 1.0.",
+    "Type: Barlow and Barlow Condensed by Jeremy Tribby, IBM Plex Mono by IBM, both SIL Open Font License.",
+    "Built on Babylon.js (Apache 2.0) and Vite (MIT).",
+    "Pacific Rim is the property of its owners. This is a private fan work with no affiliation.",
+  ];
+
+  const openOpSettings = (): void => {
+    opOverlay?.dispose();
+    opOverlay = renderSettings(
+      uiRoot,
+      {
+        quality: {
+          value: quality.id,
+          options: qualityRegistry.all().map((preset) => [preset.id, preset.displayName] as const),
+        },
+        adaptive: adaptive.view().enabled,
+        sliders: (["master", "music", "destruction", "ambience", "radio", "ui"] as const).map((bus) => ({
+          id: bus,
+          label:
+            bus === "destruction"
+              ? "Effects"
+              : bus === "ui"
+                ? "Interface"
+                : bus[0]!.toUpperCase() + bus.slice(1),
+          value: Math.round((mixerLevels[bus] ?? 0.8) * 100),
+          min: 0,
+          max: 100,
+        })),
+        toggles: [
+          { id: "subtitles", label: "Subtitles", on: presentation.subtitles },
+          { id: "flashes", label: "Flashes", on: vfxSettings.flashes },
+          { id: "motionBlur", label: "Motion blur", on: vfxSettings.motionBlur },
+        ],
+      },
+      {
+        onQuality: (level) => {
+          adaptive.setManual(level as QualityLevel);
+          applyQuality(level as QualityLevel);
+        },
+        onAdaptive: (on) => {
+          adaptive.levelApplied(quality.id);
+          adaptive.setEnabled(on);
+        },
+        onSlider: (id, value) => applyAudioLevel(id, value / 100),
+        onToggle: (id, on) => {
+          if (id === "subtitles") applyPresentation({ subtitles: on });
+          else if (id === "flashes") applyVfxSettings({ flashes: on });
+          else if (id === "motionBlur") applyVfxSettings({ motionBlur: on });
+        },
+        onClose: () => {
+          opOverlay?.dispose();
+          opOverlay = null;
+        },
+      },
+    );
+  };
+
+  /** The dome's alert: a breach is live, and the floor wants an answer. */
+  const showOpAlert = (): void => {
+    opAlert?.dispose();
+    opAlert = null;
+    const incident = ensureIncident();
+    if (!incident) return;
+    const region = regionRegistry.get(incident.regionId)?.displayName ?? incident.regionId;
+    opAlert = renderAlertBand(uiRoot, `Breach event: ${region}`, () => {
+      opIncidentId = incident.id;
+      stateMachine.transition(AppState.WorldMap);
+    });
+    samples?.play("ui.bong", { gain: 0.8 });
+  };
+
+  const commandDataFor = (incident: Incident | null) => {
+    const readiness = incident ? readinessFor(incident.id) : null;
+    const plan = incident ? planFor(incident.id) : null;
+    const region = incident ? regionRegistry.get(incident.regionId) : undefined;
+    const creature = incident ? kaijuRegistry.get(incident.combatants[0]?.kaijuId ?? "") : undefined;
+    return { readiness, plan, region, creature };
+  };
+
+  const enterCommand = (): void => {
+    closeOpStage();
+    opStage = "command";
+    // The strategic picture sits in the dark, not against a daytime sky.
+    bootScene.scene.clearColor = new Color4(0.03, 0.045, 0.07, 1);
+    const incident = opIncidentId
+      ? (attackDirector.incident(opIncidentId) ?? opIncident())
+      : ensureIncident();
+    opIncidentId = incident?.id ?? null;
+    const { readiness, region, creature } = commandDataFor(incident);
+    const clock = worldState.environment.clock;
+    opScreen = renderCommand(
+      uiRoot,
+      {
+        dateLine: `Day ${clock.dayNumber} · ${String(Math.floor((clock.dayFraction ?? 0) * 24)).padStart(2, "0")}:00 · escalation ${Math.round(attackDirector.snapshot().escalation * 100)}%`,
+        mission: incident
+          ? {
+              id: incident.id,
+              title: `${region?.displayName ?? incident.regionId} breach`,
+              where: `${region?.displayName ?? incident.regionId} // harbour district`,
+              creature: creature?.name ?? incident.combatants[0]?.kaijuId ?? "Unknown",
+              category: creature ? creatureCategory(creature.category) : "Category unknown",
+              timeLeft: hoursLeft(incident),
+              weather: readiness?.weather ?? "unknown",
+              damageRisk: readiness
+                ? readiness.machineIntegrity < 0.7
+                  ? "High"
+                  : readiness.warnings.length > 0
+                    ? "Raised"
+                    : "Moderate"
+                : "Unknown",
+              reward: "Contract, salvage, samples",
+              summary: readiness?.predictedThreat ?? "Signature is climbing. Nothing else is known yet.",
+              deployable: readiness !== null && readiness.refusals.length === 0,
+              refusal: readiness && readiness.refusals.length > 0 ? readiness.refusals.join(" ") : null,
+            }
+          : null,
+        quietLines: readiness?.warnings.slice(0, 3) ?? [],
+        machineLine: readiness
+          ? `Machine integrity ${Math.round(readiness.machineIntegrity * 100)}% · readiness ${Math.round(readiness.readiness * 100)}%`
+          : "No machine assessed.",
+        fundsLine: `Threat ${readiness?.predictedThreat ? "assessed" : "unknown"} · ${attackDirector.active().length} live contact${attackDirector.active().length === 1 ? "" : "s"}`,
+      },
+      {
+        onBrief: () => enterBriefing(),
+        onBack: () => stateMachine.transition(AppState.Shatterdome),
+        onSettings: () => openOpSettings(),
+      },
+    );
+  };
+
+  const enterBriefing = (): void => {
+    const incident = opIncidentId ? attackDirector.incident(opIncidentId) : null;
+    if (!incident) {
+      enterCommand();
+      return;
+    }
+    closeOpStage();
+    opStage = "briefing";
+    const { readiness, plan, region, creature } = commandDataFor(incident);
+    const machineId = opMachineId ?? plan?.jaegerId ?? jaegerRegistry.all()[0]?.id ?? "";
+    const machine = jaegerRegistry.get(machineId);
+    const pilots: readonly [string, string] = plan
+      ? [pilotName(plan.pilotIds[0]), pilotName(plan.pilotIds[1])]
+      : ["Unassigned", "Unassigned"];
+    const benefit = readiness?.driftFactors.find((factor) => factor.delta > 0);
+    const drawback = readiness?.drawbacks[0];
+    opScreen = renderBriefing(
+      uiRoot,
+      {
+        title: `${region?.displayName ?? incident.regionId} breach`,
+        where: `${region?.displayName ?? incident.regionId} // harbour district // approach from ${Math.round(incident.originBearingDeg)}°`,
+        creature: creature?.name ?? "Unknown",
+        category: creature ? creatureCategory(creature.category) : "unknown",
+        creatureNote: readiness?.predictedThreat ?? "Signature still resolving.",
+        weather: readiness?.weather ?? "unknown",
+        water: readiness?.underwater ? "Shoreline flooded; expect deep water" : "Dry approach",
+        risk: readiness
+          ? `${readiness.warnings.length === 0 ? "Moderate" : "Raised"} · ${(readiness.travelSeconds / 3600).toFixed(1)} h flight`
+          : "unknown",
+        primaryObjective: "Stop the creature before it reaches the inner district. Protect the city.",
+        optionalObjective: "Bring it down with the harbour intact and recover a tissue sample.",
+        machine: machine?.name ?? machineId,
+        machineLine: machine
+          ? `${machine.locomotion.heightMeters} m · ${machine.massBudget.massTons} t · ${machine.massBudget.powerOutputMw} MW`
+          : "",
+        pilots,
+        driftLine: readiness ? `${Math.round(readiness.driftStrength * 100)}% strength` : "unknown",
+        benefit: benefit ? `${benefit.label} (+${Math.round(benefit.delta * 100)}%)` : "Steady hands",
+        drawback: drawback
+          ? `${(drawback as { label?: string; text?: string }).label ?? (drawback as { text?: string }).text ?? readiness?.warnings[0] ?? "See readiness"}`
+          : (readiness?.warnings[0] ?? "None reported"),
+        rewards: [
+          "Contract payment on a hold",
+          "Salvage by the tonne",
+          "Tissue samples for research",
+          "Reputation with the district",
+        ],
+        radio: [
+          { who: "LOCCENT", line: "Breach event confirmed. Signature is climbing. Everybody move." },
+          { who: pilots[0], line: "Drift is stable. We are ready when the carrier is." },
+          { who: "Marshal", line: "Hold the shoreline. The district behind you is not a battlefield." },
+        ],
+        refusal: readiness && readiness.refusals.length > 0 ? readiness.refusals.join(" ") : null,
+      },
+      {
+        onBay: () => enterBay(),
+        onDeploy: () => beginDeployment(),
+        onBack: () => enterCommand(),
+      },
+    );
+  };
+
+  const enterBay = (): void => {
+    const incident = opIncidentId ? attackDirector.incident(opIncidentId) : null;
+    closeOpStage();
+    opStage = "bay";
+    closeGlobeView();
+    restoreBootStage();
+    opBay = new TitleView(bootScene);
+    const plan = incident ? planFor(incident.id) : null;
+    const readiness = incident ? readinessFor(incident.id) : null;
+    const machineId = opMachineId ?? plan?.jaegerId ?? jaegerRegistry.all()[0]?.id ?? "";
+    const machine = jaegerRegistry.get(machineId);
+    const record = roster.get(machineId);
+    const components = record?.damage.components ?? [];
+    const limbFor = (needle: RegExp, fallback: number): number => {
+      const entry = components.find((component) => needle.test(component.componentId));
+      return entry ? Math.max(0, entry.health / Math.max(1, entry.maxHealth)) : fallback;
+    };
+    const fitness = roster.canDeploy(machineId);
+    opScreen = renderBay(
+      uiRoot,
+      {
+        machine: machine?.name ?? machineId,
+        designation: machine
+          ? `${machine.markDesignation} · ${machine.locomotion.heightMeters} m · ${machine.massBudget.massTons} t`
+          : "",
+        readinessLine: readiness
+          ? `Readiness ${Math.round(readiness.readiness * 100)}% · integrity ${Math.round(readiness.machineIntegrity * 100)}%`
+          : "Readiness unknown",
+        readiness: readiness?.readiness ?? (fitness.ok ? 1 : 0.3),
+        limbs: [
+          { label: "Conn-Pod", fraction: limbFor(/pod|head/i, 1) },
+          { label: "Torso", fraction: limbFor(/torso|chest/i, 1) },
+          { label: "Left arm", fraction: limbFor(/arm.*left|left.*arm/i, 1) },
+          { label: "Right arm", fraction: limbFor(/arm.*right|right.*arm/i, 1) },
+          { label: "Left leg", fraction: limbFor(/leg.*left|left.*leg/i, 1) },
+          { label: "Right leg", fraction: limbFor(/leg.*right|right.*leg/i, 1) },
+        ],
+        pilots: plan
+          ? [
+              {
+                name: pilotName(plan.pilotIds[0]),
+                role: "Left hemisphere",
+                note: readiness?.driftFactors[0]?.label ?? "",
+              },
+              {
+                name: pilotName(plan.pilotIds[1]),
+                role: "Right hemisphere",
+                note: readiness?.driftFactors[1]?.label ?? "",
+              },
+            ]
+          : [],
+        weapons: (plan?.weaponIds ?? [])
+          .slice(0, 7)
+          .map((id) => ({ name: weaponRegistry.get(id)?.displayName ?? id, state: "Ready" })),
+        stats: machine
+          ? [
+              ["Height", `${machine.locomotion.heightMeters} m`],
+              ["Mass", `${machine.massBudget.massTons} t`],
+              ["Reactor", `${machine.massBudget.powerOutputMw} MW`],
+              ["Walk", `${machine.locomotion.walkSpeedMps} m/s`],
+              ["Run", `${machine.locomotion.runSpeedMps} m/s`],
+            ]
+          : [],
+        repairLine:
+          record && record.damage.components.some((component) => component.health < component.maxHealth)
+            ? "Work order open: structure below nominal."
+            : null,
+        refusal: fitness.ok
+          ? readiness && readiness.refusals.length > 0
+            ? readiness.refusals.join(" ")
+            : null
+          : fitness.message,
+        options: roster.all().map((entry) => ({
+          id: entry.jaegerId,
+          label: jaegerRegistry.get(entry.jaegerId)?.name ?? entry.jaegerId,
+          locked: !roster.canDeploy(entry.jaegerId).ok,
+        })),
+        selectedId: machineId,
+      },
+      {
+        onSelect: (id) => {
+          opMachineId = id;
+          enterBay();
+        },
+        onConfirm: () => beginDeployment(),
+        onBack: () => {
+          opBay?.dispose();
+          opBay = null;
+          openGlobeView();
+          enterBriefing();
+        },
+      },
+    );
+  };
+
+  const CINEMATIC_LINES: readonly { readonly who: string; readonly line: string; readonly at: number }[] = [
+    { who: "LOCCENT", line: "Jumphawks are up. Carrier away.", at: 0 },
+    { who: "Pilot", line: "Drift is holding. Reactor is nominal.", at: 4 },
+    {
+      who: "LOCCENT",
+      line: "Two minutes to the drop. Weather on station is heavy. Everybody hold on.",
+      at: 8,
+    },
+    { who: "Marshal", line: "Hold the shoreline. Bring it back in one piece.", at: 12 },
+  ];
+
+  const beginDeployment = (): void => {
+    const incident = opIncidentId ? attackDirector.incident(opIncidentId) : null;
+    if (!incident) {
+      enterCommand();
+      return;
+    }
+    if (opBay) {
+      opBay.dispose();
+      opBay = null;
+      openGlobeView();
+    }
+    deployTo(incident.id);
+    if (!mission || mission.phase === "closed") {
+      // The deploy refused; the notice says why on the command screen.
+      enterCommand();
+      return;
+    }
+    closeOpStage();
+    opStage = "deploying";
+    samples?.play("thruster", { gain: 1 });
+    opCinematic = renderCinematic(uiRoot, "Deployment // carrier run", () => enterFight());
+    for (const entry of CINEMATIC_LINES) {
+      opTimers.push(
+        window.setTimeout(() => {
+          opCinematic?.setCaption(entry.who, entry.line);
+          soundscape.say("radio.deploy.launch");
+        }, entry.at * 1000),
+      );
+    }
+    opTimers.push(window.setTimeout(() => enterFight(), 16_000));
+  };
+
+  const enterFight = (): void => {
+    clearOpTimers();
+    opCinematic?.dispose();
+    opCinematic = null;
+    mission?.skipCarrier();
+    if (mission?.phase === "active" && !pilotSession) beginSortieOnTheGround();
+    opScreen?.dispose();
+    opScreen = null;
+    opStage = "fight";
+    hud?.dispose();
+    hud = new HudScreen(uiRoot);
+    encounter = new EncounterDirector();
+    encounterSeconds = 0;
+    encounterEndAt = null;
+    const cue = encounter.cue();
+    if (cue.prompt) hud.teach(cue.phase, cue.prompt);
+  };
+
+  const LIMB_PATTERNS: readonly (readonly [LimbId, RegExp])[] = [
+    ["head", /pod|head|conn/i],
+    ["torso", /torso|chest|reactor/i],
+    ["armL", /left.*arm|arm.*left/i],
+    ["armR", /right.*arm|arm.*right/i],
+    ["legL", /left.*leg|leg.*left/i],
+    ["legR", /right.*leg|leg.*right/i],
+  ];
+
+  /** Every frame: the HUD from the fight, and the panels a player build never shows. */
+  updateOpFrame = (deltaSeconds: number): void => {
+    if (!production) return;
+    const world = document.getElementById("worldScreen");
+    if (world && !world.hidden) world.hidden = true;
+    const pilot = document.getElementById("pilotScreen");
+    if (pilot && !pilot.hidden) pilot.hidden = true;
+    if (!hud || opStage !== "fight") return;
+    // The clock the results quote: real seconds on station, not simulation ticks.
+    encounterSeconds += deltaSeconds;
+    const snapshot = combatArena?.snapshot();
+    const machine = snapshot?.fighters.find((fighter) => fighter.id === "jaeger");
+    const creature = snapshot?.fighters.find((fighter) => fighter.id === "kaiju");
+    const damage = pilotDamageState();
+    const limbs = { head: 1, torso: 1, armL: 1, armR: 1, legL: 1, legR: 1 } as Record<LimbId, number>;
+    for (const component of damage?.components ?? []) {
+      for (const [limb, pattern] of LIMB_PATTERNS) {
+        if (pattern.test(component.name)) limbs[limb] = Math.min(limbs[limb], component.percent / 100);
+      }
+    }
+    const creatureHealth = creature
+      ? creature.zones.reduce((sum, zone) => sum + zone.health / Math.max(1, zone.maxHealth), 0) /
+        Math.max(1, creature.zones.length)
+      : 0;
+    const distance =
+      machine && creature ? Math.hypot(creature.east - machine.east, creature.north - machine.north) : null;
+    const cue = encounter?.cue();
+    hud.update(
+      {
+        limbs,
+        reactor: (damage?.integrityPercent ?? 100) / 100,
+        heat: (machine?.heat ?? 0) / 100,
+        stamina: machine ? machine.stamina / 100 : 1,
+        weapon: machine?.wieldingPropId ? "Improvised" : "Fists and plate",
+        ammo: machine ? `${machine.weapons.length} weapon systems` : "",
+        stance: machine
+          ? machine.guarding
+            ? "Guard up"
+            : machine.reaction
+              ? machine.reaction
+              : machine.grapplePhase !== "none" && machine.grapplePhase !== ""
+                ? "Grapple"
+                : "Ready"
+          : "",
+        enemyName: creature?.displayName ?? null,
+        enemyHealth: creatureHealth,
+        enemyPosture: creature ? Math.min(1, creature.poise / 60) : 0,
+        enemyState: creature
+          ? creature.defeated
+            ? "Down"
+            : creature.reaction
+              ? creature.reaction
+              : creature.activeMove
+                ? "Attacking"
+                : "Stalking"
+          : "",
+        objective: cue?.objective ?? "",
+        phase: cue ? cue.phase.toUpperCase() : "",
+        warning: cue?.warning ?? null,
+        prompt: null,
+        distanceMeters: distance,
+      },
+      deltaSeconds,
+    );
+  };
+
+  /** Each combat tick: the director names the phase and the game answers it. */
+  const advanceEncounter = (
+    arena: CombatArena,
+    machine: ArenaFighterView,
+    pose: { readonly east: number; readonly north: number },
+    deltaSeconds: number,
+  ): void => {
+    if (!encounter || opStage !== "fight") return;
+    void deltaSeconds;
+    const creature = arena.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
+    if (!creature) return;
+    const creatureHealth =
+      creature.zones.reduce((sum, zone) => sum + zone.health / Math.max(1, zone.maxHealth), 0) /
+      Math.max(1, creature.zones.length);
+    const machineHealth = (pilotDamageState()?.integrityPercent ?? 100) / 100;
+    const cue = encounter.advance({
+      elapsedSeconds: encounterSeconds,
+      distanceMeters: Math.hypot(creature.east - pose.east, creature.north - pose.north),
+      creatureHealth,
+      creaturePoise: Math.min(1, creature.poise / 60),
+      creatureDefeated: creature.defeated,
+      creatureAbilityUsed: (creature.activeMove ?? "").startsWith("ability."),
+      machineHealth,
+      machineDefeated: machine.defeated,
+      finisherActive:
+        machine.finisherPhase !== "" &&
+        machine.finisherPhase !== "closed" &&
+        machine.finisherPhase !== "idle" &&
+        machine.finisherPhase !== "none",
+      openingWindow: creature.finisherOpen,
+    });
+    if (cue) {
+      if (cue.radioLineId) soundscape.say(cue.radioLineId);
+      if (cue.prompt) hud?.teach(cue.phase, cue.prompt);
+      if (cue.disruption) {
+        // The district gives way: the alert goes to attack, the floor kicks, the sky answers.
+        const incident = opIncidentId ? attackDirector.incident(opIncidentId) : null;
+        if (incident) worldState.setRegionAlert(incident.regionId, "attack", kernel?.tick ?? 0);
+        samples?.play("blast.low", { gain: 1, rate: 0.7 });
+        samples?.play("blast.crunch", { gain: 0.8 });
+        pilotSession?.addImpulse(1);
+      }
+      if (cue.phase === "enrage" || cue.phase === "break")
+        samples?.play("impact.bell", { gain: 0.6, rate: 0.6 });
+      if (cue.phase === "aftermath") encounterEndAt = encounterSeconds + 4;
+      if (cue.phase === "lost") encounterEndAt = encounterSeconds + 3;
+    }
+    if (encounterEndAt !== null && encounterSeconds >= encounterEndAt) {
+      encounterEndAt = null;
+      finishSortie(encounter.current === "lost" ? "lost-contact" : "success");
+    }
+  };
+
+  const finishSortie = (kind: "success" | "aborted" | "lost-contact"): void => {
+    endMission(kind);
+    showOpResults();
+  };
+
+  const showOpResults = (): void => {
+    const results = missionResults;
+    closeOpStage();
+    opStage = "results";
+    if (!results) {
+      enterCommand();
+      return;
+    }
+    const optionalDone = results.objectives.some(
+      (objective) => objective.id !== "objective.defend" && /complete|done|held/i.test(objective.state),
+    );
+    const grade = gradeSortie({
+      outcome: results.outcome,
+      objectiveScore: results.objectiveScore,
+      cityImpact: results.cityImpact,
+      machineDamage: results.machineDamage,
+      optionalDone,
+      seconds: encounterSeconds,
+    });
+    const minutes = Math.floor(encounterSeconds / 60);
+    const seconds = Math.round(encounterSeconds % 60);
+    const plus = (value: number): "plus" | "minus" | "" => (value > 0 ? "plus" : value < 0 ? "minus" : "");
+    opScreen = renderResults(
+      uiRoot,
+      {
+        grade: grade.letter,
+        outcome:
+          results.outcome === "success"
+            ? "Creature down"
+            : results.outcome === "lost-contact"
+              ? "Machine lost"
+              : results.outcome === "aborted"
+                ? "Sortie aborted"
+                : results.outcome,
+        headline: results.summary,
+        lines: [
+          { label: "Time on station", value: `${minutes}:${String(seconds).padStart(2, "0")}`, tone: "" },
+          { label: "Combat grade", value: `${grade.letter} · ${grade.points} pts`, tone: "" },
+          {
+            label: "Objectives",
+            value: `${Math.round(results.objectiveScore * 100)}%`,
+            tone: plus(results.objectiveScore - 0.5),
+          },
+          {
+            label: "City protected",
+            value: `${Math.round((1 - results.cityImpact) * 100)}%`,
+            tone: plus(0.5 - results.cityImpact),
+          },
+          {
+            label: "Machine damage",
+            value: `${Math.round(results.machineDamage * 100)}%`,
+            tone: results.machineDamage > 0.3 ? "minus" : "",
+          },
+          {
+            label: "Repair",
+            value: `${Math.round(results.repairHours)} h`,
+            tone: results.repairHours > 24 ? "minus" : "",
+          },
+          {
+            label: "Salvage",
+            value: `${Math.round(results.salvageTons)} t`,
+            tone: plus(results.salvageTons),
+          },
+          { label: "Samples", value: `${results.samples}`, tone: plus(results.samples) },
+          {
+            label: "Rescued",
+            value: `${results.rescuedThousands.toFixed(1)}k`,
+            tone: plus(results.rescuedThousands),
+          },
+          {
+            label: "Reputation",
+            value: `${results.reputation >= 0 ? "+" : ""}${Math.round(results.reputation)}`,
+            tone: plus(results.reputation),
+          },
+          {
+            label: "Funding",
+            value: `${results.funding >= 0 ? "+" : ""}${Math.round(results.funding).toLocaleString()}`,
+            tone: plus(results.funding),
+          },
+          {
+            label: "Drift link",
+            value: `${results.copilotLink >= 0 ? "+" : ""}${Math.round(results.copilotLink * 100)}%`,
+            tone: plus(results.copilotLink),
+          },
+        ],
+        consequences: [
+          results.repairHours > 0
+            ? `The machine goes into the bay for ${Math.round(results.repairHours)} hours of work.`
+            : "The machine comes back clean.",
+          results.cityImpact > 0.3 ? "The district will be rebuilding for weeks." : "The district stands.",
+          `${optionalDone ? "Optional objective met." : "Optional objective missed."}`,
+        ],
+        canReplay: true,
+      },
+      {
+        onReturn: () => stateMachine.transition(AppState.Shatterdome),
+        onReplay: () => {
+          opIncidentId = null;
+          enterCommand();
+        },
+      },
+    );
+    samples?.play(results.outcome === "success" ? "ui.confirm" : "ui.error", { gain: 0.8 });
+  };
+
+  const openOpPause = (): void => {
+    if (opOverlay) return;
+    opOverlay = renderPause(uiRoot, "Sortie in progress", {
+      onResume: () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+      },
+      onSettings: () => openOpSettings(),
+      onSaves: () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+      },
+      onAbort: () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+        finishSortie("aborted");
+      },
+      onMenu: () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+        endMission("aborted");
+        stateMachine.transition(AppState.MainMenu);
+      },
+    });
+  };
+
   const openWorld = (): void => {
     // The world view replaces the boot stage rather than sharing it.
     bootScene.jaegerPlaceholder.setEnabled(false);
@@ -4986,20 +5801,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           worldState.environment.skipToDayFraction(fraction, worldState.playerPosition.latitudeDeg);
           refreshWorld();
         },
-        onAdvanceHours: (hours: number) => {
-          const ticks = Math.round((worldState.environment.clock.dayLengthTicks * hours) / 24);
-          worldState.environment.advance(ticks, worldState.playerPosition.latitudeDeg);
-          // Time passing over a damaged city is time the city spends recovering,
-          // and time the war spends happening.
-          const regionId = worldState.activeRegionId;
-          if (regionId) advanceRegionHours(regionId, hours);
-          updateFleetStrength();
-          advanceWar(ticks);
-          // Skipped time is still time the yards were building and the pad was
-          // costing money.
-          settleMarket();
-          refreshWorld();
-        },
+        onAdvanceHours: (hours: number) => advanceHours(hours),
         onDiveToggle: () => {
           diving = !diving;
           refreshWorld();
@@ -7151,24 +7953,26 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       titleView.dispose();
       titleView = undefined;
     }
+    if (state !== AppState.Shatterdome) {
+      opAlert?.dispose();
+      opAlert = null;
+    }
+    if (state !== AppState.WorldMap) closeOpStage();
+    opOverlay?.dispose();
+    opOverlay = null;
 
     switch (state) {
       case AppState.MainMenu:
-        renderMainMenu(
-          uiRoot,
-          () => stateMachine.transition(AppState.Loading),
-          () => stateMachine.transition(AppState.AssetGallery),
-          () => stateMachine.transition(AppState.Saves),
-          () => stateMachine.transition(AppState.WorldMap),
-          () => stateMachine.transition(AppState.Sandbox),
-        );
+        renderOpTitle();
         void refreshPwaPanel();
+        void refreshTitleSummary();
         break;
       case AppState.Sandbox:
         openSandbox();
         break;
       case AppState.WorldMap:
         openWorld();
+        if (production) enterCommand();
         break;
       case AppState.Saves:
         void openSaves().catch((error) => {
@@ -7190,6 +7994,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         break;
       case AppState.Shatterdome:
         openShatterdome();
+        if (production) showOpAlert();
         break;
       case AppState.Error:
         // handled at boot-failure site above for the fatal case; runtime errors reuse this.

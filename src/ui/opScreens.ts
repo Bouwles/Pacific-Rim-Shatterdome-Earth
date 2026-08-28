@@ -107,15 +107,17 @@ export function renderTitle(
 ): ScreenHandle {
   const root = screen("title-screen");
   const menu = el("div", "menu");
-  menu.append(el("h1", undefined, "Pacific Rim: Shatterdome Earth"));
+  const title = el("h1");
+  title.append("Pacific Rim:", el("br"), "Shatterdome Earth");
+  menu.append(title);
   menu.append(el("div", "strap", "Pan Pacific Defense Corps // Private fan project"));
   const stack = el("div", "stack");
   if (data.continueSummary) {
     stack.append(button("Continue", "continue", callbacks.onContinue, { primary: true }));
     stack.append(el("div", "save-summary", data.continueSummary));
-    stack.append(button("New operation", "new-game", callbacks.onNewOperation));
+    stack.append(button("New Game", "new-game", callbacks.onNewOperation));
   } else {
-    stack.append(button("New operation", "new-game", callbacks.onNewOperation, { primary: true }));
+    stack.append(button("New Game", "new-game", callbacks.onNewOperation, { primary: true }));
   }
   stack.append(button("Saves", "open-saves", callbacks.onSaves, { ghost: true }));
   stack.append(button("Settings", "settings", callbacks.onSettings, { ghost: true }));
@@ -142,19 +144,6 @@ export function renderTitle(
   }
   menu.append(stack);
   if (data.offlineNote) menu.append(el("div", "notice", data.offlineNote));
-  if (data.updateMessage) {
-    const update = el("div", "update", data.updateMessage);
-    update.dataset["field"] = "pwa-update";
-    if (data.showUpdateOffer) {
-      const row = el("div", "row");
-      row.append(
-        button("Save and update", "pwa-apply", callbacks.onApplyUpdate, { small: true, primary: true }),
-        button("Later", "pwa-later", callbacks.onPostponeUpdate, { small: true, ghost: true }),
-      );
-      update.append(row);
-    }
-    menu.append(update);
-  }
   root.append(menu);
   root.append(el("div", "version", data.version));
   container.replaceChildren(root);
