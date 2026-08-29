@@ -125,8 +125,8 @@ describe("acceleration and braking", () => {
   });
 
   it("gives the agile frame a shorter run-up than the heavy one", () => {
-    const heavy = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 3, contextFor(HEAVY));
-    const agile = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 3, contextFor(AGILE));
+    const heavy = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 1, contextFor(HEAVY));
+    const agile = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 1, contextFor(AGILE));
     expect(agile.speedMps / AGILE.locomotion.runSpeedMps).toBeGreaterThan(
       heavy.speedMps / HEAVY.locomotion.runSpeedMps,
     );
@@ -142,9 +142,9 @@ describe("turn authority", () => {
       1 / 60,
       context,
     );
-    // One frame at 26 deg/s is under half a degree, whichever way round it goes:
+    // One frame at 88 deg/s is under two degrees, whichever way round it goes:
     // 180 degrees away is an exact tie and either direction is correct.
-    expect(Math.abs(signedDelta(step.pose.yawDeg, 0))).toBeLessThan(1);
+    expect(Math.abs(signedDelta(step.pose.yawDeg, 0))).toBeLessThan(3);
     expect(Math.abs(step.headingErrorDeg)).toBeGreaterThan(170);
   });
 
@@ -220,7 +220,7 @@ describe("ground handling", () => {
   it("looks ahead rather than under the feet", () => {
     const drop: GroundQuery = (_east, north) => (north > 100 ? -200 : 0);
     const context = contextFor(STANDARD, drop);
-    const running = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 8, context);
+    const running = drive(spawnPose(0, 0, 0), { forward: 1, run: true }, 2.5, context);
     // At a run the lookahead is a stride ahead: enough to have sampled the drop.
     expect(GROUND_LOOKAHEAD_SECONDS * running.speedMps).toBeGreaterThan(3);
   });

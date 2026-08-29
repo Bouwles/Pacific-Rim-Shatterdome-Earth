@@ -193,7 +193,7 @@ test.describe("Shatterdome interior", () => {
     await page.keyboard.press("KeyE");
     const panel = page.locator(`${PANEL} [data-panel="berth"]`);
     await expect(panel).toBeVisible({ timeout: 10_000 });
-    await expect(panel.locator('[data-field="berth-jaeger"]')).toHaveText(/Placeholder/);
+    await expect(panel.locator('[data-field="berth-jaeger"]')).toHaveText(/Gipsy Danger/);
     await expect(panel.locator('[data-field="berth-asset"]')).toHaveText(/jaeger\..*procedural placeholder/);
   });
 

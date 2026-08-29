@@ -78,6 +78,7 @@ export interface HangarCallbacks {
   onJaegers: () => void;
   onLoadout: () => void;
   onUpgrades: () => void;
+  onRecords: () => void;
   onSettings: () => void;
   onRepair: () => void;
   onMenu: () => void;
@@ -95,6 +96,7 @@ export function renderHangar(
     button("Jaegers", "jaegers", callbacks.onJaegers),
     button("Loadout", "loadout", callbacks.onLoadout),
     button("Upgrades", "upgrades", callbacks.onUpgrades),
+    button("Records", "records", callbacks.onRecords),
     el("div", "spacer"),
     button("Settings", "settings", callbacks.onSettings, { ghost: true }),
     button("Title", "exit-to-menu", callbacks.onMenu, { ghost: true, small: true }),
@@ -510,5 +512,91 @@ export function renderRewards(
     for (const line of sheet.querySelectorAll<HTMLElement>(".line")) line.style.animationDelay = "0ms";
   });
   container.appendChild(root);
+  return { root, dispose: () => root.remove() };
+}
+
+export interface RecordsData {
+  readonly hunts: readonly {
+    readonly title: string;
+    readonly location: string;
+    readonly cleared: number;
+    readonly best: string | null;
+  }[];
+  readonly machines: readonly {
+    readonly name: string;
+    readonly mark: string;
+    readonly level: number;
+    readonly prestige: number;
+    readonly status: string;
+  }[];
+  readonly bestPrestige: number;
+  readonly totalCleared: number;
+}
+
+/** The hunt log and the roster's standing: what has been cleared and by what. */
+export function renderRecords(container: HTMLElement, data: RecordsData, onBack: () => void): ScreenHandle {
+  const root = screen("records");
+  const board = el("div", "panel board");
+  const head = el("div", "row");
+  head.style.justifyContent = "space-between";
+  const heading = el("div");
+  heading.append(el("h3", undefined, "Records"), el("h2", undefined, "Hunt log"));
+  head.append(heading, button("Back to hangar", "back", onBack, { ghost: true, small: true }));
+  board.append(head);
+  const facts = el("div", "facts");
+  facts.append(
+    fact("Hunts cleared", String(data.totalCleared)),
+    fact("Best prestige", String(data.bestPrestige)),
+    fact("Machines", String(data.machines.length)),
+  );
+  board.append(facts);
+
+  const hunts = el("div", "rows");
+  hunts.append(el("h3", undefined, "Hunts"));
+  const huntHead = el("div", "line head");
+  huntHead.append(
+    el("span", undefined, "Kaiju"),
+    el("span", undefined, "Location"),
+    el("span", undefined, "Cleared"),
+    el("span", undefined, "Best"),
+  );
+  hunts.append(huntHead);
+  for (const hunt of data.hunts) {
+    const line = el("div", "line");
+    line.dataset["record"] = hunt.title;
+    line.append(
+      el("span", "name", hunt.title),
+      el("span", undefined, hunt.location),
+      el("span", undefined, String(hunt.cleared)),
+      el("span", hunt.best ? "grade" : undefined, hunt.best ?? "Not yet"),
+    );
+    hunts.append(line);
+  }
+  board.append(hunts);
+
+  const machines = el("div", "rows");
+  machines.append(el("h3", undefined, "Roster"));
+  const machineHead = el("div", "line head");
+  machineHead.append(
+    el("span", undefined, "Jaeger"),
+    el("span", undefined, "Mark"),
+    el("span", undefined, "Level"),
+    el("span", undefined, "Prestige"),
+  );
+  machines.append(machineHead);
+  for (const machine of data.machines) {
+    const line = el("div", "line");
+    line.append(
+      el("span", "name", machine.name),
+      el("span", undefined, machine.mark),
+      el("span", undefined, `${machine.level} · ${machine.status}`),
+      el("span", undefined, String(machine.prestige)),
+    );
+    machines.append(line);
+  }
+  board.append(machines);
+
+  root.append(board);
+  container.replaceChildren(root);
   return { root, dispose: () => root.remove() };
 }

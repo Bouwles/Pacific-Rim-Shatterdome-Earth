@@ -101,14 +101,11 @@ describe("filtering a management table", () => {
 
   it("applies a numeric floor", () => {
     const view = { ...emptyView(MACHINES), minimums: { armour: 0.5 } };
-    expect(filterRows(COLUMNS, view).map((row) => row.name)).toEqual([
-      "Coyote Tango",
-      "Gipsy Danger",
-    ]);
+    expect(filterRows(COLUMNS, view).map((row) => row.name)).toEqual(["Coyote Tango", "Gipsy Danger"]);
   });
 
   it("combines a query and a floor rather than choosing one", () => {
-    const view = { ...emptyView(MACHINES), query: "placeholder", minimums: { armour: 0.9 } };
+    const view = { ...emptyView(MACHINES), query: "coyote", minimums: { armour: 0.9 } };
     expect(filterRows(COLUMNS, view)).toHaveLength(1);
   });
 

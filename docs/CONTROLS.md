@@ -1,6 +1,6 @@
 # CONTROLS.md
 
-Every input the build actually responds to today. Nothing here is aspirational — gameplay controls arrive
+Every input the build actually responds to today. Nothing here is aspirational: gameplay controls arrive
 with the milestone that implements the systems behind them.
 
 ## Camera (boot scene)
@@ -14,7 +14,36 @@ Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the 
 
 ## The production path
 
-A player build (the production build, or the dev server with `?production=1`) shows only the path: title, dome, alert, command, briefing, bay, deployment, fight, results. In a sortie, `Escape` pauses (Resume, Saves, Settings, Abort the sortie, Back to menu) rather than leaving the machine. The first-use prompts on the HUD name the fight keys: `1` jab, `2` cross, `3` heavy, `F` guard, `Space` booster evade, `4` launcher, `5` shoulder, `6` finisher while the opening holds.
+A player build (the production build, or the dev server with `?production=1`) shows only the hunt loop: title, hangar, hunt board, loadout, deployment card, arrival, fight, rewards, hangar. In a hunt, `Escape` pauses (Resume, Saves, Settings, Abort the hunt, Back to menu) rather than leaving the machine. The HUD carries no key prompts; the loadout sheet lists the controls before every deployment.
+
+### Hangar
+
+| Input       | Action                                                      |
+| ----------- | ----------------------------------------------------------- |
+| Left-drag   | Orbit the bay camera around the machine                     |
+| Mouse wheel | Zoom                                                        |
+| Rail        | Hunts, Jaegers, Loadout, Upgrades, Records, Settings, Title |
+| Buttons     | Repair (when work is owed), Upgrade, Change Jaeger, Deploy  |
+
+### In the hunt (action layout)
+
+| Input         | Action                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `W A S D`     | Move; the body turns toward the camera as it moves                                                  |
+| Mouse         | Look (pointer lock on the first click in the canvas)                                                |
+| Left button   | Chain: jab, cross, forward smash, launcher, inside a 0.9 s window                                   |
+| Right button  | Heavy overhead; hold 320 ms and release for the charged haymaker                                    |
+| `F`           | Guard; a press as the hit lands is the parry, with a free counter                                   |
+| `Q`           | Booster dodge (i-frames from tick 2 to 12, 167 ms)                                                  |
+| `E`           | Grab; `E` again throws                                                                              |
+| `1` to `4`    | Plasma Caster, Elbow Rocket, Chain Sword (held), Missiles                                           |
+| `R`           | Ultimate: the plasma-drop finisher on an opening, or the charged haymaker on a full overdrive meter |
+| Middle button | Lock the camera on the creature; again to release                                                   |
+| `Shift`       | Sprint                                                                                              |
+| `Space`       | Booster step                                                                                        |
+| `Escape`      | Pause                                                                                               |
+
+Timings, at 60 ticks a second: jab 7 ticks of startup (117 ms), cross 8 (133 ms), heavy 18 (300 ms) with 28 of recovery (467 ms), forward smash 16, launcher 15, dodge 3 (50 ms), guard raised in 2 with a perfect window through tick 7 (133 ms), parry window through tick 9 (150 ms). Contacts in the chain land 250 to 450 ms apart; the whole chain runs about 2 s.
 
 ## Debug overlay
 
@@ -174,7 +203,7 @@ Escape, by opening a panel, or by pausing.
 ### What the prompt says
 
 The prompt names what is focused and how far away it is. Within reach it becomes
-`E — Use ...`. A sealed bulkhead explains which facility has not been built
+`E : Use ...`. A sealed bulkhead explains which facility has not been built
 rather than staying silent. The same sentence goes to a screen reader through a
 live region, written only when it changes.
 

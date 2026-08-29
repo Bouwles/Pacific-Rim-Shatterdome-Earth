@@ -132,7 +132,7 @@ test.describe("the simulator", () => {
     await expect(page.locator("#pilotScreen")).toBeVisible({ timeout: 15_000 });
     await page.locator('#pilotScreen [data-action="spawn-target"]').click();
     // The creature the scenario named, not the default one.
-    await expect(page.locator('#pilotScreen [data-field="target"]')).toContainText(/Serpent/i, {
+    await expect(page.locator('#pilotScreen [data-field="target"]')).toContainText(/Otachi/i, {
       timeout: 15_000,
     });
   });

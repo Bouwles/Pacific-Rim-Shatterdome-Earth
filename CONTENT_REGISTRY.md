@@ -1022,3 +1022,7 @@ Not content. `JaegerRig` and `CreatureRig` in `src/engine/` are builders paramet
 ## Imported assets (radical rebuild, 2026-08-29)
 
 Not content. People, props, buildings and recordings are CC0 imports listed in THIRD_PARTY_ASSETS.md and loaded through `src/assets/people.ts`, `src/assets/props.ts` and `src/audio/samples.ts`. They stand in named slots; a production model or recording replaces them with no code change. The content freeze holds: no machine, creature, region, currency or system was added.
+
+## Hunts (FMKH rebuild, 2026-08-29)
+
+Not content. `src/data/hunts.ts` is a board over existing creatures and regions: Knifehead at Anchorage (category III, level 1, Standard), Otachi at Hong Kong (category IV, level 8, Hard), Leatherback at Sydney (category IV, level 12, Severe). Each entry names its kaiju id, region id, opening range, arrival hour, damage scales, materials, first clear and repeat rewards, traits and weaknesses. No machine, creature, region, currency or system was added; the content freeze holds. Display names on the roster and the creatures are canon (Gipsy Danger, Cherno Alpha, Striker Eureka, Crimson Typhoon, Coyote Tango, Gipsy Avenger; Knifehead, Otachi, Leatherback) on unchanged ids.

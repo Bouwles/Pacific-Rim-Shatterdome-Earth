@@ -96,7 +96,7 @@ describe("defence in the arena", () => {
     const noSidestep: SpaceQuery = { ...OPEN_GROUND, isClear: (east) => Math.abs(east) < 5 };
     const combat = new CombatArena({ moves: MOVES, fighters: fighters(30), space: noSidestep });
     combat.start("kaiju", "kaiju.claw.swipe");
-    combat.run(22);
+    combat.run(17);
     combat.start("jaeger", "defense.dodge.step");
     const events = combat.run(20);
     expect(events.some((event) => event.type === "evaded")).toBe(true);
@@ -119,7 +119,7 @@ describe("defence in the arena", () => {
   it("leaves the attacker open on a perfect guard, and takes nothing", () => {
     const combat = arena();
     combat.start("kaiju", "kaiju.claw.swipe");
-    combat.run(24);
+    combat.run(18);
     combat.start("jaeger", "defense.block.raise");
     const events = combat.run(12);
     const perfect = events.find((event) => event.type === "perfect-guard");
@@ -132,7 +132,7 @@ describe("defence in the arena", () => {
   it("answers a parry with a free counter", () => {
     const combat = arena();
     combat.start("kaiju", "kaiju.claw.swipe");
-    combat.run(24);
+    combat.run(18);
     combat.start("jaeger", "defense.counter.parry");
     const events = combat.run(20);
     expect(events.some((event) => event.type === "parried")).toBe(true);

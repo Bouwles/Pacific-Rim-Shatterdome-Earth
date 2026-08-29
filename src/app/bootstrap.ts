@@ -116,6 +116,7 @@ import {
   renderComms,
   renderHangar,
   renderHuntBoard,
+  renderRecords,
   renderLoadout,
   renderPicker,
   renderRewards,
@@ -436,7 +437,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let opMachineId: string | null = null;
   let opTitleSummary: string | null = null;
   // The hunt loop: hangar, hunts, loadout, deploying, fight, rewards.
-  type HuntStage = "hangar" | "hunts" | "loadout" | "deploying" | "fight" | "rewards";
+  type HuntStage = "hangar" | "hunts" | "records" | "loadout" | "deploying" | "fight" | "rewards";
   let huntStage: HuntStage | null = null;
   let selectedHuntId: string | null = null;
   let actionHud: ActionHud | null = null;
@@ -473,6 +474,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // Called from the render loop, which starts before the path's helpers below
   // are defined; assigned once they exist.
   let updateOpFrame: (deltaSeconds: number) => void = () => undefined;
+  let updateHuntFrame: (deltaSeconds: number) => void = () => undefined;
   const clearOpTimers = (): void => {
     for (const id of opTimers) window.clearTimeout(id);
     opTimers = [];
@@ -2483,6 +2485,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // One growth object for the whole fight, read from the roster rather than
     // recomputed per hit.
     const growth = roster.growthOf(session.jaeger.id, crewMachineBonus());
+    // A hunt carries its own balance; the sortie and the sandbox keep theirs.
+    const activeHunt = huntStage === "fight" && selectedHuntId ? huntById(selectedHuntId) : undefined;
+    const huntScales = activeHunt?.damageScales ?? { machine: 1, creature: 1 };
     // The creature gets the style guide's creature treatment the moment it has
     // a body: rim accent, roughness floor, edges where the preset affords them.
     queueMicrotask(() => {
@@ -2521,7 +2526,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage, undefined, growth),
           layout: jaegerLayout(session.jaeger),
           finisherThreshold: 0.2,
-          damageScale: growth.damage,
+          damageScale: growth.damage * huntScales.machine,
         },
         {
           id: "kaiju",
@@ -2533,6 +2538,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           zones: kaijuZones(kaiju),
           kaiju,
           finisherThreshold: kaiju.finisherThreshold,
+          damageScale: huntScales.creature,
         },
       ],
     });
@@ -5854,7 +5860,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     pose: { readonly east: number; readonly north: number },
     deltaSeconds: number,
   ): void => {
-    if (!encounter || opStage !== "fight") return;
+    if (!encounter || (opStage !== "fight" && huntStage !== "fight")) return;
     void deltaSeconds;
     const creature = arena.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
     if (!creature) return;
@@ -6087,7 +6093,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     };
   };
 
-  const closeHuntStage = (): void => {
+  const closeHuntStage = (keepBay = false): void => {
     clearOpTimers();
     comms?.dispose();
     comms = null;
@@ -6096,23 +6102,29 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     clearDistrict();
     opScreen?.dispose();
     opScreen = null;
-    if (opBay) {
+    if (opBay && !keepBay) {
       opBay.dispose();
       opBay = null;
     }
     huntStage = null;
   };
 
-  const enterHangar = (): void => {
-    closeOpStage();
-    closeHuntStage();
-    huntStage = "hangar";
+  /** The bay behind every hangar-family screen: built once, kept between them. */
+  const ensureBay = (): void => {
     if (viewMode === "ground") closeGroundView();
     closeGlobeView();
+    if (opBay) return;
     restoreBootStage();
     bootScene.camera.attachControl(canvas, true);
     opBay = new TitleView(bootScene);
     opBay.drift = false;
+  };
+
+  const enterHangar = (): void => {
+    closeOpStage();
+    closeHuntStage(true);
+    huntStage = "hangar";
+    ensureBay();
     const data = hangarData();
     opScreen = renderHangar(
       uiRoot,
@@ -6138,6 +6150,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onJaegers: () => openMachinePicker(),
         onLoadout: () => enterLoadout(selectedHuntId ?? HUNTS[0]?.id ?? ""),
         onUpgrades: () => openUpgrades(),
+        onRecords: () => enterRecords(),
         onSettings: () => openOpSettings(),
         onRepair: () => {
           const machineId = machineForHunt();
@@ -6246,10 +6259,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   };
 
   const enterHunts = (): void => {
-    closeHuntStage();
+    closeHuntStage(true);
     huntStage = "hunts";
-    restoreBootStage();
-    bootScene.scene.clearColor = new Color4(0.03, 0.045, 0.07, 1);
+    ensureBay();
     const data = hangarData();
     opScreen = renderHuntBoard(
       uiRoot,
@@ -6282,14 +6294,49 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     );
   };
 
+  const enterRecords = (): void => {
+    closeHuntStage(true);
+    huntStage = "records";
+    ensureBay();
+    const hunts = [...HUNTS]
+      .sort((a, b) => a.order - b.order)
+      .map((hunt) => ({
+        title: hunt.title,
+        location: hunt.location,
+        cleared: huntRecords[hunt.id]?.cleared ?? 0,
+        best: huntRecords[hunt.id]?.best ?? null,
+      }));
+    const machines = roster.all().map((record) => {
+      const chassis = jaegerRegistry.get(record.chassisId);
+      return {
+        name: chassis?.name ?? record.chassisId,
+        mark: chassis?.markDesignation ?? "",
+        level: record.level,
+        prestige: record.prestige,
+        status: String(record.status),
+      };
+    });
+    opScreen = renderRecords(
+      uiRoot,
+      {
+        hunts,
+        machines,
+        bestPrestige: roster.bestPrestige(),
+        totalCleared: hunts.reduce((sum, hunt) => sum + hunt.cleared, 0),
+      },
+      () => enterHangar(),
+    );
+  };
+
   const enterLoadout = (huntId: string): void => {
     const hunt = huntById(huntId);
     if (!hunt) {
       enterHunts();
       return;
     }
-    closeHuntStage();
+    closeHuntStage(true);
     huntStage = "loadout";
+    ensureBay();
     selectedHuntId = hunt.id;
     const data = hangarData();
     opScreen = renderLoadout(
@@ -6329,8 +6376,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   ];
 
   const beginHunt = (hunt: HuntDefinition): void => {
-    closeHuntStage();
+    closeHuntStage(true);
     huntStage = "deploying";
+    ensureBay();
     selectedHuntId = hunt.id;
     samples?.play("thruster", { gain: 1 });
     comms = renderComms(uiRoot, `Deployment // ${hunt.location}`, () => arriveForHunt(hunt));
@@ -6350,7 +6398,13 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     huntStage = "fight";
     mission = undefined;
     missionResults = null;
+    opBay?.dispose();
+    opBay = null;
     worldState.teleportTo(hunt.regionId, kernel?.tick ?? 0);
+    // The hunt is lit for play: the clock skips forward to the hunt's hour so
+    // the city, the creature and the telegraphs read. Forward only, so time
+    // never runs backwards in a save.
+    worldState.environment.clock.skipToDayFraction(hunt.dayFraction);
     floatingOrigin.forceRebase(worldState.playerPosition);
     sectorRenderer?.rebase();
     movePlayerTo(worldState.playerPosition);
@@ -6485,9 +6539,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       };
     });
 
-  const updateHuntFrame = (deltaSeconds: number): void => {
+  updateHuntFrame = (deltaSeconds: number): void => {
     if (!actionHud || huntStage !== "fight") return;
     huntSeconds += deltaSeconds;
+    encounterSeconds += deltaSeconds;
     const snapshot = combatArena?.snapshot();
     const machine = snapshot?.fighters.find((fighter) => fighter.id === "jaeger");
     const creature = snapshot?.fighters.find((fighter) => fighter.id === "kaiju");

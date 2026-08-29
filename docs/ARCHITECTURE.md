@@ -1749,3 +1749,14 @@ The loop a player sees, in `bootstrap.ts` under the heading "The production path
 - `finishSortie` closes the mission through the existing `endMission` and shows `renderResults` with `gradeSortie`. Return transitions to the dome; Replay clears the incident and returns to command, where `ensureIncident` raises the next one.
 
 People (`src/assets/people.ts`) and props (`src/assets/props.ts`) are asset-container libraries: one load per file, instances per placement, measured bounds for height and fit, disposal of instances and containers. Samples (`src/audio/samples.ts`) decode once per set and play through the stage's buses with take rotation, distance attenuation and a far low-pass.
+
+## The hunt loop (FMKH rebuild, 2026-08-29)
+
+The player path in `src/app/bootstrap.ts` (the section headed by `enterHangar`) is a small state machine beside the application one: `huntStage` is `hangar`, `hunts`, `records`, `loadout`, `deploying`, `fight` or `rewards`, all inside `AppState.WorldMap`. A player build (`production`) enters the hangar from New Game and Continue; a debug build keeps the old world map.
+
+- `ensureBay` keeps one `TitleView` (the live bay) alive behind every hangar-family screen and disposes it at arrival, so the hunt board, the loadout and the deployment card sit over the machine rather than the boot pedestal.
+- `beginHunt` shows the comms card for 6.5 s (three radio lines, Skip) and `arriveForHunt` teleports to the region, skips the world clock forward to the hunt's `dayFraction`, waits for the district to stream, places the machine on the waterfront, dresses buildings and roads from the kits, spawns the creature at `openingRangeMeters` inland and builds the `ActionHud` and the `EncounterDirector`.
+- `spawnTarget` reads the active hunt's `damageScales` into the arena fighters' `damageScale`, so a hunt's balance lives in `src/data/hunts.ts` and the sortie and the sandbox keep theirs.
+- `updateHuntFrame` runs every frame from the render loop (declared as a `let` before the loop, like `updateOpFrame`, because the loop's first frame runs before the rest of the bootstrap body): it feeds the HUD from the arena snapshot and the director's cue, counts damage, hits, perfect guards and combos, and ends the hunt three seconds after either side is defeated.
+- `finishHunt` settles the roster through `roster.completeSortie`, grades the run with `gradeSortie`, records clears and best grades per hunt in local storage (`shatterdome.hunts.v1`) and renders the rewards sheet.
+- Input: `PilotInputSource.setActionLayout(true)` in a player build maps the mouse buttons and the letter keys to the action callbacks; the bootstrap turns them into arena requests (chain, heavy, charged heavy, dodge, grab, abilities, ultimate, parry).

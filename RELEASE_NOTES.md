@@ -2,6 +2,10 @@
 
 First release candidate. Thirty-five milestones, one complete loop: boot, build a complex, take a machine out, fight, come home damaged, repair, research, grow, and keep the save. A private fan project with no affiliation to anybody who owns Pacific Rim; everything in it is original or procedurally generated placeholder work.
 
+## After the candidate: the hunt loop (2026-08-29)
+
+The player path is now a hunt loop: title, hangar, hunt board, loadout, deployment card, arrival, boss fight, rewards, hangar. The first controllable machine arrives inside twenty seconds of launch and the first contact inside thirty. The roster and the creatures carry canon names on unchanged ids, so every save written by the candidate still loads. Details in CHANGELOG.md and FMKH_REBUILD_STATE.md.
+
 ## What the candidate is
 
 The whole core loop works end to end from an empty browser profile, and an automated test walks it in one continuous session: boot, new campaign, a facility ordered and paid for, a manual save, a sortie from alert to carrier to combat, damage taken and billed, results explained line by line, the save intact afterwards, an export downloaded, and the simulator provably walled off from all of it.

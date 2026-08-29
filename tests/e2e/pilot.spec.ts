@@ -46,7 +46,7 @@ test.describe("piloting a Jaeger", () => {
     page.on("pageerror", (error) => consoleErrors.push(error.message));
 
     await takeTheMachineOut(page);
-    await expect(field(page, "machine")).toHaveText(/Mk-/);
+    await expect(field(page, "machine")).toHaveText(/Mark/);
     await expect(field(page, "state")).toHaveText(/idle/);
 
     await hold(page, "w", 2_500);
@@ -136,10 +136,10 @@ test.describe("piloting a Jaeger", () => {
   test("swaps machines from the roster and takes the new profile", async ({ page }) => {
     await takeTheMachineOut(page);
     await page.locator(`${PILOT} [data-field="roster"]`).selectOption("heavy-mk4");
-    await expect(field(page, "machine")).toHaveText(/Bulwark/);
+    await expect(field(page, "machine")).toHaveText(/Cherno Alpha/);
     const heavyCeiling = await number(page, "speed", /of (\d+) m\/s/);
     await page.locator(`${PILOT} [data-field="roster"]`).selectOption("agile-mk5");
-    await expect(field(page, "machine")).toHaveText(/Harrier/);
+    await expect(field(page, "machine")).toHaveText(/Striker Eureka/);
     expect(await number(page, "speed", /of (\d+) m\/s/)).toBeGreaterThan(heavyCeiling);
   });
 

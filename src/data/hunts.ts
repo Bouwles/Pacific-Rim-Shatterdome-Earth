@@ -22,6 +22,15 @@ export interface HuntDefinition {
   readonly weaknesses: readonly string[];
   /** Metres between the machine and the creature when the fight opens. */
   readonly openingRangeMeters: number;
+  /** Local time at arrival as a fraction of the day; the world clock skips forward to it. */
+  readonly dayFraction: number;
+  /**
+   * Multipliers on what each side deals in this hunt. The arena's numbers are
+   * tuned for the long sortie; a hunt is a four to eight minute fight where
+   * the machine takes twenty or thirty hits, so the creature hits softer and
+   * the machine hits harder, more so on the first board.
+   */
+  readonly damageScales: { readonly machine: number; readonly creature: number };
   /** Ordinal on the board; the first hunt is the flagship. */
   readonly order: number;
 }
@@ -42,6 +51,8 @@ export const HUNTS: readonly HuntDefinition[] = [
     traits: ["Blade skull", "Closes fast", "Grabs at close range"],
     weaknesses: ["Posture breaks under heavy hits", "Slow to turn after a lunge"],
     openingRangeMeters: 140,
+    dayFraction: 0.56,
+    damageScales: { machine: 1.2, creature: 0.5 },
     order: 1,
   },
   {
@@ -59,6 +70,8 @@ export const HUNTS: readonly HuntDefinition[] = [
     traits: ["Acid spit at range", "Tail sweep", "Relentless pressure"],
     weaknesses: ["Guard the spit, punish the recovery", "Head is soft after a sweep"],
     openingRangeMeters: 160,
+    dayFraction: 0.74,
+    damageScales: { machine: 1.2, creature: 0.65 },
     order: 2,
   },
   {
@@ -76,6 +89,8 @@ export const HUNTS: readonly HuntDefinition[] = [
     traits: ["Armoured back", "Burrows and resurfaces", "Grapples hard"],
     weaknesses: ["Break the armour with charged heavies", "Dodge the resurface"],
     openingRangeMeters: 150,
+    dayFraction: 0.42,
+    damageScales: { machine: 1.1, creature: 0.8 },
     order: 3,
   },
 ];

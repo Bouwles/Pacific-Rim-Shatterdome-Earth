@@ -8,7 +8,9 @@ You run one Shatterdome. You buy and research Jaegers, pick and develop copilots
 
 The project is built in numbered milestones. Everything listed here actually runs today. Nothing below is a mockup.
 
-- One complete loop: title, Shatterdome, breach alert, command, briefing, bay, deployment, approach, fight, results, return, next alert. A player build shows this path and nothing else
+- One loop, built for immediacy: title with the live bay behind it, the hangar with your Jaeger, a hunt board, a loadout sheet, a six second deployment card, arrival on the waterfront with the kaiju a hundred and forty metres inland, a four to eight minute boss fight with phases, a rewards sheet, and back to the hangar. A player build shows this path and nothing else; the first controllable machine arrives inside twenty seconds of launch
+- Action controls: WASD and mouse look, a four hit chain on the left button, a heavy on the right with a charged version when held, F to guard with a perfect guard window, Q to booster dodge, E to grab and throw, 1 to 4 for the abilities, R for the ultimate, middle mouse to lock, Shift to sprint, Space to booster step
+- Canon names on the roster and the creatures: Gipsy Danger, Cherno Alpha, Striker Eureka, Crimson Typhoon, Coyote Tango, Gipsy Avenger; Knifehead, Otachi, Leatherback. Names only; every model is still an original placeholder rig
 - People are imported animated characters (CC0) with roles, work and reactions; rooms are dressed with kit props; impacts and interface sounds are recorded, not synthesised
 - The fight has a shape: an encounter director names its phases and the HUD, radio, music and district respond
 - Opens on a title composition: a rigged machine in a dark bay under a cold key and a warm lamp, rain, fog and a slow drift, with a styled menu beside it
@@ -16,7 +18,7 @@ The project is built in numbered milestones. Everything listed here actually run
 - One design system across every screen, a grade over every camera on Medium and above, and no debug surface in a player build (the dev server or `?debug=1` brings it back, F3 toggles it)
 - Boots into a real 3D scene, WebGPU when the browser supports it, WebGL otherwise, with no gameplay difference between the two
 - Application state machine covering Boot, MainMenu, Loading, Shatterdome, Deployment, Combat, Results and Error
-- Main menu with a working New Game flow that puts you on the command floor of the Shatterdome, on foot
+- Main menu with New Game and Continue; a player build lands in the hangar, and a debug build can still walk the Shatterdome on foot
 - Deterministic simulation kernel that runs on a fixed timestep, independent of framerate and of the renderer
 - Seeded random number streams, one per subsystem, so runs are reproducible from a single seed
 - Versioned, serializable commands and events with validation that fails loudly and early
@@ -277,6 +279,15 @@ npm run dev
 ```
 
 Then open the address it prints, usually http://localhost:5173.
+
+The dev server is a debug build. To play what a player gets, build it and serve the result:
+
+```
+npm run build
+npm run preview
+```
+
+The dev server shows the same player path with `?production=1` in the address.
 
 Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines, the same cities and the same storm at the same minute. Debug readouts are only present on the dev server or with `?debug=1`; F3 toggles the overlay there. A production build shows none of it.
 
