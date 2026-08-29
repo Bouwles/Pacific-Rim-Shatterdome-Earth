@@ -404,7 +404,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // The production path. One dense loop: title, dome, alert, command,
   // briefing, bay, deployment, approach, fight, results, return. Debug builds
   // keep every panel; a player build shows only these screens.
-  const production = !debugMode;
+  // A player build, or a debug build asked to behave like one so the path can be tested.
+  const production = !debugMode || new URLSearchParams(window.location.search).has("production");
   type OpStage = "command" | "briefing" | "bay" | "deploying" | "fight" | "results";
   let opStage: OpStage | null = null;
   let opScreen: ScreenHandle | null = null;
@@ -1267,12 +1268,28 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     switchViewMode("ground");
     const stepOut = (): void => {
       if (mission !== active) return;
+      // The slice lands on the waterfront and fights inland through the
+      // district, whatever the war's own bearing said.
+      const layout = production ? layoutFor(active.regionId) : null;
+      const region = regionRegistry.get(active.regionId);
+      let inlandBearingDeg: number | null = null;
+      if (layout && region) {
+        const seaward = layout.seawardBearingRadians;
+        const reach = layout.radiusMeters * 0.55;
+        movePlayerTo(
+          localToGeo(
+            { ...region.centre, altitudeMeters: 0 },
+            { east: Math.sin(seaward) * reach, north: Math.cos(seaward) * reach, up: 0 },
+          ),
+        );
+        inlandBearingDeg = ((seaward + Math.PI) * 180) / Math.PI;
+      }
       startPilot(active.plan.jaegerId);
       // The incident's own creature, and far enough out that arriving is an
       // approach through the district rather than a spawn inside a swing.
       const incident = attackDirector.incident(active.incidentId);
       const creatureId = incident?.combatants[0]?.kaijuId ?? "kaiju.biped-alpha";
-      spawnTarget(creatureId, production ? 460 : 120);
+      spawnTarget(creatureId, production ? 460 : 120, inlandBearingDeg);
       directorNotice = "On station.";
       refreshWorld();
       if (production) enterFightHud();
@@ -2392,7 +2409,11 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
    * what it reports. Both fighters run the same resolver, which is the whole
    * point of the framework.
    */
-  const spawnTarget = (kaijuId = "kaiju.biped-alpha", distanceMeters = 120): void => {
+  const spawnTarget = (
+    kaijuId = "kaiju.biped-alpha",
+    distanceMeters = 120,
+    bearingDeg: number | null = null,
+  ): void => {
     const session = pilotSession;
     if (!session) return;
     clearTarget();
@@ -2402,7 +2423,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     // editing this file.
     const kaiju = kaijuRegistry.get(kaijuId) ?? kaijuRegistry.getOrThrow("kaiju.biped-alpha");
     const pose = session.pose;
-    const yaw = (pose.yawDeg * Math.PI) / 180;
+    const yaw = ((bearingDeg ?? pose.yawDeg) * Math.PI) / 180;
     // A hundred and twenty metres ahead: outside every move's reach, so the
     // player has to close the distance rather than starting inside a swing.
     const east = pose.east + Math.sin(yaw) * distanceMeters;
