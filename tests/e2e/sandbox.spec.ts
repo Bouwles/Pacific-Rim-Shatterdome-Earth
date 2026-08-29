@@ -118,7 +118,10 @@ test.describe("the simulator", () => {
     await sandbox(page);
     await field(page, "region").selectOption("sydney");
     await field(page, "creature").selectOption("kaiju.serpent-delta");
-    await page.locator(`${SANDBOX} [data-action="run"]`).click();
+    // Dispatched: in a debug build the diagnostics bar overlaps the bottom of
+    // the simulator sheet, which is a layout nuisance rather than the thing
+    // under test.
+    await page.locator(`${SANDBOX} [data-action="run"]`).dispatchEvent("click");
 
     // The run lands on the world map at the chosen region, which is where a
     // fight is entered from.

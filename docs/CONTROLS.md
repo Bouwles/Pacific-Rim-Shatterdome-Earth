@@ -12,6 +12,10 @@ with the milestone that implements the systems behind them.
 
 Babylon's `ArcRotateCamera` default bindings; the boot scene attaches it to the canvas.
 
+## The production path
+
+A player build (the production build, or the dev server with `?production=1`) shows only the path: title, dome, alert, command, briefing, bay, deployment, fight, results. In a sortie, `Escape` pauses (Resume, Saves, Settings, Abort the sortie, Back to menu) rather than leaving the machine. The first-use prompts on the HUD name the fight keys: `1` jab, `2` cross, `3` heavy, `F` guard, `Space` booster evade, `4` launcher, `5` shoulder, `6` finisher while the opening holds.
+
 ## Debug overlay
 
 Present only on the dev server or with `?debug=1` in the address. A production build renders no diagnostics bar, no transport, no coordinate readouts, and no pilot diagnostics drawer; the pilot panel's systems drawer starts closed there and open in a debug build.

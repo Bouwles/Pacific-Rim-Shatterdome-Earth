@@ -4,6 +4,7 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## What currently works
 
+- **Radical rebuild (2026-08-29).** The production path in `src/app/bootstrap.ts` (the section headed "The production path"), screens in `src/ui/opScreens.ts`, the HUD in `src/ui/hudScreen.ts`, the encounter director in `src/game/encounterDirector.ts`, people in `src/assets/people.ts`, props in `src/assets/props.ts`, samples in `src/audio/samples.ts`, the interface system in `src/ui/theme.css`. Imported CC0 assets are listed in THIRD_PARTY_ASSETS.md. Verified in the production build and by `tests/e2e/productionPath.spec.ts`.
 - **Presentation rescue (2026-08-28).** A title composition in the engine (`src/engine/titleView.ts`), articulated hero rigs (`src/engine/jaegerRig.ts`, `src/engine/creatureRig.ts`) wired into the pilot and combat views under the resolver, a grade over every camera (`src/engine/postPipeline.ts`) gated by quality preset, a relit Shatterdome interior with plating, strip lights and crew figures, a design system in `index.html`, and every debug surface behind the dev server or `?debug=1`. Screens verified in the production build at 1920×1080 and 1366×768 with zero console errors: title, interior, world map, sandbox fight, campaign sortie.
 - `npm install` → `npm run dev` boots a Vite dev server. WebGPU-first engine selection with a WebGL fallback, both paths observed rendering (WebGPU manually, WebGL via Playwright's Chromium).
 - Application state machine with 8 states and a data-driven transition graph; reachable today: Boot → MainMenu → Loading → Shatterdome → MainMenu, MainMenu ↔ AssetGallery / Saves / WorldMap, Shatterdome ↔ Saves, plus Boot → Error on fatal boot failure.
@@ -390,6 +391,10 @@ Read this, [GAME_SPEC.md](GAME_SPEC.md), [ROADMAP.md](ROADMAP.md), and [docs/ARC
 
 ## Known issues
 
+- The production sortie runs without allied machines; their fire from behind the player destroyed the Conn-Pod before contact. The squad returns when the arena keeps friendly projectiles off friendly zones.
+- The hero rigs are still procedural part builds; shaped armour, pistons and seams are the next pass on them. No legal model of a canon machine or creature exists.
+- The encounter's finisher and aftermath phases are pinned by unit test and reachable in play, but the full victory was not captured on the automated pass, which drives the fight only to contact.
+- The Jaeger Bay room shows the machine rig in its berths; the three-space Shatterdome with sightlines to the bay is not built.
 - The chase camera still obeys terrain obstruction, so on a shelf under cliffs (Lima) it closes to a few tens of metres behind the machine. Flat regions frame correctly.
 - The world panel's war section stays visible while piloting so the sortie controls remain reachable; its incident list can be long.
 - Rigs are parameterised by height only; every chassis and creature category shares a silhouette. Distinct silhouettes per definition are content work on the same builders.

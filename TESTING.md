@@ -831,3 +831,10 @@ Production build (`npm run build`, `npx vite preview`), WebGPU, seed 20260930, C
 - Sandbox: run, ground view, take the machine out, begin encounter; machine and creature rigs fight at seven metres, attack poses and flinches visible, creature veins and eyes glow.
 - Unit: `tests/unit/rigs.test.ts` covers part counts, stride, recoil settling, defeated slump, disposal cleanliness and the grade table. `tests/integration/shatterdome.test.ts` passes headless because plating is skipped without a window.
 - Playwright: the full suite run against the dev server; the one pre-existing builder failure (construction wait) remains and is tracked in RELEASE_NOTES.md.
+
+## Radical rebuild evidence (2026-08-29)
+
+- `tests/e2e/productionPath.spec.ts`: on the dev server with `?production=1`, title, New Game, alert band, Respond, command card, briefing, bay, Confirm and deploy, cinematic, Skip, HUD with the approach objective, twelve seconds of driving that closes the distance, three swings, Escape to the pause overlay, Abort, the results sheet with at least ten lines, Return, the next alert band. Zero console errors. A second test walks title, settings, credits, command, briefing and bay at 1366x768 and asserts no horizontal overflow.
+- `tests/unit/encounterDirector.test.ts`: the phase order of the benchmark fight, no repeated cues, a lost machine over everything, the signature no later than forty seconds after contact, and the grade table.
+- `tests/integration/shatterdome.test.ts` still passes with people, props and berth rigs in the rooms: headless engines get stand-ins of the right height and no textures, and disposal returns the scene to what it found.
+- Manual, production build, WebGPU, seed 20260930: the screens in `docs/screenshots/rebuild-final/`. Automated play in the DevTools-driven window ran at about one frame per second because the window was occluded; the full-speed check is the Playwright spec above.

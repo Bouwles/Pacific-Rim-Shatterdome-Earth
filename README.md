@@ -8,6 +8,9 @@ You run one Shatterdome. You buy and research Jaegers, pick and develop copilots
 
 The project is built in numbered milestones. Everything listed here actually runs today. Nothing below is a mockup.
 
+- One complete loop: title, Shatterdome, breach alert, command, briefing, bay, deployment, approach, fight, results, return, next alert. A player build shows this path and nothing else
+- People are imported animated characters (CC0) with roles, work and reactions; rooms are dressed with kit props; impacts and interface sounds are recorded, not synthesised
+- The fight has a shape: an encounter director names its phases and the HUD, radio, music and district respond
 - Opens on a title composition: a rigged machine in a dark bay under a cold key and a warm lamp, rain, fog and a slow drift, with a styled menu beside it
 - Machines and creatures are articulated rigs built from parts that walk, swing, guard, flinch and go down, standing in until a real model arrives through the resolver
 - One design system across every screen, a grade over every camera on Medium and above, and no debug surface in a player build (the dev server or `?debug=1` brings it back, F3 toggles it)

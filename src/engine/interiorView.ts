@@ -19,11 +19,12 @@ import type { AssetResolver, ResolvedAsset } from "../assets/resolver";
 import type { AssetManifest } from "../assets/manifest";
 import type { ContentRegistry } from "../data/registry";
 import type { QualityPreset } from "../data/quality";
-import type { InteriorRoom, ObstacleKind, InteractableKind } from "../shatterdome/interiorLayout";
+import type { InteriorRoom, ObstacleKind, InteractableKind, RoomPoint } from "../shatterdome/interiorLayout";
 import { activeStaffPoses, shiftLoadFor } from "../shatterdome/staff";
 import { ON_FOOT, eyeHeightOf, type OnFootPose } from "../shatterdome/onFoot";
 import { PeopleLibrary, type Person, type PersonModelId } from "../assets/people";
 import { PropLibrary, type PlacedProp, type PropPlacement } from "../assets/props";
+import { JaegerRig } from "./jaegerRig";
 
 /**
  * The Shatterdome interior, drawn.
@@ -101,6 +102,21 @@ const INTERACTABLE_MODELS: Readonly<Partial<Record<InteractableKind, readonly st
   "conn-pod": ["machine-fortified"],
 };
 
+/** The nearest usable fixture to a point, for a worker to face. */
+function nearestFixture(room: InteriorRoom, x: number, z: number, withinMeters: number): RoomPoint | null {
+  let best: RoomPoint | null = null;
+  let bestDistance = withinMeters;
+  for (const entry of room.interactables) {
+    if (entry.kind !== "terminal" && entry.kind !== "staff-post" && entry.kind !== "conn-pod") continue;
+    const distance = Math.hypot(entry.position.x - x, entry.position.z - z);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = entry.position;
+    }
+  }
+  return best;
+}
+
 const INTERACTABLE_COLOURS: Readonly<Record<InteractableKind, readonly [number, number, number]>> = {
   terminal: [0.25, 0.7, 0.9],
   "staff-post": [0.3, 0.32, 0.36],
@@ -176,6 +192,10 @@ export class InteriorView {
   /** The dressing: imported kit pieces standing in for the collision boxes. */
   private readonly props: PropLibrary;
   private readonly roomProps: PlacedProp[] = [];
+  /** Machines standing in the berths, when no real model has arrived for them. */
+  private readonly berthRigs: JaegerRig[] = [];
+  private alertSince: number | null = null;
+  private roomSeconds = 0;
   private readonly crew: Array<{ readonly person: Person; readonly slot: number }> = [];
   private crewCapacity = 0;
   private lastUpdateMs: number | null = null;
@@ -291,11 +311,37 @@ export class InteriorView {
       drawn += 1;
       person.root.setEnabled(true);
       person.root.position.set(staff.x, 0, staff.z);
-      person.root.rotation.y = (staff.yawDeg * Math.PI) / 180;
-      person.play(staff.activity === "walking" ? "walk" : staff.activity === "working" ? "work" : "idle");
+      let yaw = (staff.yawDeg * Math.PI) / 180;
+      if (staff.activity === "working") {
+        // Face the console being worked, not the room in general.
+        const station = nearestFixture(room, staff.x, staff.z, 4.5);
+        if (station) yaw = Math.atan2(station.x - staff.x, station.z - staff.z);
+      }
+      person.root.rotation.y = yaw;
+      const alertAge = this.alertSince === null ? null : this.roomSeconds - this.alertSince;
+      if (alertAge !== null && alertAge < 2.4) {
+        person.play("react", false);
+      } else if (alertAge !== null && staff.activity === "idle") {
+        // An alert has everyone at a station; nobody stands around.
+        person.play("work");
+      } else {
+        person.play(staff.activity === "walking" ? "walk" : staff.activity === "working" ? "work" : "idle");
+      }
     }
     this.people.update(deltaSeconds);
+    this.roomSeconds += deltaSeconds;
+    for (const rig of this.berthRigs)
+      rig.update({ timeSeconds: this.roomSeconds, speedMps: 0 }, deltaSeconds);
     this.staffDrawnValue = drawn;
+  }
+
+  /** An alarm: the crew flinch, then everyone is at a station until it clears. */
+  setAlert(on: boolean): void {
+    if (on) {
+      if (this.alertSince === null) this.alertSince = this.roomSeconds;
+    } else {
+      this.alertSince = null;
+    }
   }
 
   stats(): InteriorViewStats {
@@ -350,6 +396,8 @@ export class InteriorView {
     this.crew.length = 0;
     for (const prop of this.roomProps) prop.dispose();
     this.roomProps.length = 0;
+    for (const rig of this.berthRigs) rig.dispose();
+    this.berthRigs.length = 0;
     this.crewCapacity = 0;
     this.staffDrawnValue = 0;
     this.staffOnShiftValue = 0;
@@ -854,6 +902,16 @@ export class InteriorView {
       resolved.root.rotation = new Vector3(0, Math.PI, 0);
       this.resolvedAssets.push(resolved);
       this.gpuBytes += 256 * 1024;
+      if (resolved.origin === "generator") {
+        // The generator's stand-in is a box; the rig is a machine. Same
+        // transform, same replacement contract when a real model arrives.
+        resolved.root.setEnabled(false);
+        const rig = new JaegerRig(this.scene, manifest.nominalHeightMeters, `berth.${index}.rig`);
+        rig.root.parent = this.root;
+        rig.root.position.copyFrom(resolved.root.position);
+        rig.root.rotation.copyFrom(resolved.root.rotation);
+        this.berthRigs.push(rig);
+      }
     }
   }
 }

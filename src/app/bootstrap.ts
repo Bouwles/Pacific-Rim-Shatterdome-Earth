@@ -111,6 +111,7 @@ import {
   type ScreenHandle,
 } from "../ui/opScreens";
 import { HudScreen, type LimbId } from "../ui/hudScreen";
+import { PropLibrary, type PlacedProp } from "../assets/props";
 import { EncounterDirector, gradeSortie } from "../game/encounterDirector";
 import type { Incident } from "../world/director";
 import { ImpactDirector } from "../vfx/impactLanguage";
@@ -421,6 +422,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let opIncidentId: string | null = null;
   let opMachineId: string | null = null;
   let opTitleSummary: string | null = null;
+  /** Kit buildings standing on the blocks around the fight. */
+  let districtProps: PropLibrary | null = null;
+  let districtPlaced: PlacedProp[] = [];
   // Called from the render loop, which starts before the path's helpers below
   // are defined; assigned once they exist.
   let updateOpFrame: (deltaSeconds: number) => void = () => undefined;
@@ -1275,7 +1279,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       let inlandBearingDeg: number | null = null;
       if (layout && region) {
         const seaward = layout.seawardBearingRadians;
-        const reach = layout.radiusMeters * 0.55;
+        const reach = layout.radiusMeters * 0.42;
         movePlayerTo(
           localToGeo(
             { ...region.centre, altitudeMeters: 0 },
@@ -1285,6 +1289,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         inlandBearingDeg = ((seaward + Math.PI) * 180) / Math.PI;
       }
       startPilot(active.plan.jaegerId);
+      if (layout && region) dressDistrict(layout, region.centre);
       // The incident's own creature, and far enough out that arriving is an
       // approach through the district rather than a spawn inside a swing.
       const incident = attackDirector.incident(active.incidentId);
@@ -5054,6 +5059,29 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // The production path
   // ========================================================================
 
+  const BUILDINGS: readonly string[] = [
+    "building-a",
+    "building-b",
+    "building-c",
+    "building-d",
+    "building-e",
+    "building-f",
+    "building-g",
+    "building-h",
+    "building-i",
+    "building-j",
+    "building-k",
+    "building-l",
+    "building-m",
+    "building-n",
+  ];
+  const SKYSCRAPERS: readonly string[] = [
+    "building-skyscraper-a",
+    "building-skyscraper-b",
+    "building-skyscraper-c",
+    "building-skyscraper-d",
+    "building-skyscraper-e",
+  ];
   const pilotName = (id: string): string => pilotRegistry.get(id)?.name ?? id;
   const creatureCategory = (category: string): string =>
     /^category/i.test(category) ? category.replace(/^category[- ]?/i, "Category ") : `Category ${category}`;
@@ -5092,8 +5120,61 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     return incident ?? anyIncident();
   };
 
+  const clearDistrict = (): void => {
+    for (const prop of districtPlaced) prop.dispose();
+    districtPlaced = [];
+  };
+
+  /**
+   * Stands kit buildings on the blocks nearest the arrival: the box towers
+   * remain the city's bones; these are the faces the fight is seen against.
+   */
+  const dressDistrict = (layout: CityLayout, centre: GeoPosition): void => {
+    clearDistrict();
+    if (typeof window === "undefined") return;
+    districtProps ??= new PropLibrary(bootScene.scene);
+    const here = floatingOrigin.toLocal(worldState.playerPosition);
+    const candidates = layout.blocks
+      .map((block) => {
+        const local = floatingOrigin.toLocal(
+          localToGeo({ ...centre, altitudeMeters: 0 }, { east: block.east, north: block.north, up: 0 }),
+        );
+        return { block, local, distance: Math.hypot(local.east - here.east, local.north - here.north) };
+      })
+      .filter((entry) => entry.distance < 1400)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 72);
+    const placements = candidates.map(({ block, local }, index) => {
+      const tall = block.heightMeters >= 90;
+      const pool = tall ? SKYSCRAPERS : BUILDINGS;
+      const model = pool[(index * 7 + block.towerCount) % pool.length] ?? "building-a";
+      return {
+        kit: "city" as const,
+        model,
+        x: local.east,
+        // Seated a little into the slope so a block on a hillside does not float.
+        y: (localGroundHeight(local.east, local.north) ?? local.up) - Math.max(4, block.heightMeters * 0.06),
+        z: local.north,
+        yawDeg: (block.rotationRadians * 180) / Math.PI,
+        fit: {
+          width: block.widthMeters * 0.9,
+          depth: block.depthMeters * 0.9,
+          height: Math.max(18, block.heightMeters),
+        },
+      };
+    });
+    void districtProps.placeAll(placements).then((placed) => {
+      if (opStage !== "fight" && opStage !== "deploying") {
+        for (const prop of placed) prop.dispose();
+        return;
+      }
+      districtPlaced.push(...placed);
+    });
+  };
+
   const closeOpStage = (): void => {
     clearOpTimers();
+    clearDistrict();
     opScreen?.dispose();
     opScreen = null;
     opCinematic?.dispose();
@@ -5240,6 +5321,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       opIncidentId = incident.id;
       stateMachine.transition(AppState.WorldMap);
     });
+    interiorView?.setAlert(true);
     samples?.play("ui.bong", { gain: 0.8 });
   };
 
@@ -8092,6 +8174,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       titleView = undefined;
       post?.dispose();
       post = undefined;
+      districtProps?.dispose();
+      districtProps = null;
       effectsView?.dispose();
       soundStage?.dispose();
       ambientAudio?.dispose();

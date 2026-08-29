@@ -1018,3 +1018,7 @@ id not listed here.
 ## Hero rigs (rescue pass, 2026-08-28)
 
 Not content. `JaegerRig` and `CreatureRig` in `src/engine/` are builders parameterised by the definition's height, used by the pilot view, the combat view and the title. No Jaeger, kaiju, region or system was added; the content freeze holds. A production GLB dropped into `public/assets/models` still replaces a rig through the resolver with no code change; the generator's stand-in is kept attached for its sockets and hidden.
+
+## Imported assets (radical rebuild, 2026-08-29)
+
+Not content. People, props, buildings and recordings are CC0 imports listed in THIRD_PARTY_ASSETS.md and loaded through `src/assets/people.ts`, `src/assets/props.ts` and `src/audio/samples.ts`. They stand in named slots; a production model or recording replaces them with no code change. The content freeze holds: no machine, creature, region, currency or system was added.

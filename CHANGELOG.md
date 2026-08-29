@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-29, Radical rebuild: one dense loop
+
+The systems were complete and the game still read as a collection of placeholders. This pass rebuilds the player-facing path around one 15 to 20 minute loop and hides everything that is not part of it from a player build. Breadth is frozen: no new machines, creatures, regions, currencies or systems. Every golden hash is untouched. Saves are unchanged.
+
+- People. The crew are imported animated characters (CC0, Quaternius via poly.pizza) loaded once per model and instanced per post, height-normalised, tinted by role, crossfading between idle, walk, work, react and wave. They face the console they work, flinch when an alert lands and go to stations after it. The box figures are gone from every room.
+- Props. Rooms are dressed from Kenney's CC0 factory kit: consoles for terminals, machines and crates for obstacles, pipes and catwalks and columns on the walls, bollards at doors, a crane and hoppers in the big bays. The kit palette is restyled to painted steel and safety amber; the untouched original sits beside it. The berths hold the machine rig rather than a box.
+- Sound. Kenney's CC0 impact, sci-fi and interface recordings play through a sample library on the existing buses: plate hits, footfalls an octave down, thrusters, knockdowns, crunches, a bell for the break, and interface clicks that sound different for confirming, backing out and everything else.
+- The path. Title with Continue and the newest save summary; the dome raises an alert band once the war has a breach in a benchmark district; the command screen puts the globe first with the one live breach as a card; a briefing sheet; the bay with the live machine, structure, pilots, weapons, core figures and machine tabs; a letterboxed deployment cinematic with radio captions and Skip; arrival on the district's waterfront after it has streamed in; an approach with objective and control prompt, the creature 460 m inland; a corner HUD with a six-part limb silhouette; an encounter director that names opening, spacing, signature, disruption, enrage, break, finisher and aftermath and answers each with objective, warning, radio, music and a district power failure; a graded results sheet with consequences, Replay and Return; the next alert on return.
+- The district. Kit buildings from the city kit stand on the blocks nearest the arrival, seated into the slope, so the fight is seen against faces rather than boxes.
+- Interface. One system in `src/ui/theme.css`: graphite and navy, steel structure, amber for action, cyan for information, red for danger, Barlow Condensed over IBM Plex Mono, cropped corners and brackets. Every button has hover, focus, press and disabled states. Escape in a sortie pauses with Resume, Saves, Settings, Abort and Back to menu.
+- Hidden from players. The world panel, the pilot panel, the asset gallery, the simulator, the world map entry and every diagnostic live behind the dev server or `?debug=1`. Allied machines are out of the production sortie: their plasma fire from behind the player destroyed the Conn-Pod before contact in every sortie tried.
+- Tests. `tests/e2e/productionPath.spec.ts` walks the path at full speed with `?production=1` on the dev server, title to results and back, and checks every screen fits 1366x768. `tests/unit/encounterDirector.test.ts` pins the phase order and the grade.
+
 ## 2026-08-28, Rescue pass: the look of a game
 
 The systems were finished; the game did not look like one. This pass is presentation, feel and cohesion, with no new content and no simulation change (every golden hash is untouched).

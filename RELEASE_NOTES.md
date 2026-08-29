@@ -50,7 +50,7 @@ Headless stress runs deterministic in the suite: four combatants (192 events), a
 ## Known issues
 
 - Berths, the pilot picker and the world panel list chassis rather than owned machines; a machine bought mid-campaign has a full service record but no berth of its own to be inspected at.
-- Allied machines fight but have no visible mesh beside you.
+- Allied machines fight in the debug build only; in the production sortie they are held back because their fire from behind the player destroyed the Conn-Pod before contact.
 - The co-op guest window is a readout, not a rendered view, and WebRTC between two physically separate machines is implemented but has never been exercised across a real network.
 - The sandbox validates waves, mutations, city damage presets and water states that the running fight does not apply yet.
 - Facility module slots exist and count, but nothing can be fitted into them.
