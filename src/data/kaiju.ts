@@ -256,7 +256,7 @@ const KAIJU: readonly KaijuDefinition[] = [
   },
   {
     id: "kaiju.biped-alpha",
-    name: "Alpha Biped",
+    name: "Knifehead",
     category: "category-3",
     heightMeters: 82,
     massTons: 3_400,
@@ -392,7 +392,7 @@ const KAIJU: readonly KaijuDefinition[] = [
   },
   {
     id: "kaiju.serpent-delta",
-    name: "Delta Serpent",
+    name: "Otachi",
     category: "category-4",
     heightMeters: 64,
     massTons: 2_600,
@@ -504,7 +504,7 @@ const KAIJU: readonly KaijuDefinition[] = [
   },
   {
     id: "kaiju.burrower-sigma",
-    name: "Sigma Burrower",
+    name: "Leatherback",
     category: "category-4",
     heightMeters: 58,
     massTons: 4_100,

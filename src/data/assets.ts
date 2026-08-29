@@ -62,7 +62,7 @@ function boxCollision(width: number, height: number, depth: number) {
 const MANIFESTS: readonly AssetManifest[] = [
   {
     id: "jaeger.placeholder-mk0",
-    displayName: "Placeholder Sentinel",
+    displayName: "Gipsy Danger",
     assetClass: "jaeger",
     source: { url: null, format: "glb" },
     fallbackGenerator: { id: "biped", params: { heightMeters: 75, shoulderRatio: 0.3, bulk: 1 } },

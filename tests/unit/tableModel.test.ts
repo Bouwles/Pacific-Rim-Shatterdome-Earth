@@ -18,8 +18,8 @@ interface Machine {
 }
 
 const MACHINES: readonly Machine[] = [
-  { name: "Placeholder Ironclad", price: 2_900_000, upkeep: 6_200, armour: 0.95 },
-  { name: "Placeholder Sentinel", price: 900_000, upkeep: 4_100, armour: 0.6 },
+  { name: "Coyote Tango", price: 2_900_000, upkeep: 6_200, armour: 0.95 },
+  { name: "Gipsy Danger", price: 900_000, upkeep: 4_100, armour: 0.6 },
   { name: "Placeholder Racer", price: 7_800_000, upkeep: 11_400, armour: 0.3 },
 ];
 
@@ -57,7 +57,7 @@ describe("sorting a management table", () => {
 
   it("sorts text alphabetically", () => {
     const sorted = sortRows(COLUMNS, MACHINES, "name", "ascending");
-    expect(sorted[0]!.name).toBe("Placeholder Ironclad");
+    expect(sorted[0]!.name).toBe("Coyote Tango");
   });
 
   it("leaves the order alone when nothing is sorted by", () => {
@@ -102,8 +102,8 @@ describe("filtering a management table", () => {
   it("applies a numeric floor", () => {
     const view = { ...emptyView(MACHINES), minimums: { armour: 0.5 } };
     expect(filterRows(COLUMNS, view).map((row) => row.name)).toEqual([
-      "Placeholder Ironclad",
-      "Placeholder Sentinel",
+      "Coyote Tango",
+      "Gipsy Danger",
     ]);
   });
 
@@ -129,7 +129,7 @@ describe("comparing against what you already have", () => {
   it("knows that a lower price is better and a higher armour is better", () => {
     const owned = MACHINES[0]!;
     const table = buildTable(COLUMNS, emptyView(MACHINES), owned);
-    const cheaper = table.find((entry) => entry.row.name === "Placeholder Sentinel")!;
+    const cheaper = table.find((entry) => entry.row.name === "Gipsy Danger")!;
     expect(cheaper.cells.find((cell) => cell.columnId === "price")?.comparison).toBe("better");
     expect(cheaper.cells.find((cell) => cell.columnId === "armour")?.comparison).toBe("worse");
 

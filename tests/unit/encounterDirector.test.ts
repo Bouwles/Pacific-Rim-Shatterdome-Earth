@@ -33,13 +33,14 @@ describe("the encounter director", () => {
     feed(input({ elapsedSeconds: 1, distanceMeters: 500 }));
     feed(input({ elapsedSeconds: 10, distanceMeters: 200 }));
     feed(input({ elapsedSeconds: 30, distanceMeters: 60 }));
-    feed(input({ elapsedSeconds: 55, distanceMeters: 60, creatureHealth: 0.8 }));
-    feed(input({ elapsedSeconds: 70, distanceMeters: 60, creatureHealth: 0.75 }));
-    feed(input({ elapsedSeconds: 80, distanceMeters: 60, creatureHealth: 0.6 }));
-    feed(input({ elapsedSeconds: 95, distanceMeters: 60, creatureHealth: 0.55 }));
-    feed(input({ elapsedSeconds: 110, distanceMeters: 40, creatureHealth: 0.4 }));
-    feed(input({ elapsedSeconds: 120, distanceMeters: 30, creatureHealth: 0.3, openingWindow: true }));
-    feed(input({ elapsedSeconds: 124, distanceMeters: 30, creatureHealth: 0.3, finisherActive: true }));
+    feed(input({ elapsedSeconds: 55, distanceMeters: 60, creatureHealth: 0.68 }));
+    feed(input({ elapsedSeconds: 70, distanceMeters: 60, creatureHealth: 0.62 }));
+    feed(input({ elapsedSeconds: 80, distanceMeters: 60, creatureHealth: 0.5 }));
+    feed(input({ elapsedSeconds: 95, distanceMeters: 60, creatureHealth: 0.48 }));
+    feed(input({ elapsedSeconds: 110, distanceMeters: 40, creatureHealth: 0.35 }));
+    feed(input({ elapsedSeconds: 116, distanceMeters: 40, creatureHealth: 0.12 }));
+    feed(input({ elapsedSeconds: 120, distanceMeters: 30, creatureHealth: 0.1, openingWindow: true }));
+    feed(input({ elapsedSeconds: 124, distanceMeters: 30, creatureHealth: 0.1, finisherActive: true }));
     feed(input({ elapsedSeconds: 130, distanceMeters: 30, creatureHealth: 0, creatureDefeated: true }));
     expect(phases).toEqual([
       "opening",
@@ -49,6 +50,7 @@ describe("the encounter director", () => {
       "disruption",
       "spacing",
       "enrage",
+      "critical",
       "break",
       "finisher",
       "aftermath",

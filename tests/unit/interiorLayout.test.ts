@@ -15,8 +15,8 @@ import {
 import { ON_FOOT, isClear } from "../../src/shatterdome/onFoot";
 
 const BERTHS = [
-  { jaegerId: "placeholder-mk0", displayName: "Placeholder Sentinel" },
-  { jaegerId: "heavy-mk4", displayName: "Placeholder Bulwark" },
+  { jaegerId: "placeholder-mk0", displayName: "Gipsy Danger" },
+  { jaegerId: "heavy-mk4", displayName: "Cherno Alpha" },
 ];
 
 function layoutFor(state = new ShatterdomeState(createFacilityRegistry()), seed = 20260824): InteriorLayout {

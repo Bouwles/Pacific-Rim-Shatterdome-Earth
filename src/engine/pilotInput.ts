@@ -46,6 +46,21 @@ export interface PilotInputCallbacks {
    * to the weapon path when it is not an order.
    */
   readonly onNumberKey?: (code: string) => boolean;
+  /** Action layout: left mouse, the basic chain. */
+  readonly onPrimary?: () => void;
+  /** Action layout: right mouse down and up, the heavy and its charge. */
+  readonly onSecondaryDown?: () => void;
+  readonly onSecondaryUp?: () => void;
+  /** Action layout: Q, the booster dodge. */
+  readonly onDodge?: () => void;
+  /** Action layout: E, the grab. */
+  readonly onGrab?: () => void;
+  /** Action layout: 1 to 4, the abilities. */
+  readonly onAbility?: (index: number) => void;
+  /** Action layout: R, the ultimate. */
+  readonly onUltimate?: () => void;
+  /** Action layout: F pressed, the perfect-guard attempt (the hold is read separately). */
+  readonly onGuardPress?: () => void;
 }
 
 /** Keys the ranged row answers to. */
@@ -115,6 +130,13 @@ export class PilotInputSource {
     private readonly callbacks: PilotInputCallbacks,
     /** Injected so a test can drive input with no document. */
     private readonly target: EventTarget = window,
+    /**
+     * The action layout: mouse buttons attack, Q dodges, E grabs, 1 to 4 are
+     * abilities, R is the ultimate, F on press is the perfect guard. The
+     * classic layout (number-row attacks, letter-row weapons) stays for the
+     * debug build and its tests.
+     */
+    private actionLayout = false,
   ) {
     this.bind("keydown", (event) => this.onKeyDown(event as KeyboardEvent));
     this.bind("keyup", (event) => this.onKeyUp(event as KeyboardEvent));
@@ -123,6 +145,31 @@ export class PilotInputSource {
     this.bind("blur", () => this.held.clear());
     this.bindCanvas("mousemove", (event) => this.onMouseMove(event as MouseEvent));
     this.bindCanvas("click", () => this.requestPointerLock());
+    this.bindCanvas("mousedown", (event) => this.onMouseDown(event as MouseEvent));
+    this.bindCanvas("mouseup", (event) => this.onMouseUp(event as MouseEvent));
+    this.bindCanvas("contextmenu", (event) => {
+      if (this.actionLayout) event.preventDefault();
+    });
+  }
+
+  /** Switches between the classic number-row layout and the action layout. */
+  setActionLayout(on: boolean): void {
+    this.actionLayout = on;
+  }
+
+  private onMouseDown(event: MouseEvent): void {
+    if (!this.enabledValue || !this.actionLayout) return;
+    if (event.button === 0) this.callbacks.onPrimary?.();
+    else if (event.button === 2) this.callbacks.onSecondaryDown?.();
+    else if (event.button === 1) {
+      event.preventDefault();
+      this.callbacks.onLockToggle();
+    }
+  }
+
+  private onMouseUp(event: MouseEvent): void {
+    if (!this.enabledValue || !this.actionLayout) return;
+    if (event.button === 2) this.callbacks.onSecondaryUp?.();
   }
 
   get enabled(): boolean {
@@ -141,6 +188,11 @@ export class PilotInputSource {
    * direction has to be readable at the moment the button is pressed rather than
    * only inside the movement sample.
    */
+  /** Whether the classic turn keys steer; under the action layout the mouse does. */
+  get turnKeysActive(): boolean {
+    return !this.actionLayout;
+  }
+
   get moveDirection(): "neutral" | "forward" | "back" | "side" {
     if (LEFT_KEYS.some((code) => this.held.has(code)) || RIGHT_KEYS.some((code) => this.held.has(code))) {
       return "side";
@@ -181,7 +233,7 @@ export class PilotInputSource {
     }
     const forward = axis(this.held, FORWARD_KEYS, BACK_KEYS);
     const strafe = axis(this.held, RIGHT_KEYS, LEFT_KEYS);
-    const turnIntent = axis(this.held, TURN_RIGHT_KEYS, TURN_LEFT_KEYS);
+    const turnIntent = this.actionLayout ? 0 : axis(this.held, TURN_RIGHT_KEYS, TURN_LEFT_KEYS);
     const moving = Math.hypot(forward, strafe) > 0.05;
     const desiredHeadingDeg =
       allowHeadingIntent && moving && Math.abs(turnIntent) < 0.05
@@ -251,6 +303,22 @@ export class PilotInputSource {
       this.chargingValue = true;
       this.callbacks.onChargeStart?.();
     };
+    if (this.actionLayout) {
+      // Turning is the mouse's job; Q and E are the dodge and the grab.
+      delete actions["KeyQ"];
+      delete actions["KeyE"];
+      delete actions["KeyH"];
+      actions["KeyQ"] = () => this.callbacks.onDodge?.();
+      actions["KeyE"] = () => this.callbacks.onGrab?.();
+      actions["KeyR"] = () => this.callbacks.onUltimate?.();
+      actions["KeyF"] = () => this.callbacks.onGuardPress?.();
+      (["Digit1", "Digit2", "Digit3", "Digit4"] as const).forEach((code, index) => {
+        actions[code] = () => this.callbacks.onAbility?.(index);
+      });
+      for (const code of ["Digit5", "Digit6", "Digit7", "Digit8", "Digit9", "Digit0"]) delete actions[code];
+      for (const code of MELEE_KEY_CODES) delete actions[code];
+      for (const code of WEAPON_KEY_CODES) delete actions[code];
+    }
     const action = actions[event.code];
     if (action) {
       action();
@@ -265,6 +333,8 @@ export class PilotInputSource {
       this.callbacks.onChargeRelease?.();
     }
     if (event.code === "KeyF") this.callbacks.onFinisherHold?.(false);
+    // The chain sword channels while its ability key is held.
+    if (this.actionLayout && event.code === "Digit3") this.callbacks.onWeaponRelease?.("KeyK");
     if ((WEAPON_KEY_CODES as readonly string[]).includes(event.code)) {
       this.callbacks.onWeaponRelease?.(event.code);
     }

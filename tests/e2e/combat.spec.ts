@@ -49,7 +49,7 @@ test.describe("combat", () => {
     page.on("pageerror", (error) => consoleErrors.push(error.message));
 
     await fight(page);
-    await expect(field(page, "target")).toHaveText(/Alpha Biped, \d+ m/);
+    await expect(field(page, "target")).toHaveText(/Knifehead, \d+ m/);
     // Every zone the creature has, with the health it actually has.
     await expect(field(page, "target-zones")).toHaveText(/head 100%/);
     await expect(field(page, "target-zones")).toHaveText(/core 100%/);
@@ -115,7 +115,7 @@ test.describe("combat", () => {
     await page.waitForTimeout(400);
     await expect(page.locator(`${PILOT} [data-action="debug-volumes"]`)).toBeChecked();
     // Still drawing, and still no errors from turning it on.
-    await expect(field(page, "target")).toHaveText(/Alpha Biped/);
+    await expect(field(page, "target")).toHaveText(/Knifehead/);
   });
 
   test("clears the target and leaves the machine drivable", async ({ page }) => {

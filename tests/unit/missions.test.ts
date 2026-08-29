@@ -155,7 +155,7 @@ describe("the deployment planner", () => {
     weatherSummary: "clear",
     weatherPenalty: 0,
     underwater: false,
-    forecastComposition: "1 confirmed: Alpha Biped",
+    forecastComposition: "1 confirmed: Knifehead",
     forecastConfidence: 0.8,
   };
 
@@ -201,7 +201,7 @@ describe("the deployment planner", () => {
   it("never reveals more than the warning knew", () => {
     const confident = assessPlan(baseOptions);
     const vague = assessPlan({ ...baseOptions, forecastConfidence: 0.2 });
-    expect(confident.predictedThreat).toMatch(/Alpha Biped/);
+    expect(confident.predictedThreat).toMatch(/Knifehead/);
     // A weak signal says so rather than leaking what is really out there.
     expect(vague.predictedThreat).toMatch(/Not enough signal/);
   });

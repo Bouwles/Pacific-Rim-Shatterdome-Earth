@@ -111,6 +111,19 @@ import {
   type ScreenHandle,
 } from "../ui/opScreens";
 import { HudScreen, type LimbId } from "../ui/hudScreen";
+import { ActionHud, type AbilityView } from "../ui/actionHud";
+import {
+  renderComms,
+  renderHangar,
+  renderHuntBoard,
+  renderLoadout,
+  renderPicker,
+  renderRewards,
+  renderUpgrades,
+  type CommsHandle,
+} from "../ui/hangarScreens";
+import { HUNTS, huntById, type HuntDefinition } from "../data/hunts";
+import { experienceForLevel } from "../jaegers/progression";
 import { PropLibrary, type PlacedProp } from "../assets/props";
 import { EncounterDirector, gradeSortie } from "../game/encounterDirector";
 import type { Incident } from "../world/director";
@@ -422,6 +435,38 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let opIncidentId: string | null = null;
   let opMachineId: string | null = null;
   let opTitleSummary: string | null = null;
+  // The hunt loop: hangar, hunts, loadout, deploying, fight, rewards.
+  type HuntStage = "hangar" | "hunts" | "loadout" | "deploying" | "fight" | "rewards";
+  let huntStage: HuntStage | null = null;
+  let selectedHuntId: string | null = null;
+  let actionHud: ActionHud | null = null;
+  let comms: CommsHandle | null = null;
+  let overdrive = 0;
+  let huntSeconds = 0;
+  let huntDamageDealt = 0;
+  let huntHitsTaken = 0;
+  let huntPerfectGuards = 0;
+  let huntBestCombo = 0;
+  let creatureWasOpen = false;
+  let huntEndAt: number | null = null;
+  let huntOutcome: "won" | "lost" | "aborted" | null = null;
+  /** Runs and best grades per hunt, kept in local storage; not part of a save. */
+  const HUNT_RECORDS_KEY = "shatterdome.hunts.v1";
+  const huntRecords: Record<string, { cleared: number; best: string | null }> = (() => {
+    try {
+      const raw = localStorage.getItem(HUNT_RECORDS_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, { cleared: number; best: string | null }>) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const saveHuntRecords = (): void => {
+    try {
+      localStorage.setItem(HUNT_RECORDS_KEY, JSON.stringify(huntRecords));
+    } catch {
+      // Storage refused; the run still counts for this session.
+    }
+  };
   /** Kit buildings standing on the blocks around the fight. */
   let districtProps: PropLibrary | null = null;
   let districtPlaced: PlacedProp[] = [];
@@ -635,6 +680,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       titleView?.update(Math.min(0.1, deltaMs / 1000));
       opBay?.update(Math.min(0.1, deltaMs / 1000));
       updateOpFrame(Math.min(0.1, deltaMs / 1000));
+      updateHuntFrame(Math.min(0.1, deltaMs / 1000));
       post?.follow(bootScene.scene.activeCamera);
       profiler.end();
       profiler.endFrame();
@@ -3069,6 +3115,89 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   };
 
   /** Presses an attack. The arena decides whether it is legal, and says why not. */
+  // ------------------------------------------------------------------------
+  // The action layout: what the mouse buttons and the letter keys do in a
+  // player build. Every press goes through the arena's own request path, so
+  // the rules (stamina, heat, cancel windows, reach) are the same rules the
+  // classic layout obeys.
+  const CHAIN: readonly string[] = [
+    "melee.light.jab",
+    "melee.light.cross",
+    "melee.heavy.smash.forward",
+    "melee.launcher.uppercut",
+  ];
+  const ABILITY_CODES: readonly string[] = ["Digit7", "KeyO", "KeyK", "Digit8"];
+  let chainStep = 0;
+  let chainAt = 0;
+  let secondaryTimer: number | null = null;
+  let secondaryCharging = false;
+  const pressMove = (moveId: string): boolean => {
+    if (!combatArena) return false;
+    if (!combatArena.request("jaeger", moveId).ok) return false;
+    combatArena.press("jaeger", moveId);
+    return true;
+  };
+  const primaryChain = (): void => {
+    const now = performance.now();
+    if (now - chainAt > 900) chainStep = 0;
+    const moveId = CHAIN[chainStep] ?? CHAIN[0] ?? "melee.light.jab";
+    if (pressMove(moveId)) {
+      chainStep = (chainStep + 1) % CHAIN.length;
+      chainAt = now;
+    }
+  };
+  const secondaryDown = (): void => {
+    secondaryCharging = false;
+    if (secondaryTimer !== null) window.clearTimeout(secondaryTimer);
+    secondaryTimer = window.setTimeout(() => {
+      secondaryTimer = null;
+      secondaryCharging = combatArena?.beginCharge("jaeger", "melee.charge.haymaker").ok ?? false;
+    }, 320);
+  };
+  const secondaryUp = (): void => {
+    if (secondaryTimer !== null) {
+      window.clearTimeout(secondaryTimer);
+      secondaryTimer = null;
+    }
+    if (secondaryCharging) {
+      combatArena?.releaseCharge("jaeger");
+      secondaryCharging = false;
+      return;
+    }
+    const direction = pilotInput?.moveDirection ?? "neutral";
+    pressMove(HEAVY_VARIANTS[direction] ?? "melee.heavy.overhead");
+  };
+  const boosterDodge = (): void => {
+    if (!pressMove("defense.dodge.step")) return;
+    pilotSession?.press("booster", kernel?.tick ?? 0);
+  };
+  const grab = (): void => {
+    const me = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    const holding =
+      me !== undefined && me.grapplePhase !== "" && me.grapplePhase !== "none" && me.grapplePhase !== "idle";
+    if (holding) combatArena?.grappleThrow("jaeger");
+    else pressMove("grapple.clinch");
+  };
+  const ultimate = (): void => {
+    const creature = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
+    if (creature?.finisherOpen) {
+      combatArena?.setFinisherHold("jaeger", true);
+      pressMove("melee.finisher.plasma-drop");
+      return;
+    }
+    // No opening: a full overdrive meter buys the charged haymaker, released on
+    // its own. An empty meter buys nothing, and says so.
+    if (huntStage === "fight" && overdrive < 0.999) {
+      actionHud?.announce("Overdrive not ready");
+      return;
+    }
+    if (combatArena?.beginCharge("jaeger", "melee.charge.haymaker").ok) {
+      overdrive = 0;
+      samples?.play("laser.large", { gain: 0.9, rate: 0.7 });
+      window.setTimeout(() => combatArena?.releaseCharge("jaeger"), 420);
+    }
+  };
+
   const pressAttack = (slot: number): void => {
     let moveId = ATTACK_SLOTS[slot];
     // Slot three is the heavy, and the heavy is the one with directions on it.
@@ -3453,7 +3582,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         pilotSession?.setComfort({ reducedMotion: reduced });
         refreshPilot();
       },
-      onExit: () => (production && opStage === "fight" ? openOpPause() : stopPilot()),
+      onExit: () =>
+        production && (opStage === "fight" || huntStage === "fight") ? openOpPause() : stopPilot(),
+      onPrimary: primaryChain,
+      onSecondaryDown: secondaryDown,
+      onSecondaryUp: secondaryUp,
+      onDodge: boosterDodge,
+      onGrab: grab,
+      onAbility: (index: number) => {
+        const code = ABILITY_CODES[index];
+        if (code) pressWeapon(code);
+      },
+      onUltimate: ultimate,
+      onGuardPress: () => pressMove("defense.counter.parry"),
       onAttack: pressAttack,
       onMelee: pressMelee,
       onWeapon: pressWeapon,
@@ -3498,6 +3639,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         refreshPilot();
       },
     });
+    pilotInput.setActionLayout(production);
 
     pilotScreen = renderPilotScreen(
       uiRoot,
@@ -4513,6 +4655,27 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       }
     }
     if (mine) advanceEncounter(arena, mine, pose, deltaSeconds);
+    if (huntStage === "fight") {
+      for (const event of events) {
+        if (event.actorId === "jaeger" && event.targetId === "kaiju" && event.damage > 0) {
+          huntDamageDealt += event.damage;
+          overdrive = Math.min(1, overdrive + event.damage / 1400);
+        }
+        if (event.targetId === "jaeger" && event.damage > 0) huntHitsTaken += 1;
+        if (
+          event.targetId === "jaeger" &&
+          event.damage === 0 &&
+          event.reaction &&
+          /parr|perfect/i.test(event.reaction)
+        ) {
+          huntPerfectGuards += 1;
+          overdrive = Math.min(1, overdrive + 0.12);
+          actionHud?.announce("Perfect guard");
+          samples?.play("impact.bell", { gain: 0.7, rate: 1.4 });
+        }
+      }
+      if (mine) huntBestCombo = Math.max(huntBestCombo, mine.bestCombo);
+    }
     // Heavy contact is felt through the floor: the low impact the ambience
     // already knows how to play, at the distance the hit actually happened.
     for (const event of events) {
@@ -5203,8 +5366,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         debug: debugMode,
       },
       {
-        onContinue: () => stateMachine.transition(AppState.Saves),
-        onNewOperation: () => stateMachine.transition(AppState.Loading),
+        onContinue: () => stateMachine.transition(production ? AppState.WorldMap : AppState.Saves),
+        onNewOperation: () => stateMachine.transition(production ? AppState.WorldMap : AppState.Loading),
         onSettings: () => openOpSettings(),
         onCredits: () => {
           opOverlay?.dispose();
@@ -5731,7 +5894,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       if (cue.phase === "aftermath") encounterEndAt = encounterSeconds + 4;
       if (cue.phase === "lost") encounterEndAt = encounterSeconds + 3;
     }
-    if (encounterEndAt !== null && encounterSeconds >= encounterEndAt) {
+    if (huntStage === null && encounterEndAt !== null && encounterSeconds >= encounterEndAt) {
       encounterEndAt = null;
       finishSortie(encounter.current === "lost" ? "lost-contact" : "success");
     }
@@ -5849,6 +6012,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   const openOpPause = (): void => {
     if (opOverlay) return;
+    if (huntStage === "fight" && document.pointerLockElement) document.exitPointerLock();
     opOverlay = renderPause(uiRoot, "Sortie in progress", {
       onResume: () => {
         opOverlay?.dispose();
@@ -5862,7 +6026,8 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       onAbort: () => {
         opOverlay?.dispose();
         opOverlay = null;
-        finishSortie("aborted");
+        if (huntStage === "fight") finishHunt("aborted");
+        else finishSortie("aborted");
       },
       onMenu: () => {
         opOverlay?.dispose();
@@ -5871,6 +6036,607 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         stateMachine.transition(AppState.MainMenu);
       },
     });
+  };
+
+  // ========================================================================
+  // The hunt loop
+  // ========================================================================
+
+  const ABILITY_LABELS: readonly string[] = ["Plasma Caster", "Elbow Rocket", "Chain Sword", "Missiles"];
+  const CONTROL_LINES: readonly string[] = [
+    "WASD move · mouse look · Shift sprint · Space booster step",
+    "Left mouse: four-hit chain · Right mouse: heavy, hold to charge",
+    "F guard, press on the hit for a perfect guard · Q booster dodge · E grab, again to throw",
+    "1 to 4 abilities · R ultimate when the meter is full or the posture breaks · middle mouse lock",
+  ];
+
+  const machineForHunt = (): string =>
+    opMachineId ?? roster.all()[0]?.jaegerId ?? jaegerRegistry.all()[0]?.id ?? "";
+
+  const hangarData = () => {
+    const machineId = machineForHunt();
+    const definition = jaegerRegistry.get(machineId);
+    const record = roster.get(machineId);
+    const fitness = roster.canDeploy(machineId);
+    const level = record?.level ?? 1;
+    const prestige = record?.prestige ?? 0;
+    const need = experienceForLevel(level, prestige);
+    const experience = record?.experience ?? 0;
+    const components = record?.damage.components ?? [];
+    const structure = components.reduce((sum, component) => sum + component.health, 0);
+    const structureMax = components.reduce((sum, component) => sum + component.maxHealth, 0);
+    const condition = structureMax > 0 ? structure / structureMax : 1;
+    const order = record ? roster.repairOrder(machineId) : null;
+    const plan = { pilots: crew.all().slice(0, 2) };
+    const pilots =
+      plan.pilots.length >= 2
+        ? `${pilotName(plan.pilots[0]!.pilotId)} and ${pilotName(plan.pilots[1]!.pilotId)}`
+        : "Crew assigned on deploy";
+    return {
+      machineId,
+      definition,
+      record,
+      fitness,
+      level,
+      prestige,
+      need,
+      experience,
+      condition,
+      order,
+      pilots,
+    };
+  };
+
+  const closeHuntStage = (): void => {
+    clearOpTimers();
+    comms?.dispose();
+    comms = null;
+    actionHud?.dispose();
+    actionHud = null;
+    clearDistrict();
+    opScreen?.dispose();
+    opScreen = null;
+    if (opBay) {
+      opBay.dispose();
+      opBay = null;
+    }
+    huntStage = null;
+  };
+
+  const enterHangar = (): void => {
+    closeOpStage();
+    closeHuntStage();
+    huntStage = "hangar";
+    if (viewMode === "ground") closeGroundView();
+    closeGlobeView();
+    restoreBootStage();
+    bootScene.camera.attachControl(canvas, true);
+    opBay = new TitleView(bootScene);
+    opBay.drift = false;
+    const data = hangarData();
+    opScreen = renderHangar(
+      uiRoot,
+      {
+        machine: data.definition?.name ?? data.machineId,
+        mark: data.definition?.markDesignation ?? "",
+        level: data.level,
+        prestige: data.prestige,
+        experienceLine: `${Math.round(data.experience)} / ${Math.round(data.need)} XP to level ${data.level + 1}`,
+        condition: data.condition,
+        conditionLine:
+          data.order && data.order.totalHours > 0
+            ? `${Math.round(data.condition * 100)}% structure · ${Math.round(data.order.totalHours)} h of work open`
+            : `${Math.round(data.condition * 100)}% structure · nothing owed`,
+        pilots: data.pilots,
+        repairable: (data.order?.totalHours ?? 0) > 0 || data.record?.status === "recovering",
+        deployable: data.fitness.ok,
+        refusal: data.fitness.ok ? null : data.fitness.message,
+        rankLine: `Best prestige ${roster.bestPrestige()} · ${Object.values(huntRecords).reduce((sum, entry) => sum + entry.cleared, 0)} hunts cleared`,
+      },
+      {
+        onHunts: () => enterHunts(),
+        onJaegers: () => openMachinePicker(),
+        onLoadout: () => enterLoadout(selectedHuntId ?? HUNTS[0]?.id ?? ""),
+        onUpgrades: () => openUpgrades(),
+        onSettings: () => openOpSettings(),
+        onRepair: () => {
+          const machineId = machineForHunt();
+          const record = roster.get(machineId);
+          if (!record) return;
+          const order = roster.repairOrder(machineId);
+          roster.work(machineId, order.totalHours + Math.max(0, record.hoursRemaining) + 1);
+          samples?.play("scifi.metal", { gain: 0.9, rate: 0.8 });
+          samples?.play("ui.confirm");
+          opBay?.kick();
+          enterHangar();
+        },
+        onMenu: () => stateMachine.transition(AppState.MainMenu),
+      },
+    );
+  };
+
+  const openMachinePicker = (): void => {
+    opOverlay?.dispose();
+    const current = machineForHunt();
+    opOverlay = renderPicker(
+      uiRoot,
+      "Change Jaeger",
+      roster.all().map((entry) => {
+        const definition = jaegerRegistry.get(entry.jaegerId);
+        const fitness = roster.canDeploy(entry.jaegerId);
+        return {
+          id: entry.jaegerId,
+          label: definition?.name ?? entry.jaegerId,
+          line: `${definition?.markDesignation ?? ""} · level ${entry.level}${fitness.ok ? "" : ` · ${fitness.message}`}`,
+          locked: !fitness.ok,
+          selected: entry.jaegerId === current,
+        };
+      }),
+      (id) => {
+        opMachineId = id;
+        opOverlay?.dispose();
+        opOverlay = null;
+        samples?.play("door.open", { gain: 0.8 });
+        if (huntStage === "loadout" && selectedHuntId) enterLoadout(selectedHuntId);
+        else enterHangar();
+      },
+      () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+      },
+    );
+  };
+
+  const openUpgrades = (): void => {
+    opOverlay?.dispose();
+    const data = hangarData();
+    const choices = data.record ? roster.passiveChoices(data.machineId) : null;
+    const forecast = data.record ? roster.prestigeForecast(data.machineId) : null;
+    opOverlay = renderUpgrades(
+      uiRoot,
+      {
+        machine: data.definition?.name ?? data.machineId,
+        level: data.level,
+        experienceLine: `${Math.round(data.experience)} / ${Math.round(data.need)} XP`,
+        choices: (choices?.options ?? []).map((passive) => ({
+          id: passive.id,
+          label: passive.displayName,
+          note: choices?.tier ? `tier ${String(choices.tier)}` : "",
+        })),
+        taken: ((data.record as { passives?: readonly string[] } | undefined)?.passives ?? []).map(
+          (id) => passiveRegistry.get(id)?.displayName ?? id,
+        ),
+        prestigeLine: forecast
+          ? forecast.eligible
+            ? `Prestige ${forecast.fromRank} to ${forecast.toRank} is open.`
+            : forecast.refusal
+          : null,
+      },
+      (passiveId) => {
+        const result = roster.choosePassive(
+          data.machineId,
+          passiveId,
+          worldState.environment.clock.dayNumber,
+        );
+        samples?.play(result.ok ? "scifi.metal" : "ui.error", { gain: 0.8 });
+        if (result.ok) opBay?.kick();
+        openUpgrades();
+      },
+      forecast?.eligible
+        ? () => {
+            roster.prestige(data.machineId, worldState.environment.clock.dayNumber);
+            samples?.play("impact.bell", { gain: 0.8 });
+            openUpgrades();
+          }
+        : null,
+      () => {
+        opOverlay?.dispose();
+        opOverlay = null;
+        enterHangar();
+      },
+    );
+  };
+
+  const SKY_BY_REGION: Readonly<Record<string, readonly [string, string]>> = {
+    anchorage: ["#25313f", "#8fa4b6"],
+    "hong-kong": ["#1b2230", "#6b7f96"],
+    sydney: ["#2a3a52", "#b7c6d4"],
+    tokyo: ["#151a25", "#4e5b74"],
+    manila: ["#2b3444", "#9aa9b8"],
+  };
+
+  const enterHunts = (): void => {
+    closeHuntStage();
+    huntStage = "hunts";
+    restoreBootStage();
+    bootScene.scene.clearColor = new Color4(0.03, 0.045, 0.07, 1);
+    const data = hangarData();
+    opScreen = renderHuntBoard(
+      uiRoot,
+      [...HUNTS]
+        .sort((a, b) => a.order - b.order)
+        .map((hunt) => {
+          const record = huntRecords[hunt.id];
+          const sky = SKY_BY_REGION[hunt.regionId] ?? ["#1b2230", "#6b7f96"];
+          return {
+            id: hunt.id,
+            title: hunt.title,
+            location: hunt.location,
+            category: hunt.category,
+            recommendedLevel: hunt.recommendedLevel,
+            difficulty: hunt.difficulty,
+            materials: hunt.materials,
+            firstClear: hunt.firstClear,
+            repeat: hunt.repeat,
+            traits: hunt.traits,
+            weaknesses: hunt.weaknesses,
+            cleared: record?.cleared ?? 0,
+            bestGrade: record?.best ?? null,
+            skyTop: sky[0],
+            skyBottom: sky[1],
+            locked: data.level + 4 < hunt.recommendedLevel,
+          };
+        }),
+      (id) => enterLoadout(id),
+      () => enterHangar(),
+    );
+  };
+
+  const enterLoadout = (huntId: string): void => {
+    const hunt = huntById(huntId);
+    if (!hunt) {
+      enterHunts();
+      return;
+    }
+    closeHuntStage();
+    huntStage = "loadout";
+    selectedHuntId = hunt.id;
+    const data = hangarData();
+    opScreen = renderLoadout(
+      uiRoot,
+      {
+        hunt: hunt.title,
+        location: hunt.location,
+        machine: data.definition?.name ?? data.machineId,
+        level: data.level,
+        pilots: data.pilots,
+        abilities: ABILITY_LABELS.map((name, index) => ({
+          key: String(index + 1),
+          name,
+          note:
+            ["Ranged, heat fed", "Gap closer, hits hard", "Held: sustained cuts", "Six a magazine, reloads"][
+              index
+            ] ?? "",
+        })),
+        controls: CONTROL_LINES,
+        refusal: data.fitness.ok ? null : data.fitness.message,
+      },
+      () => beginHunt(hunt),
+      () => openMachinePicker(),
+      () => enterHunts(),
+    );
+  };
+
+  const COMMS_LINES: readonly {
+    readonly who: string;
+    readonly initials: string;
+    readonly line: string;
+    readonly at: number;
+  }[] = [
+    { who: "Marshal Stacker Pentecost", initials: "SP", line: "Contact confirmed. You are the wall.", at: 0 },
+    { who: "LOCCENT", initials: "LC", line: "Drop in thirty seconds. Weather on station is heavy.", at: 2.2 },
+    { who: "Raleigh Becket", initials: "RB", line: "Drift is holding. Let's go.", at: 4.4 },
+  ];
+
+  const beginHunt = (hunt: HuntDefinition): void => {
+    closeHuntStage();
+    huntStage = "deploying";
+    selectedHuntId = hunt.id;
+    samples?.play("thruster", { gain: 1 });
+    comms = renderComms(uiRoot, `Deployment // ${hunt.location}`, () => arriveForHunt(hunt));
+    for (const entry of COMMS_LINES) {
+      opTimers.push(
+        window.setTimeout(() => comms?.say(entry.who, entry.initials, entry.line), entry.at * 1000),
+      );
+    }
+    opTimers.push(window.setTimeout(() => arriveForHunt(hunt), 6500));
+  };
+
+  const arriveForHunt = (hunt: HuntDefinition): void => {
+    if (huntStage !== "deploying") return;
+    clearOpTimers();
+    comms?.setStage(`Arrival // ${hunt.location}`);
+    comms?.say("LOCCENT", "LC", "Feet down. It is coming to you.");
+    huntStage = "fight";
+    mission = undefined;
+    missionResults = null;
+    worldState.teleportTo(hunt.regionId, kernel?.tick ?? 0);
+    floatingOrigin.forceRebase(worldState.playerPosition);
+    sectorRenderer?.rebase();
+    movePlayerTo(worldState.playerPosition);
+    switchViewMode("ground");
+    opTimers.push(
+      window.setTimeout(() => {
+        if (huntStage !== "fight") return;
+        const layout = layoutFor(hunt.regionId);
+        const region = regionRegistry.get(hunt.regionId);
+        let inlandBearingDeg: number | null = null;
+        if (layout && region) {
+          const seaward = layout.seawardBearingRadians;
+          const reach = layout.radiusMeters * 0.42;
+          movePlayerTo(
+            localToGeo(
+              { ...region.centre, altitudeMeters: 0 },
+              { east: Math.sin(seaward) * reach, north: Math.cos(seaward) * reach, up: 0 },
+            ),
+          );
+          inlandBearingDeg = ((seaward + Math.PI) * 180) / Math.PI;
+        }
+        startPilot(machineForHunt());
+        if (layout && region) {
+          dressDistrict(layout, region.centre);
+          dressRoads(layout, region.centre);
+        }
+        spawnTarget(hunt.kaijuId, hunt.openingRangeMeters, inlandBearingDeg);
+        comms?.dispose();
+        comms = null;
+        actionHud?.dispose();
+        actionHud = new ActionHud(uiRoot);
+        encounter = new EncounterDirector();
+        encounterSeconds = 0;
+        encounterEndAt = null;
+        huntSeconds = 0;
+        overdrive = 0;
+        huntDamageDealt = 0;
+        huntHitsTaken = 0;
+        huntPerfectGuards = 0;
+        huntBestCombo = 0;
+        creatureWasOpen = false;
+        huntEndAt = null;
+        huntOutcome = null;
+        actionHud.announce(`${hunt.title} · ${hunt.category}`);
+      }, 2800),
+    );
+  };
+
+  /** Kit roads along the layout's road polylines near the machine. */
+  const dressRoads = (layout: CityLayout, centre: GeoPosition): void => {
+    if (typeof window === "undefined") return;
+    districtProps ??= new PropLibrary(bootScene.scene);
+    const here = floatingOrigin.toLocal(worldState.playerPosition);
+    const placements: {
+      kit: "roads";
+      model: string;
+      x: number;
+      y: number;
+      z: number;
+      yawDeg: number;
+      fit: { width: number; depth: number };
+    }[] = [];
+    for (const road of layout.roads) {
+      const points = road.points;
+      for (let index = 0; index + 3 < points.length && placements.length < 90; index += 2) {
+        const east0 = points[index] ?? 0;
+        const north0 = points[index + 1] ?? 0;
+        const east1 = points[index + 2] ?? 0;
+        const north1 = points[index + 3] ?? 0;
+        const length = Math.hypot(east1 - east0, north1 - north0);
+        if (length < 1) continue;
+        const width = Math.max(10, road.widthMeters);
+        const yaw = (Math.atan2(east1 - east0, north1 - north0) * 180) / Math.PI;
+        for (let along = width / 2; along < length && placements.length < 90; along += width) {
+          const t = along / length;
+          const local = floatingOrigin.toLocal(
+            localToGeo(
+              { ...centre, altitudeMeters: 0 },
+              { east: east0 + (east1 - east0) * t, north: north0 + (north1 - north0) * t, up: 0 },
+            ),
+          );
+          if (Math.hypot(local.east - here.east, local.north - here.north) > 700) continue;
+          placements.push({
+            kit: "roads",
+            model: "road-straight",
+            x: local.east,
+            y: (localGroundHeight(local.east, local.north) ?? local.up) + 0.4,
+            z: local.north,
+            yawDeg: yaw,
+            fit: { width, depth: width },
+          });
+        }
+      }
+    }
+    void districtProps.placeAll(placements).then((placed) => {
+      if (huntStage !== "fight") {
+        for (const prop of placed) prop.dispose();
+        return;
+      }
+      districtPlaced.push(...placed);
+    });
+  };
+
+  const huntAbilities = (
+    weapons: readonly {
+      id: string;
+      magazine: number;
+      magazineSize: number;
+      reserve: number;
+      cooldownTicksLeft: number;
+      reloadTicksLeft: number;
+      feed: string;
+      channelling: boolean;
+    }[],
+  ): AbilityView[] =>
+    ABILITY_CODES.map((code, index) => {
+      const weaponId = WEAPON_KEYS[code];
+      const weapon = weapons.find((entry) => entry.id === weaponId);
+      const cooling = weapon ? Math.max(weapon.cooldownTicksLeft, weapon.reloadTicksLeft) : 0;
+      return {
+        key: String(index + 1),
+        label: ABILITY_LABELS[index] ?? weaponId ?? "",
+        ready: weapon
+          ? cooling > 0
+            ? Math.max(0, 1 - cooling / 120)
+            : weapon.feed === "rounds" && weapon.magazine === 0 && weapon.reserve === 0
+              ? 0
+              : 1
+          : 0,
+        ammo: weapon && weapon.feed === "rounds" ? `${weapon.magazine}/${weapon.magazineSize}` : "",
+        active: weapon?.channelling ?? false,
+      };
+    });
+
+  const updateHuntFrame = (deltaSeconds: number): void => {
+    if (!actionHud || huntStage !== "fight") return;
+    huntSeconds += deltaSeconds;
+    const snapshot = combatArena?.snapshot();
+    const machine = snapshot?.fighters.find((fighter) => fighter.id === "jaeger");
+    const creature = snapshot?.fighters.find((fighter) => fighter.id === "kaiju");
+    const damage = pilotDamageState();
+    const creatureHealth = creature
+      ? creature.zones.reduce((sum, zone) => sum + zone.health / Math.max(1, zone.maxHealth), 0) /
+        Math.max(1, creature.zones.length)
+      : 0;
+    const hunt = selectedHuntId ? huntById(selectedHuntId) : undefined;
+    let flash: string | null = null;
+    if (creature && creature.finisherOpen && !creatureWasOpen) flash = "Armour break";
+    creatureWasOpen = creature?.finisherOpen ?? false;
+    const cue = encounter?.cue();
+    actionHud.update(
+      {
+        health: (damage?.integrityPercent ?? 100) / 100,
+        stamina: machine ? machine.stamina / 100 : 1,
+        overdrive: creature?.finisherOpen ? 1 : overdrive,
+        enemyName: creature ? (hunt?.title ?? creature.displayName) : null,
+        enemyHealth: creatureHealth,
+        enemyPosture: creature ? Math.min(1, creature.poise / 60) : 0,
+        phase:
+          cue && cue.phase !== "approach" && cue.phase !== "opening" && cue.phase !== "spacing"
+            ? cue.phase.toUpperCase()
+            : "",
+        locked:
+          pilotSession?.camera.lockedTargetId !== null && pilotSession?.camera.lockedTargetId !== undefined,
+        abilities: huntAbilities(machine?.weapons ?? []),
+        combo: machine?.comboHits ?? 0,
+        objective: cue?.objective ?? "",
+        flash,
+      },
+      deltaSeconds,
+    );
+    if (huntEndAt === null) {
+      if (creature?.defeated) {
+        huntOutcome = "won";
+        huntEndAt = huntSeconds + 3;
+        samples?.play("blast.low", { gain: 1, rate: 0.6 });
+        actionHud.announce("Kaiju down");
+      } else if (machine?.defeated) {
+        huntOutcome = "lost";
+        huntEndAt = huntSeconds + 2.5;
+        actionHud.announce("Machine down");
+      }
+    } else if (huntSeconds >= huntEndAt) {
+      huntEndAt = null;
+      finishHunt(huntOutcome ?? "lost");
+    }
+  };
+
+  const finishHunt = (outcome: "won" | "lost" | "aborted"): void => {
+    const hunt = selectedHuntId ? huntById(selectedHuntId) : undefined;
+    const machineId = machineForHunt();
+    const record = roster.get(machineId);
+    const levelBefore = record?.level ?? 1;
+    const damage = pilotDamageState();
+    const structureLost = 1 - (damage?.integrityPercent ?? 100) / 100;
+    const componentLost = (damage?.offline.length ?? 0) > 0;
+    const creature = hunt ? kaijuRegistry.get(hunt.kaijuId) : undefined;
+    const salvageTons = outcome === "won" ? Math.round((creature?.massTons ?? 2000) * 0.12) : 0;
+    const day = worldState.environment.clock.dayNumber;
+    const award = roster.completeSortie(
+      machineId,
+      { won: outcome === "won", structureLost, componentLost, rescuedThousands: 0, salvageTons },
+      day,
+    );
+    const after = roster.get(machineId);
+    const grade = gradeSortie({
+      outcome: outcome === "won" ? "success" : outcome === "aborted" ? "aborted" : "lost-contact",
+      objectiveScore: outcome === "won" ? 1 : 0,
+      cityImpact: 0,
+      machineDamage: structureLost,
+      optionalDone: huntPerfectGuards >= 2,
+      seconds: huntSeconds,
+    });
+    if (hunt) {
+      const entry = huntRecords[hunt.id] ?? { cleared: 0, best: null };
+      if (outcome === "won") {
+        entry.cleared += 1;
+        const order = ["F", "D", "C", "B", "A", "S"];
+        if (!entry.best || order.indexOf(grade.letter) > order.indexOf(entry.best)) entry.best = grade.letter;
+      }
+      huntRecords[hunt.id] = entry;
+      saveHuntRecords();
+    }
+    stopPilot();
+    actionHud?.dispose();
+    actionHud = null;
+    encounter = null;
+    huntStage = "rewards";
+    const minutes = Math.floor(huntSeconds / 60);
+    const seconds = Math.round(huntSeconds % 60);
+    const need = experienceForLevel(after?.level ?? levelBefore, after?.prestige ?? 0);
+    const nextHunt = hunt
+      ? [...HUNTS].sort((a, b) => a.order - b.order).find((entry) => entry.order > hunt.order)
+      : undefined;
+    opScreen?.dispose();
+    opScreen = renderRewards(
+      uiRoot,
+      {
+        grade: grade.letter,
+        outcome:
+          outcome === "won"
+            ? `${hunt?.title ?? "Kaiju"} down`
+            : outcome === "aborted"
+              ? "Hunt aborted"
+              : "Machine lost",
+        headline:
+          outcome === "won"
+            ? `${hunt?.location ?? "The district"} holds. ${award.messages[0] ?? ""}`.trim()
+            : outcome === "aborted"
+              ? "Pulled out before the finish. Nothing paid but the lesson."
+              : "Contact lost. The bay will have it back on its feet.",
+        experienceGained: Math.round(award.experience),
+        levelBefore,
+        levelAfter: after?.level ?? levelBefore,
+        progress: need > 0 ? (after?.experience ?? 0) / need : 0,
+        lines: [
+          { label: "Time", value: `${minutes}:${String(seconds).padStart(2, "0")}`, plus: false },
+          { label: "Grade", value: `${grade.letter} · ${grade.points} pts`, plus: grade.points >= 80 },
+          { label: "Damage dealt", value: `${Math.round(huntDamageDealt).toLocaleString()}`, plus: true },
+          { label: "Hits taken", value: `${huntHitsTaken}`, plus: false },
+          { label: "Best combo", value: `${huntBestCombo}`, plus: huntBestCombo >= 4 },
+          { label: "Perfect guards", value: `${huntPerfectGuards}`, plus: huntPerfectGuards > 0 },
+          { label: "Salvage", value: `${salvageTons} t`, plus: salvageTons > 0 },
+          {
+            label: "Materials",
+            value: outcome === "won" ? (hunt?.materials.join(", ") ?? "") : "None",
+            plus: outcome === "won",
+          },
+          { label: "Machine damage", value: `${Math.round(structureLost * 100)}%`, plus: false },
+          {
+            label: "Repair",
+            value: after ? `${Math.round(roster.repairOrder(machineId).totalHours)} h` : "0 h",
+            plus: false,
+          },
+        ],
+        unlocked:
+          outcome === "won" && (huntRecords[hunt?.id ?? ""]?.cleared ?? 0) === 1
+            ? [hunt?.firstClear ?? ""]
+            : [],
+        nextHunt: nextHunt?.title ?? null,
+      },
+      () => (hunt ? beginHunt(hunt) : enterHunts()),
+      nextHunt ? () => enterLoadout(nextHunt.id) : null,
+      () => enterHangar(),
+    );
+    samples?.play(outcome === "won" ? "ui.confirm" : "ui.error", { gain: 0.9 });
   };
 
   const openWorld = (): void => {
@@ -8078,7 +8844,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       opAlert?.dispose();
       opAlert = null;
     }
-    if (state !== AppState.WorldMap) closeOpStage();
+    if (state !== AppState.WorldMap) {
+      closeOpStage();
+      closeHuntStage();
+    }
     opOverlay?.dispose();
     opOverlay = null;
 
@@ -8093,7 +8862,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         break;
       case AppState.WorldMap:
         openWorld();
-        if (production) enterCommand();
+        if (production) enterHangar();
         break;
       case AppState.Saves:
         void openSaves().catch((error) => {

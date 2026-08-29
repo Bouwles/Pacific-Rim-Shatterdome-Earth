@@ -59,6 +59,8 @@ export class TitleView {
   private readonly savedRadius: number;
   private elapsed = 0;
   private disposed = false;
+  /** When false the camera is the player's; the composition stops turning. */
+  drift = true;
 
   constructor(boot: BootScene) {
     this.boot = boot;
@@ -184,11 +186,16 @@ export class TitleView {
     boot.camera.radius = 150;
   }
 
+  /** The machine takes a hit of work: a recoil kick, for upgrades and repairs. */
+  kick(): void {
+    this.rig.addRecoil(1);
+  }
+
   /** One frame of drift. */
   update(deltaSeconds: number): void {
     if (this.disposed) return;
     this.elapsed += deltaSeconds;
-    this.boot.camera.alpha += DRIFT_RADIANS_PER_SECOND * deltaSeconds;
+    if (this.drift) this.boot.camera.alpha += DRIFT_RADIANS_PER_SECOND * deltaSeconds;
     this.rig.update({ timeSeconds: this.elapsed, speedMps: 0 }, deltaSeconds);
     // The beacon: one slow revolution, brightest as it passes the machine.
     const sweep = (this.elapsed * 0.6) % (Math.PI * 2);

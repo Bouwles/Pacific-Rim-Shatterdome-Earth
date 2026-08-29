@@ -24,6 +24,7 @@ export type EncounterPhase =
   | "break"
   | "finisher"
   | "aftermath"
+  | "critical"
   | "lost";
 
 export interface EncounterInput {
@@ -117,6 +118,14 @@ const CUES: Readonly<Record<EncounterPhase, Omit<EncounterCue, "phase">>> = {
     disruption: false,
     prompt: null,
   },
+  critical: {
+    objective: "It is dying and dangerous. Finish it before it finishes you.",
+    warning: "Critical",
+    radioLineId: "radio.phase.shift",
+    bossPhase: true,
+    disruption: false,
+    prompt: null,
+  },
   aftermath: {
     objective: "Creature down. Hold position; recovery is inbound.",
     warning: null,
@@ -137,10 +146,11 @@ const CUES: Readonly<Record<EncounterPhase, Omit<EncounterCue, "phase">>> = {
 
 const CONTACT_METERS = 220;
 const OPENING_SECONDS = 14;
-const SIGNATURE_HEALTH = 0.82;
+const SIGNATURE_HEALTH = 0.7;
 const SIGNATURE_LATEST_SECONDS = 40;
-const DISRUPTION_HEALTH = 0.62;
-const ENRAGE_HEALTH = 0.42;
+const DISRUPTION_HEALTH = 0.55;
+const ENRAGE_HEALTH = 0.4;
+const CRITICAL_HEALTH = 0.15;
 
 export class EncounterDirector {
   private phase: EncounterPhase = "approach";
@@ -187,13 +197,16 @@ export class EncounterDirector {
     if (input.openingWindow || (input.creaturePoise <= 0.05 && input.creatureHealth < SIGNATURE_HEALTH))
       return "break";
     if (this.phase === "break") {
-      return input.creatureHealth < ENRAGE_HEALTH
-        ? "enrage"
-        : input.creatureHealth < DISRUPTION_HEALTH
-          ? "disruption"
-          : "spacing";
+      return input.creatureHealth < CRITICAL_HEALTH
+        ? "critical"
+        : input.creatureHealth < ENRAGE_HEALTH
+          ? "enrage"
+          : input.creatureHealth < DISRUPTION_HEALTH
+            ? "disruption"
+            : "spacing";
     }
 
+    if (input.creatureHealth < CRITICAL_HEALTH) return "critical";
     if (input.creatureHealth < ENRAGE_HEALTH) return "enrage";
     if (input.creatureHealth < DISRUPTION_HEALTH || this.disruptionAt !== null) {
       // The disruption is a moment, not a state: eight seconds, then back to the fight.
