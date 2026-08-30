@@ -293,11 +293,11 @@ The dev server shows the same player path with `?production=1` in the address.
 
 ### Playing it on GitHub Pages
 
-The game is a static build, so it runs from GitHub Pages without a server. Every push to `main` runs `.github/workflows/pages.yml`, which builds the game and publishes `dist/` to
+The game is a static build, so it runs from GitHub Pages without a server. Every push to `main` runs `.github/workflows/pages.yml`, which builds the game and pushes `dist/` to the `gh-pages` branch. Pages serves that branch at
 
 https://bouwles.github.io/Pacific-Rim-Shatterdome-Earth/
 
-The direct routes work there too, for example `?hunt=knifehead` or `?seed=12345`. Saves live in the browser's IndexedDB for that address, so a save made on the Pages address stays there. If the page ever fails to publish, check the Actions tab; the only setting the workflow needs is Pages set to "GitHub Actions" as its source, which the workflow turns on itself the first time it runs.
+The direct routes work there too, for example `?hunt=knifehead` or `?seed=12345`. Saves live in the browser's IndexedDB for that address, so a save made on the Pages address stays there. If the address ever answers with a 404, open the repository's Settings, then Pages, and set the source to the `gh-pages` branch at its root; that is the only setting involved, and the Actions tab shows each publish.
 
 The production build uses relative URLs, so the same `dist/` folder also runs from any subfolder of any static host.
 

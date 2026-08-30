@@ -3,7 +3,7 @@
 ## 2026-08-30, GitHub Pages
 
 - The production build is relocatable: every URL is relative to index.html (`base: "./"` for builds only), the manifest and the icon links are relative, the service worker routes against the folder it lives in, and the audio root, the pack fetches and the worker registration follow the build base. The same `dist/` runs at a domain root, in a subfolder and on GitHub Pages.
-- `.github/workflows/pages.yml` builds on every push to `main` and publishes `dist/` to https://bouwles.github.io/Pacific-Rim-Shatterdome-Earth/. The dev server and the tests keep `/`.
+- `.github/workflows/pages.yml` builds on every push to `main` and pushes `dist/` to the `gh-pages` branch, which Pages serves at https://bouwles.github.io/Pacific-Rim-Shatterdome-Earth/. The dev server and the tests keep `/`. `@types/node` is declared so the typecheck passes on a clean install.
 
 ## 2026-08-30, Titan Break: the flagship fight
 
