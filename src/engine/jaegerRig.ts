@@ -1,58 +1,131 @@
-import { Color3, Mesh, MeshBuilder, StandardMaterial, TransformNode, type Scene } from "@babylonjs/core";
-import { PALETTE_TOKENS, SURFACE_STYLES } from "../data/styleGuide";
+import {
+  Color3,
+  Color4,
+  Mesh,
+  MeshBuilder,
+  StandardMaterial,
+  TransformNode,
+  type Scene,
+} from "@babylonjs/core";
 
 /**
- * A machine with a body.
+ * Gipsy Danger, built from parts.
  *
- * The single grey box is gone. This builds an articulated humanoid from
- * primitive parts: a pelvis and torso with an emissive reactor core, a
- * helmeted head with a visor strip, layered shoulder pauldrons, jointed arms
- * ending in fists, jointed legs with broad feet, and joint collars where the
- * limbs meet so the articulation reads as engineered rather than floating.
+ * The original procedural placeholder for the flagship machine: a stylised
+ * industrial-anime hero rig with a small armoured head, a broad layered torso
+ * around a circular chest reactor, blue plate over dark joints, segmented
+ * arms and legs, elbow thrusters, a plasma barrel on the left forearm and a
+ * chain sword that deploys from the right. Inked edges on every panel give it
+ * a drawn silhouette at fight distance.
  *
- * It is a *rig*, not a model: everything is parameterised by height and driven
- * by a pose each frame, so the same builder serves the piloted machine, the
- * title composition, and any machine that needs a body until a real GLB
- * arrives through the resolver, which still replaces it.
+ * Orientation contract (docs/ORIENTATION.md): the pivot is on the sole plane,
+ * +Y is up, the visor and the reactor face +Z. The root is identity; every
+ * tilt lives on the `visual` node and is reported through `tilt`.
  *
- * The animation rules give it mass. The walk swings from the hips with the
- * torso leading into speed, arms counter-swing, everything eases, and nothing
- * snaps. Attacks pull back before they extend. Recoil is a decaying kick,
- * strongest at the torso. Damage drops the posture and makes the core gutter.
+ * Height drives every dimension, so the same builder makes a 68 m frame and
+ * an 82 m frame. Sockets are plain transform nodes: a real GLB replaces the
+ * rig through the resolver without touching gameplay.
  */
 
+export type JaegerAttackKind =
+  | "jab"
+  | "cross"
+  | "smash"
+  | "spin"
+  | "overhead"
+  | "haymaker"
+  | "launcher"
+  | "shoulder"
+  | "elbow"
+  | "sword"
+  | "purge"
+  | "finisher"
+  | "counter";
+
+export type JaegerWeaponMode = "fists" | "sword" | "plasma";
+
+export type JaegerRegion = "arm.L" | "arm.R" | "leg.L" | "leg.R" | "torso" | "reactor";
+
 export interface JaegerRigPose {
-  /** 0 to 1 through the stride cycle. */
+  /** 0 to 1, from the locomotion. Distance covered decides the legs. */
   readonly stridePhase: number;
-  /** Metres per second over the ground. Drives swing amplitude and lean. */
   readonly speedMps: number;
-  /** Seconds of world time, for idle breathing. */
   readonly timeSeconds: number;
-  /** The active attack, if any. */
-  readonly attack: { readonly phase: "windup" | "active" | "recover"; readonly progress: number } | null;
+  readonly attack: {
+    readonly phase: "windup" | "active" | "recover";
+    readonly progress: number;
+    readonly kind?: JaegerAttackKind;
+  } | null;
   readonly guarding: boolean;
-  /** 0 to 1 of structure lost. Posture and the core respond. */
+  /** 0 to 1: overall structure lost. */
   readonly damage: number;
+  /** Which way the body is leaning: forward is +Z, lateral is +X. */
+  readonly lean?: { readonly forward: number; readonly lateral: number };
+  readonly dodge?: { readonly progress: number; readonly direction: "L" | "R" | "F" | "B" } | null;
+  /** A tagged tilt: progress 1 is flat on the back; recovering runs it in reverse. */
+  readonly knockdown?: { readonly progress: number; readonly recovering: boolean } | null;
+  readonly grapple?: { readonly holding: boolean; readonly progress: number } | null;
+  readonly weapon?: JaegerWeaponMode;
+  /** 0 to 1 per region: darkens plate, then it flickers. */
+  readonly regionDamage?: Partial<Record<JaegerRegion, number>>;
+  /** Reactor glow and thruster light, 0 to 1. Drift Flow drives it. */
+  readonly charge?: number;
+  /** Booster output this frame, 0 to 1: dodges, sprints and the elbow rocket. */
+  readonly boost?: number;
 }
 
-const IDLE_POSE: JaegerRigPose = {
+const DEFAULT_POSE: JaegerRigPose = {
   stridePhase: 0,
   speedMps: 0,
   timeSeconds: 0,
   attack: null,
   guarding: false,
   damage: 0,
+  weapon: "fists",
 };
 
-function hex(id: string, fallback: string): Color3 {
-  return Color3.FromHexString(PALETTE_TOKENS.find((token) => token.id === id)?.hex ?? fallback);
-}
+/** Colours the flagship reads as. Painted plate, so the albedo sits below them. */
+const PLATE_BLUE = Color3.FromHexString("#2d5f9c");
+const PLATE_BLUE_DEEP = Color3.FromHexString("#1f3f6b");
+const JOINT_DARK = Color3.FromHexString("#151b22");
+const TRIM_STEEL = Color3.FromHexString("#8a9199");
+const ACCENT_AMBER = Color3.FromHexString("#ffc247");
+const REACTOR_CYAN = Color3.FromHexString("#66e0ff");
+const VISOR_CYAN = Color3.FromHexString("#8fe3ff");
+const THRUSTER_ORANGE = Color3.FromHexString("#ff9a3d");
+const SWORD_STEEL = Color3.FromHexString("#c8d2da");
+
+const EDGE_COLOUR = new Color4(0.02, 0.04, 0.07, 0.9);
 
 export class JaegerRig {
   readonly root: TransformNode;
+  /** All tagged tilts (knockdown, dodge lean) live here, under the identity root. */
+  readonly visual: TransformNode;
+  readonly sockets: Readonly<
+    Record<
+      | "head"
+      | "chest"
+      | "reactor"
+      | "back"
+      | "hand.L"
+      | "hand.R"
+      | "forearm.L"
+      | "forearm.R"
+      | "foot.L"
+      | "foot.R"
+      | "muzzle",
+      TransformNode
+    >
+  >;
+  /** Degrees of tagged tilt on the visual node this frame, for the validator. */
+  tilt = 0;
+
   private readonly scene: Scene;
   private readonly meshes: Mesh[] = [];
   private readonly materials: StandardMaterial[] = [];
+  private readonly regionMaterials = new Map<JaegerRegion, StandardMaterial[]>();
+  private readonly h: number;
+  private readonly legLength: number;
 
   private readonly pelvis: TransformNode;
   private readonly torso: TransformNode;
@@ -61,311 +134,588 @@ export class JaegerRig {
   private readonly armR: TransformNode;
   private readonly forearmL: TransformNode;
   private readonly forearmR: TransformNode;
-  private readonly thighL: TransformNode;
-  private readonly thighR: TransformNode;
+  private readonly legL: TransformNode;
+  private readonly legR: TransformNode;
   private readonly shinL: TransformNode;
   private readonly shinR: TransformNode;
-  private core: StandardMaterial | null = null;
+  private readonly footL: TransformNode;
+  private readonly footR: TransformNode;
+  private readonly sword: Mesh;
+  private readonly plasmaBarrel: Mesh;
+  private readonly reactorCore: Mesh;
+  private readonly reactorMaterial: StandardMaterial;
+  private readonly visorMaterial: StandardMaterial;
+  private readonly thrusterMaterial: StandardMaterial;
+  private readonly plasmaMaterial: StandardMaterial;
+  private readonly ventMaterials: StandardMaterial[] = [];
 
-  /** Decaying recoil, fed by hits and burned down every update. */
   private recoilKick = 0;
+  private swordDeploy = 0;
+  private plasmaDeploy = 0;
   private disposed = false;
 
   constructor(scene: Scene, heightMeters: number, name = "jaegerRig") {
     this.scene = scene;
-    this.root = new TransformNode(`${name}.root`, scene);
     const h = heightMeters;
+    this.h = h;
+    this.root = new TransformNode(`${name}.root`, scene);
+    this.visual = new TransformNode(`${name}.visual`, scene);
+    this.visual.parent = this.root;
 
-    // Proportions in fractions of height: legs about half, torso a third.
-    const legLength = h * 0.5;
+    const plate = this.material(`${name}.plate`, PLATE_BLUE, "torso");
+    const plateDeep = this.material(`${name}.plateDeep`, PLATE_BLUE_DEEP, "torso");
+    const joint = this.material(`${name}.joint`, JOINT_DARK);
+    const trim = this.material(`${name}.trim`, TRIM_STEEL);
+    const accent = this.material(`${name}.accent`, ACCENT_AMBER);
+    accent.emissiveColor = ACCENT_AMBER.scale(0.2);
+    this.reactorMaterial = this.material(`${name}.reactor`, REACTOR_CYAN);
+    this.reactorMaterial.emissiveColor = REACTOR_CYAN.scale(0.9);
+    this.visorMaterial = this.material(`${name}.visor`, VISOR_CYAN);
+    this.visorMaterial.emissiveColor = VISOR_CYAN.scale(0.7);
+    // Thruster nozzles are dark metal until they fire; the orange is emissive only.
+    this.thrusterMaterial = this.material(`${name}.thruster`, JOINT_DARK);
+    this.thrusterMaterial.emissiveColor = Color3.Black();
+    this.plasmaMaterial = this.material(`${name}.plasma`, REACTOR_CYAN);
+    this.plasmaMaterial.emissiveColor = Color3.Black();
+    const swordMaterial = this.material(`${name}.sword`, SWORD_STEEL);
+    swordMaterial.specularColor = new Color3(0.6, 0.65, 0.7);
+    swordMaterial.specularPower = 48;
+
+    // Proportions. Heroic: long legs, broad shoulders, small head.
+    this.legLength = h * 0.47;
     const torsoHeight = h * 0.3;
-    this.legLength = legLength;
+    const shoulderWidth = h * 0.34;
 
-    const steel = this.material(`${name}.armour`, hex("style.steel", "#5f6a72"));
-    const dark = this.material(`${name}.joint`, hex("style.ink", "#0a1016"));
-    const warm = this.material(`${name}.accent`, hex("style.warning-amber", "#ffc247"));
-    warm.emissiveColor = hex("style.warning-amber", "#ffc247").scale(0.25);
-    const core = this.material(`${name}.core`, hex("style.plasma", "#66e0ff"));
-    core.emissiveColor = hex("style.plasma", "#66e0ff").scale(0.9);
-    this.core = core;
-    const visor = this.material(`${name}.visor`, hex("style.sky-cool", "#7fd6ff"));
-    visor.emissiveColor = hex("style.sky-cool", "#7fd6ff").scale(0.7);
-
-    // ------------------------------- pelvis -------------------------------
+    // Pelvis and hips.
     this.pelvis = new TransformNode(`${name}.pelvis`, scene);
-    this.pelvis.parent = this.root;
-    this.pelvis.position.y = legLength;
-    this.box(`${name}.hips`, h * 0.2, h * 0.08, h * 0.12, this.pelvis, steel, 0, h * 0.02, 0);
-    this.cylinder(`${name}.waist`, h * 0.07, h * 0.15, this.pelvis, dark, 0, h * 0.07, 0);
+    this.pelvis.parent = this.visual;
+    this.pelvis.position.y = this.legLength;
+    this.box(`${name}.hips`, h * 0.2, h * 0.08, h * 0.13, this.pelvis, plateDeep, 0, 0.01 * h, 0);
+    this.box(`${name}.codpiece`, h * 0.1, h * 0.06, h * 0.05, this.pelvis, plate, 0, -0.01 * h, h * 0.07);
+    this.box(`${name}.hipPlate.L`, h * 0.05, h * 0.09, h * 0.12, this.pelvis, plate, -h * 0.115, 0, 0);
+    this.box(`${name}.hipPlate.R`, h * 0.05, h * 0.09, h * 0.12, this.pelvis, plate, h * 0.115, 0, 0);
+    this.cylinder(`${name}.waist`, h * 0.065, h * 0.06, this.pelvis, joint, 0, h * 0.06, 0);
 
-    // ------------------------------- torso --------------------------------
-    this.torso = new TransformNode(`${name}.torsoNode`, scene);
+    // Torso: abdomen, broad chest, layered front plate, back pack.
+    this.torso = new TransformNode(`${name}.torso`, scene);
     this.torso.parent = this.pelvis;
-    this.torso.position.y = h * 0.09;
-    // Chest broadens toward the shoulders: two stacked masses, not one slab.
+    this.torso.position.y = h * 0.08;
     this.box(
       `${name}.abdomen`,
-      h * 0.16,
-      torsoHeight * 0.45,
+      h * 0.15,
+      torsoHeight * 0.4,
       h * 0.1,
       this.torso,
-      dark,
+      joint,
       0,
-      torsoHeight * 0.22,
+      torsoHeight * 0.2,
       0,
+    );
+    this.box(
+      `${name}.abdomenPlate`,
+      h * 0.12,
+      torsoHeight * 0.32,
+      h * 0.03,
+      this.torso,
+      plateDeep,
+      0,
+      torsoHeight * 0.2,
+      h * 0.06,
     );
     this.box(
       `${name}.chest`,
-      h * 0.24,
+      h * 0.26,
       torsoHeight * 0.55,
-      h * 0.13,
+      h * 0.15,
       this.torso,
-      steel,
+      plate,
       0,
-      torsoHeight * 0.68,
+      torsoHeight * 0.66,
       0,
     );
     this.box(
-      `${name}.chestPlate`,
-      h * 0.18,
+      `${name}.chestPlate.L`,
+      h * 0.1,
       torsoHeight * 0.4,
-      h * 0.02,
+      h * 0.04,
       this.torso,
-      steel,
-      0,
-      torsoHeight * 0.7,
-      -h * 0.075,
-    );
-    // The reactor core: the one thing on the body that glows by right.
-    this.cylinder(
-      `${name}.reactor`,
-      h * 0.03,
-      h * 0.055,
-      this.torso,
-      core,
-      0,
-      torsoHeight * 0.68,
+      plate,
       -h * 0.085,
+      torsoHeight * 0.72,
+      h * 0.085,
+    );
+    this.box(
+      `${name}.chestPlate.R`,
+      h * 0.1,
+      torsoHeight * 0.4,
+      h * 0.04,
+      this.torso,
+      plate,
+      h * 0.085,
+      torsoHeight * 0.72,
+      h * 0.085,
+    );
+    this.box(
+      `${name}.collar`,
+      h * 0.2,
+      torsoHeight * 0.12,
+      h * 0.12,
+      this.torso,
+      trim,
+      0,
+      torsoHeight * 0.93,
+      h * 0.02,
+    );
+    this.box(
+      `${name}.backPack`,
+      h * 0.2,
+      torsoHeight * 0.5,
+      h * 0.06,
+      this.torso,
+      plateDeep,
+      0,
+      torsoHeight * 0.62,
+      -h * 0.095,
+    );
+    this.box(
+      `${name}.spine`,
+      h * 0.04,
+      torsoHeight * 0.8,
+      h * 0.03,
+      this.torso,
+      trim,
+      0,
+      torsoHeight * 0.5,
+      -h * 0.125,
+    );
+    for (const side of [-1, 1] as const) {
+      const vent = this.material(`${name}.vent.${side}`, JOINT_DARK);
+      this.ventMaterials.push(vent);
+      this.box(
+        `${name}.vent.${side}`,
+        h * 0.05,
+        torsoHeight * 0.22,
+        h * 0.03,
+        this.torso,
+        vent,
+        side * h * 0.075,
+        torsoHeight * 0.36,
+        h * 0.075,
+      );
+      // Thrusters on the back: the boosters that read as orange when they fire.
+      this.cylinder(
+        `${name}.thruster.${side}`,
+        h * 0.028,
+        h * 0.07,
+        this.torso,
+        this.thrusterMaterial,
+        side * h * 0.07,
+        torsoHeight * 0.6,
+        -h * 0.13,
+        Math.PI / 2,
+      );
+      this.box(
+        `${name}.stripe.${side}`,
+        h * 0.012,
+        torsoHeight * 0.3,
+        h * 0.005,
+        this.torso,
+        accent,
+        side * h * 0.12,
+        torsoHeight * 0.7,
+        h * 0.078,
+      );
+    }
+    // The reactor: a ring around a glowing core, on the front of the chest.
+    this.cylinder(
+      `${name}.reactorRing`,
+      h * 0.055,
+      h * 0.03,
+      this.torso,
+      trim,
+      0,
+      torsoHeight * 0.66,
+      h * 0.09,
       Math.PI / 2,
     );
-    // Intake vents flanking the chest, warm-striped.
-    this.box(
-      `${name}.ventL`,
-      h * 0.02,
-      torsoHeight * 0.3,
-      h * 0.06,
+    this.reactorCore = this.cylinder(
+      `${name}.reactorCore`,
+      h * 0.038,
+      h * 0.035,
       this.torso,
-      warm,
-      -h * 0.13,
-      torsoHeight * 0.72,
+      this.reactorMaterial,
       0,
-    );
-    this.box(
-      `${name}.ventR`,
-      h * 0.02,
-      torsoHeight * 0.3,
-      h * 0.06,
-      this.torso,
-      warm,
-      h * 0.13,
-      torsoHeight * 0.72,
-      0,
+      torsoHeight * 0.66,
+      h * 0.098,
+      Math.PI / 2,
     );
 
-    // -------------------------------- head --------------------------------
-    this.head = new TransformNode(`${name}.headNode`, scene);
+    // Head: small, armoured, with a visor slit and a sensor mast.
+    this.head = new TransformNode(`${name}.head`, scene);
     this.head.parent = this.torso;
-    this.head.position.y = torsoHeight + h * 0.01;
-    this.box(`${name}.helm`, h * 0.09, h * 0.08, h * 0.09, this.head, steel, 0, h * 0.035, 0);
-    this.box(`${name}.visor`, h * 0.07, h * 0.02, h * 0.012, this.head, visor, 0, h * 0.035, -h * 0.045);
+    this.head.position.y = torsoHeight + h * 0.005;
+    this.cylinder(`${name}.neck`, h * 0.03, h * 0.03, this.head, joint, 0, -h * 0.005, 0);
+    this.box(`${name}.helm`, h * 0.075, h * 0.065, h * 0.08, this.head, plate, 0, h * 0.035, 0);
+    this.box(
+      `${name}.visor`,
+      h * 0.05,
+      h * 0.014,
+      h * 0.012,
+      this.head,
+      this.visorMaterial,
+      0,
+      h * 0.036,
+      h * 0.042,
+    );
+    this.box(`${name}.jawGuard`, h * 0.06, h * 0.02, h * 0.03, this.head, joint, 0, h * 0.012, h * 0.03);
+    this.box(`${name}.mast`, h * 0.008, h * 0.05, h * 0.008, this.head, trim, h * 0.03, h * 0.08, -h * 0.02);
 
-    // ------------------------------- arms ---------------------------------
-    const shoulderY = torsoHeight * 0.85;
-    const shoulderX = h * 0.16;
-    const upperLen = h * 0.2;
-    const forearmLen = h * 0.2;
-    const buildArm = (side: 1 | -1): { arm: TransformNode; forearm: TransformNode } => {
-      const tag = side === 1 ? "R" : "L";
-      const arm = new TransformNode(`${name}.arm${tag}`, scene);
-      arm.parent = this.torso;
-      arm.position.set(side * shoulderX, shoulderY, 0);
-      // Pauldron sits on the shoulder joint, oversized the way the film
-      // machines wear them; the collar makes the joint read as a bearing.
-      this.box(
-        `${name}.pauldron${tag}`,
-        h * 0.1,
-        h * 0.07,
-        h * 0.11,
-        arm,
-        steel,
-        side * h * 0.02,
-        h * 0.02,
-        0,
-      );
-      this.cylinder(`${name}.shoulderJoint${tag}`, h * 0.035, h * 0.06, arm, dark, 0, 0, 0, 0, Math.PI / 2);
-      this.box(
-        `${name}.upperArm${tag}`,
-        h * 0.055,
-        upperLen,
-        h * 0.055,
-        arm,
-        dark,
-        side * h * 0.01,
-        -upperLen * 0.55,
-        0,
-      );
+    // Shoulders and arms.
+    const shoulderY = torsoHeight * 0.82;
+    this.armL = this.buildArm(
+      name,
+      -1,
+      shoulderWidth * 0.5,
+      shoulderY,
+      plate,
+      plateDeep,
+      joint,
+      trim,
+      "arm.L",
+    );
+    this.armR = this.buildArm(
+      name,
+      1,
+      shoulderWidth * 0.5,
+      shoulderY,
+      plate,
+      plateDeep,
+      joint,
+      trim,
+      "arm.R",
+    );
+    this.forearmL = this.armL
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".forearm")) as TransformNode;
+    this.forearmR = this.armR
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".forearm")) as TransformNode;
 
-      const forearm = new TransformNode(`${name}.forearm${tag}`, scene);
-      forearm.parent = arm;
-      forearm.position.y = -upperLen;
-      this.cylinder(`${name}.elbow${tag}`, h * 0.03, h * 0.07, forearm, dark, 0, 0, 0, 0, Math.PI / 2);
-      // The forearm is armoured heavier than the upper arm: it is the weapon.
-      this.box(
-        `${name}.forearmShell${tag}`,
-        h * 0.075,
-        forearmLen * 0.8,
-        h * 0.075,
-        forearm,
-        steel,
-        0,
-        -forearmLen * 0.45,
-        0,
-      );
-      this.box(
-        `${name}.fist${tag}`,
-        h * 0.065,
-        h * 0.06,
-        h * 0.07,
-        forearm,
-        dark,
-        0,
-        -forearmLen * 0.95,
-        -h * 0.005,
-      );
-      return { arm, forearm };
+    // The chain sword rides the right forearm and deploys down past the fist.
+    this.sword = this.box(
+      `${name}.sword`,
+      h * 0.02,
+      h * 0.3,
+      h * 0.05,
+      this.forearmR,
+      swordMaterial,
+      0,
+      -h * 0.34,
+      h * 0.01,
+    );
+    this.sword.scaling.y = 0.001;
+    this.sword.isVisible = false;
+    // The plasma caster barrel opens on the left forearm.
+    this.plasmaBarrel = this.cylinder(
+      `${name}.plasmaBarrel`,
+      h * 0.022,
+      h * 0.09,
+      this.forearmL,
+      this.plasmaMaterial,
+      0,
+      -h * 0.2,
+      h * 0.035,
+      Math.PI / 2,
+    );
+    this.plasmaBarrel.scaling.setAll(0.001);
+
+    // Legs.
+    this.legL = this.buildLeg(name, -1, plate, plateDeep, joint, trim, "leg.L");
+    this.legR = this.buildLeg(name, 1, plate, plateDeep, joint, trim, "leg.R");
+    this.shinL = this.legL
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".shin")) as TransformNode;
+    this.shinR = this.legR
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".shin")) as TransformNode;
+    this.footL = this.shinL
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".foot")) as TransformNode;
+    this.footR = this.shinR
+      .getChildTransformNodes(true)
+      .find((node) => node.name.endsWith(".foot")) as TransformNode;
+
+    // Sockets: plain nodes, +Z pointing the way the mounted thing points.
+    const socket = (id: string, parent: TransformNode, x: number, y: number, z: number): TransformNode => {
+      const node = new TransformNode(`${name}.socket.${id}`, scene);
+      node.parent = parent;
+      node.position.set(x, y, z);
+      return node;
     };
-    ({ arm: this.armR, forearm: this.forearmR } = buildArm(1));
-    ({ arm: this.armL, forearm: this.forearmL } = buildArm(-1));
-
-    // ------------------------------- legs ---------------------------------
-    const hipX = h * 0.07;
-    const thighLen = legLength * 0.5;
-    const shinLen = legLength * 0.5;
-    const buildLeg = (side: 1 | -1): { thigh: TransformNode; shin: TransformNode } => {
-      const tag = side === 1 ? "R" : "L";
-      const thigh = new TransformNode(`${name}.thigh${tag}`, scene);
-      thigh.parent = this.pelvis;
-      thigh.position.set(side * hipX, 0, 0);
-      this.cylinder(`${name}.hipJoint${tag}`, h * 0.035, h * 0.07, thigh, dark, 0, 0, 0, 0, Math.PI / 2);
-      this.box(
-        `${name}.thighShell${tag}`,
-        h * 0.085,
-        thighLen * 0.85,
-        h * 0.09,
-        thigh,
-        steel,
-        0,
-        -thighLen * 0.5,
-        0,
-      );
-
-      const shin = new TransformNode(`${name}.shin${tag}`, scene);
-      shin.parent = thigh;
-      shin.position.y = -thighLen;
-      this.cylinder(`${name}.knee${tag}`, h * 0.03, h * 0.08, shin, dark, 0, 0, 0, 0, Math.PI / 2);
-      // Calf broadens downward: these legs carry a building.
-      this.box(
-        `${name}.shinShell${tag}`,
-        h * 0.095,
-        shinLen * 0.8,
-        h * 0.1,
-        shin,
-        steel,
-        0,
-        -shinLen * 0.45,
-        h * 0.005,
-      );
-      this.box(`${name}.foot${tag}`, h * 0.1, h * 0.035, h * 0.16, shin, dark, 0, -shinLen * 0.98, -h * 0.03);
-      return { thigh, shin };
+    this.sockets = {
+      head: socket("head", this.head, 0, h * 0.04, 0),
+      chest: socket("chest", this.torso, 0, torsoHeight * 0.66, h * 0.09),
+      reactor: socket("reactor", this.torso, 0, torsoHeight * 0.66, h * 0.12),
+      back: socket("back", this.torso, 0, torsoHeight * 0.6, -h * 0.14),
+      "hand.L": socket("hand.L", this.forearmL, 0, -h * 0.215, 0),
+      "hand.R": socket("hand.R", this.forearmR, 0, -h * 0.215, 0),
+      "forearm.L": socket("forearm.L", this.forearmL, 0, -h * 0.1, 0),
+      "forearm.R": socket("forearm.R", this.forearmR, 0, -h * 0.1, 0),
+      "foot.L": socket("foot.L", this.footL, 0, 0, 0),
+      "foot.R": socket("foot.R", this.footR, 0, 0, 0),
+      muzzle: socket("muzzle", this.forearmL, 0, -h * 0.2, h * 0.08),
     };
-    ({ thigh: this.thighR, shin: this.shinR } = buildLeg(1));
-    ({ thigh: this.thighL, shin: this.shinL } = buildLeg(-1));
+
+    this.update(DEFAULT_POSE, 0);
   }
 
-  /** All the rig's meshes, for pickability, shadows and disposal checks. */
+  /** The front marker for the validator: the reactor, which faces +Z. */
+  get frontMarker(): TransformNode {
+    return this.sockets.reactor;
+  }
+
+  get heightMeters(): number {
+    return this.h;
+  }
+
+  /** A kick from a hit or a footfall; decays on its own. */
+  addRecoil(strength: number): void {
+    if (!Number.isFinite(strength)) return;
+    this.recoilKick = Math.min(1.2, this.recoilKick + Math.max(0, strength));
+  }
+
+  /** Inked edges on or off, for the low preset. */
+  setInk(on: boolean): void {
+    for (const mesh of this.meshes) {
+      if (on) {
+        mesh.enableEdgesRendering(0.99);
+        mesh.edgesWidth = this.h * 0.22;
+        mesh.edgesColor = EDGE_COLOUR;
+      } else {
+        mesh.disableEdgesRendering();
+      }
+    }
+  }
+
   allMeshes(): readonly Mesh[] {
     return this.meshes;
   }
 
-  /** A hit landed. The kick decays over the next few frames. */
-  addRecoil(strength: number): void {
-    this.recoilKick = Math.min(1.2, this.recoilKick + Math.max(0, strength));
-  }
-
-  /** Drives the whole body from one pose. Call once per frame. */
   update(pose: Partial<JaegerRigPose>, deltaSeconds = 1 / 60): void {
     if (this.disposed) return;
-    const p = { ...IDLE_POSE, ...pose };
+    const p: JaegerRigPose = { ...DEFAULT_POSE, ...pose };
+    const h = this.h;
+    const t = p.timeSeconds;
+    const dt = Math.max(0, deltaSeconds);
+
+    // Locomotion: legs from the stride phase, arms against them, torso ahead
+    // of the hips. Swing scales with speed and saturates at a run.
     const phase = p.stridePhase * Math.PI * 2;
-    // Swing amplitude follows speed and saturates: a sprint is a longer
-    // stride, not a cartoon windmill.
-    const swing = Math.min(0.55, (p.speedMps / 9) * 0.55);
-    const idle = Math.sin(p.timeSeconds * 0.9) * 0.012;
+    const speedFraction = Math.min(1, p.speedMps / 30);
+    const swing = Math.min(0.7, speedFraction * 0.7);
+    const sprinting = p.speedMps > 22;
+    const armSwing = swing * 0.8;
+    // A limb hanging down swings forward (+Z) with a negative rotation.x.
+    this.legL.rotation.x = -Math.sin(phase) * swing;
+    this.legR.rotation.x = Math.sin(phase) * swing;
+    // Knees bend on the back swing, when the foot is lifting, and stay straight
+    // on the planted half so the sole reads as planted rather than skating.
+    this.shinL.rotation.x = Math.max(0, Math.sin(phase)) * swing * 1.3;
+    this.shinR.rotation.x = Math.max(0, -Math.sin(phase)) * swing * 1.3;
+    this.footL.rotation.x = -this.shinL.rotation.x * 0.5;
+    this.footR.rotation.x = -this.shinR.rotation.x * 0.5;
+    // Pelvis rises a little at the crossing of the legs; the settle lives in the view.
+    this.pelvis.position.y = this.legLength + Math.abs(Math.sin(phase)) * swing * h * 0.01;
+    this.pelvis.rotation.y = Math.sin(phase) * swing * 0.1;
 
-    // Legs: thighs alternate, shins bend on the back-swing only.
-    this.thighL.rotation.x = Math.sin(phase) * swing;
-    this.thighR.rotation.x = Math.sin(phase + Math.PI) * swing;
-    this.shinL.rotation.x = Math.max(0, Math.sin(phase + Math.PI * 0.5)) * swing * 0.9;
-    this.shinR.rotation.x = Math.max(0, Math.sin(phase + Math.PI * 1.5)) * swing * 0.9;
+    let armLx = Math.sin(phase) * armSwing;
+    let armRx = -Math.sin(phase) * armSwing;
+    let armLz = 0.12;
+    let armRz = -0.12;
+    let armLy = 0;
+    let armRy = 0;
+    let foreLx = -0.25 - swing * 0.5;
+    let foreRx = -0.25 - swing * 0.5;
+    let torsoX = (sprinting ? 0.22 : 0.06) * speedFraction + (p.lean?.forward ?? 0) * 0.25;
+    let torsoY = Math.sin(phase) * swing * 0.12;
+    const torsoZ = -(p.lean?.lateral ?? 0) * 0.18;
+    let headX = -torsoX * 0.6;
+    let headY = 0;
 
-    // The pelvis bobs twice per stride and the torso leads into the motion.
-    this.pelvis.position.y = this.legLength + Math.abs(Math.sin(phase)) * swing * 0.6;
-    const damageSlump = p.damage * 0.12;
-    this.torso.rotation.x = -swing * 0.35 - damageSlump + idle + this.recoilKick * 0.3;
-    this.torso.rotation.y = Math.sin(phase) * swing * 0.12;
-
-    // Arms counter-swing in locomotion, and fight when asked to.
-    const armSwingL = Math.sin(phase + Math.PI) * swing * 0.8;
-    const armSwingR = Math.sin(phase) * swing * 0.8;
-    if (p.attack) {
-      const t = Math.min(1, Math.max(0, p.attack.progress));
-      if (p.attack.phase === "windup") {
-        // Pull back and coil: the anticipation is the mass.
-        this.armR.rotation.x = 0.6 * t;
-        this.forearmR.rotation.x = -1.2 * t;
-        this.torso.rotation.y = -0.25 * t;
-      } else if (p.attack.phase === "active") {
-        // Extend through the target, torso rotating into the blow.
-        this.armR.rotation.x = 0.6 - 2.0 * t;
-        this.forearmR.rotation.x = -1.2 + 1.1 * t;
-        this.torso.rotation.y = -0.25 + 0.5 * t;
-      } else {
-        this.armR.rotation.x = -1.4 + 1.4 * t;
-        this.forearmR.rotation.x = -0.1 * (1 - t);
-        this.torso.rotation.y = 0.25 * (1 - t);
+    // Attacks. Each kind is a pose the arms and torso travel through; the
+    // arena decides when it lands, the rig only shows the commitment.
+    const attack = p.attack;
+    if (attack) {
+      const k = attack.kind ?? "jab";
+      const q = clamp(attack.progress, 0, 1);
+      const ease = q * q * (3 - 2 * q);
+      const windup = attack.phase === "windup" ? ease : attack.phase === "active" ? 1 : 1 - ease;
+      const strike = attack.phase === "active" ? ease : attack.phase === "recover" ? 1 - ease : 0;
+      const rightHanded = k !== "cross";
+      if (k === "jab" || k === "cross" || k === "counter") {
+        const back = 0.55 * windup - 2.05 * strike;
+        const fold = -1.5 * windup + 1.3 * strike;
+        if (rightHanded) {
+          armRx = back;
+          foreRx = fold;
+          torsoY = -0.3 * windup + 0.55 * strike;
+        } else {
+          armLx = back;
+          foreLx = fold;
+          torsoY = 0.3 * windup - 0.55 * strike;
+        }
+        torsoX += 0.1 * strike;
+      } else if (k === "smash" || k === "elbow") {
+        armLx = 0.4 * windup - 1.9 * strike;
+        armRx = 0.4 * windup - 1.9 * strike;
+        foreLx = -1.3 * windup + (k === "elbow" ? -0.3 : 1.1) * strike;
+        foreRx = -1.3 * windup + (k === "elbow" ? -0.3 : 1.1) * strike;
+        torsoX += -0.15 * windup + 0.35 * strike;
+      } else if (k === "overhead") {
+        armLx = -2.9 * windup + 1.7 * strike;
+        armRx = -2.9 * windup + 1.7 * strike;
+        foreLx = -0.4 * windup;
+        foreRx = -0.4 * windup;
+        torsoX += -0.2 * windup + 0.45 * strike;
+      } else if (k === "haymaker") {
+        armRx = 0.3 * windup - 1.7 * strike;
+        armRz = -1.3 * windup + 1.2 * strike;
+        foreRx = -0.9 * windup + 0.6 * strike;
+        torsoY = -0.6 * windup + 0.9 * strike;
+        torsoX += 0.12 * strike;
+      } else if (k === "spin") {
+        armLx = -1.5;
+        armRx = -1.5;
+        armLz = 0.9;
+        armRz = -0.9;
+        torsoY = -1.1 * windup + 2.2 * strike;
+      } else if (k === "launcher") {
+        armRx = 0.7 * windup - 2.6 * strike;
+        foreRx = -1.0 * windup + 0.4 * strike;
+        torsoX += 0.25 * windup - 0.3 * strike;
+        torsoY = -0.25 * windup + 0.35 * strike;
+      } else if (k === "shoulder") {
+        armLx = -0.9 * (windup + strike);
+        armLy = 0.5 * (windup + strike);
+        foreLx = -1.2;
+        torsoY = 0.5 * windup + 0.3 * strike;
+        torsoX += 0.15 * windup + 0.35 * strike;
+      } else if (k === "sword") {
+        armRx = -1.55;
+        armRy = -1.1 * windup + 1.3 * strike;
+        foreRx = -0.2;
+        torsoY = -0.5 * windup + 0.8 * strike;
+        torsoX += 0.1 * strike;
+      } else if (k === "purge") {
+        armLz = 1.15 * (windup + strike);
+        armRz = -1.15 * (windup + strike);
+        armLx = -0.5 * (windup + strike);
+        armRx = -0.5 * (windup + strike);
+        torsoX += -0.2 * (windup + strike);
+      } else if (k === "finisher") {
+        armLx = -1.6 * (windup + strike * 0.2);
+        armRx = -1.2 * windup - 0.6 * strike;
+        foreLx = -0.1;
+        foreRx = -1.0 * windup + 0.8 * strike;
+        torsoX += 0.05 * windup + 0.25 * strike;
       }
-      this.armL.rotation.x = armSwingL * 0.4 - 0.2;
-    } else if (p.guarding) {
-      // Forearms up and crossed in front of the core.
-      this.armL.rotation.x = -1.5;
-      this.armR.rotation.x = -1.5;
-      this.forearmL.rotation.x = -1.1;
-      this.forearmR.rotation.x = -1.1;
-    } else {
-      this.armL.rotation.x = armSwingL;
-      this.armR.rotation.x = armSwingR;
-      this.forearmL.rotation.x = -0.25 - Math.max(0, armSwingL) * 0.4;
-      this.forearmR.rotation.x = -0.25 - Math.max(0, armSwingR) * 0.4;
     }
 
-    // The head keeps its own counsel: level against the torso, damage aside.
-    this.head.rotation.x = -this.torso.rotation.x * 0.6;
+    if (p.guarding && !attack) {
+      armLx = -1.25;
+      armRx = -1.25;
+      armLy = 0.55;
+      armRy = -0.55;
+      foreLx = -1.6;
+      foreRx = -1.6;
+      torsoX += 0.08;
+      headX = 0.1;
+    }
 
-    // Recoil burns down; the core gutters once the structure is going.
-    this.recoilKick = Math.max(0, this.recoilKick - deltaSeconds * 4);
-    if (this.core) {
-      const gutter = p.damage > 0.5 ? 0.5 + 0.5 * Math.abs(Math.sin(p.timeSeconds * 11)) : 1;
-      this.core.emissiveColor = hex("style.plasma", "#66e0ff").scale(0.9 * gutter * (1 - p.damage * 0.4));
+    if (p.grapple?.holding) {
+      const g = clamp(p.grapple.progress, 0, 1);
+      armLx = -1.55;
+      armRx = -1.55;
+      armLy = 0.35;
+      armRy = -0.35;
+      foreLx = -0.5 + 0.3 * g;
+      foreRx = -0.5 + 0.3 * g;
+      torsoX += 0.2 + 0.1 * g;
+    }
+
+    // Recoil kicks the torso back and decays; damage slumps it forward and
+    // makes the reactor gutter.
+    this.recoilKick = Math.max(0, this.recoilKick - dt * 4);
+    torsoX += -this.recoilKick * 0.28 + p.damage * 0.1;
+    headY += Math.sin(t * 0.7) * 0.03;
+
+    this.torso.rotation.set(torsoX, torsoY, torsoZ);
+    this.head.rotation.set(headX, headY, 0);
+    this.armL.rotation.set(armLx, armLy, armLz);
+    this.armR.rotation.set(armRx, armRy, armRz);
+    this.forearmL.rotation.x = foreLx;
+    this.forearmR.rotation.x = foreRx;
+
+    // Dodge lean and knockdown are the tagged tilts on the visual node.
+    let tiltX = 0;
+    let tiltZ = 0;
+    let lift = 0;
+    if (p.dodge) {
+      const d = Math.sin(clamp(p.dodge.progress, 0, 1) * Math.PI) * 0.16;
+      if (p.dodge.direction === "L") tiltZ = d;
+      else if (p.dodge.direction === "R") tiltZ = -d;
+      else if (p.dodge.direction === "F") tiltX = d;
+      else tiltX = -d;
+    }
+    if (p.knockdown) {
+      const k = clamp(p.knockdown.progress, 0, 1);
+      const eased = k * k * (3 - 2 * k);
+      // Flat on the back: the top of the body goes to -Z, feet stay put.
+      tiltX = -1.42 * eased;
+      lift = h * 0.06 * eased;
+      this.legL.rotation.x = -0.35 * eased;
+      this.legR.rotation.x = -0.25 * eased;
+      this.armL.rotation.x = -0.6 * eased;
+      this.armR.rotation.x = -0.5 * eased;
+    }
+    this.visual.rotation.set(tiltX, 0, tiltZ);
+    this.visual.position.y = lift;
+    this.tilt = (Math.hypot(tiltX, tiltZ) * 180) / Math.PI;
+
+    // Weapons deploy with their own short transitions, never popping.
+    const weapon = p.weapon ?? "fists";
+    this.swordDeploy = approach(this.swordDeploy, weapon === "sword" ? 1 : 0, dt * 5);
+    this.plasmaDeploy = approach(this.plasmaDeploy, weapon === "plasma" ? 1 : 0, dt * 6);
+    this.sword.isVisible = this.swordDeploy > 0.01;
+    this.sword.scaling.y = Math.max(0.001, this.swordDeploy);
+    this.sword.position.y = -h * 0.19 - this.swordDeploy * h * 0.15;
+    const barrel = Math.max(0.001, this.plasmaDeploy);
+    this.plasmaBarrel.scaling.set(barrel, barrel, barrel);
+    this.plasmaMaterial.emissiveColor = REACTOR_CYAN.scale(this.plasmaDeploy * 0.8);
+
+    // Reactor and thrusters: the two lights the machine carries.
+    const charge = clamp(p.charge ?? 0, 0, 1);
+    const gutter = p.damage > 0.5 ? 0.55 + 0.45 * Math.abs(Math.sin(t * 11)) : 1;
+    const pulse = 0.85 + 0.15 * Math.sin(t * 2.4);
+    this.reactorMaterial.emissiveColor = REACTOR_CYAN.scale(
+      (0.7 + charge * 0.5) * pulse * gutter * (1 - p.damage * 0.35),
+    );
+    const boost = clamp(p.boost ?? 0, 0, 1) + (sprinting ? 0.35 : 0);
+    this.thrusterMaterial.emissiveColor = THRUSTER_ORANGE.scale(Math.min(1, boost));
+    for (const vent of this.ventMaterials)
+      vent.emissiveColor = THRUSTER_ORANGE.scale(Math.min(1, boost) * 0.35);
+
+    // Region damage: plate darkens, then flickers at the scar.
+    const regions = p.regionDamage ?? {};
+    for (const [region, materials] of this.regionMaterials) {
+      const amount = clamp(regions[region] ?? 0, 0, 1);
+      const flicker = amount > 0.6 ? 0.5 + 0.5 * Math.abs(Math.sin(t * 13 + region.length)) : 0;
+      for (const material of materials) {
+        const base = material.metadata as { base: Color3 } | undefined;
+        if (!base) continue;
+        material.diffuseColor = base.base.scale(0.62 * (1 - amount * 0.45));
+        material.emissiveColor = THRUSTER_ORANGE.scale(flicker * amount * 0.35);
+      }
     }
   }
 
@@ -374,24 +724,238 @@ export class JaegerRig {
     this.disposed = true;
     for (const mesh of this.meshes) mesh.dispose();
     for (const material of this.materials) material.dispose();
-    this.meshes.length = 0;
-    this.materials.length = 0;
-    this.core = null;
     this.root.dispose();
   }
 
-  private legLength = 0;
+  private buildArm(
+    name: string,
+    side: 1 | -1,
+    shoulderX: number,
+    shoulderY: number,
+    plate: StandardMaterial,
+    plateDeep: StandardMaterial,
+    joint: StandardMaterial,
+    trim: StandardMaterial,
+    region: JaegerRegion,
+  ): TransformNode {
+    const h = this.h;
+    const suffix = side === 1 ? "R" : "L";
+    const armPlate = this.material(`${name}.arm.${suffix}.plate`, PLATE_BLUE, region);
+    const arm = new TransformNode(`${name}.arm.${suffix}`, this.scene);
+    arm.parent = this.torso;
+    arm.position.set(side * shoulderX, shoulderY, 0);
+    const upperLen = h * 0.2;
+    const forearmLen = h * 0.21;
+    // Pauldron: a big shoulder block with a raised rim, the widest thing on the body.
+    this.box(
+      `${name}.pauldron.${suffix}`,
+      h * 0.11,
+      h * 0.09,
+      h * 0.12,
+      arm,
+      armPlate,
+      side * h * 0.01,
+      h * 0.02,
+      0,
+    );
+    this.box(
+      `${name}.pauldronRim.${suffix}`,
+      h * 0.12,
+      h * 0.02,
+      h * 0.13,
+      arm,
+      trim,
+      side * h * 0.01,
+      h * 0.065,
+      0,
+    );
+    this.cylinder(
+      `${name}.shoulderJoint.${suffix}`,
+      h * 0.045,
+      h * 0.06,
+      arm,
+      joint,
+      0,
+      0,
+      0,
+      0,
+      Math.PI / 2,
+    );
+    this.box(
+      `${name}.upperArm.${suffix}`,
+      h * 0.075,
+      upperLen,
+      h * 0.08,
+      arm,
+      armPlate,
+      0,
+      -upperLen * 0.5,
+      0,
+    );
+    this.box(
+      `${name}.upperArmInner.${suffix}`,
+      h * 0.05,
+      upperLen * 0.9,
+      h * 0.05,
+      arm,
+      joint,
+      0,
+      -upperLen * 0.5,
+      0,
+    );
+    const forearm = new TransformNode(`${name}.arm.${suffix}.forearm`, this.scene);
+    forearm.parent = arm;
+    forearm.position.y = -upperLen;
+    this.cylinder(`${name}.elbow.${suffix}`, h * 0.04, h * 0.09, forearm, joint, 0, 0, 0, 0, Math.PI / 2);
+    // Elbow rocket housing: a thruster block behind the elbow.
+    this.box(
+      `${name}.elbowRocket.${suffix}`,
+      h * 0.05,
+      h * 0.06,
+      h * 0.05,
+      forearm,
+      plateDeep,
+      0,
+      -h * 0.01,
+      -h * 0.05,
+    );
+    this.cylinder(
+      `${name}.elbowNozzle.${suffix}`,
+      h * 0.018,
+      h * 0.03,
+      forearm,
+      this.thrusterMaterial,
+      0,
+      -h * 0.01,
+      -h * 0.078,
+      Math.PI / 2,
+    );
+    this.box(
+      `${name}.gauntlet.${suffix}`,
+      h * 0.085,
+      forearmLen * 0.75,
+      h * 0.09,
+      forearm,
+      armPlate,
+      0,
+      -forearmLen * 0.45,
+      0,
+    );
+    this.box(
+      `${name}.gauntletPlate.${suffix}`,
+      h * 0.06,
+      forearmLen * 0.5,
+      h * 0.02,
+      forearm,
+      plate,
+      0,
+      -forearmLen * 0.4,
+      h * 0.05,
+    );
+    this.box(
+      `${name}.fist.${suffix}`,
+      h * 0.07,
+      h * 0.075,
+      h * 0.075,
+      forearm,
+      joint,
+      0,
+      -forearmLen - h * 0.015,
+      h * 0.005,
+    );
+    this.box(
+      `${name}.knuckles.${suffix}`,
+      h * 0.075,
+      h * 0.03,
+      h * 0.02,
+      forearm,
+      trim,
+      0,
+      -forearmLen - h * 0.03,
+      h * 0.04,
+    );
+    return arm;
+  }
 
-  private material(name: string, colour: Color3): StandardMaterial {
+  private buildLeg(
+    name: string,
+    side: 1 | -1,
+    plate: StandardMaterial,
+    plateDeep: StandardMaterial,
+    joint: StandardMaterial,
+    trim: StandardMaterial,
+    region: JaegerRegion,
+  ): TransformNode {
+    const h = this.h;
+    const suffix = side === 1 ? "R" : "L";
+    const legPlate = this.material(`${name}.leg.${suffix}.plate`, PLATE_BLUE, region);
+    const leg = new TransformNode(`${name}.leg.${suffix}`, this.scene);
+    leg.parent = this.pelvis;
+    leg.position.set(side * h * 0.075, 0, 0);
+    const thighLen = this.legLength * 0.5;
+    const shinLen = this.legLength * 0.5;
+    this.cylinder(`${name}.hipJoint.${suffix}`, h * 0.045, h * 0.07, leg, joint, 0, 0, 0, 0, Math.PI / 2);
+    this.box(`${name}.thigh.${suffix}`, h * 0.09, thighLen, h * 0.1, leg, legPlate, 0, -thighLen * 0.5, 0);
+    this.box(
+      `${name}.thighPlate.${suffix}`,
+      h * 0.07,
+      thighLen * 0.7,
+      h * 0.025,
+      leg,
+      plate,
+      0,
+      -thighLen * 0.45,
+      h * 0.06,
+    );
+    const shin = new TransformNode(`${name}.leg.${suffix}.shin`, this.scene);
+    shin.parent = leg;
+    shin.position.y = -thighLen;
+    this.cylinder(`${name}.knee.${suffix}`, h * 0.045, h * 0.1, shin, joint, 0, 0, 0, 0, Math.PI / 2);
+    this.box(`${name}.kneeCap.${suffix}`, h * 0.06, h * 0.05, h * 0.03, shin, trim, 0, 0, h * 0.055);
+    this.box(`${name}.shin.${suffix}`, h * 0.085, shinLen, h * 0.095, shin, legPlate, 0, -shinLen * 0.5, 0);
+    this.box(
+      `${name}.shinGuard.${suffix}`,
+      h * 0.07,
+      shinLen * 0.75,
+      h * 0.025,
+      shin,
+      plateDeep,
+      0,
+      -shinLen * 0.5,
+      h * 0.058,
+    );
+    const foot = new TransformNode(`${name}.leg.${suffix}.foot`, this.scene);
+    foot.parent = shin;
+    foot.position.y = -shinLen;
+    // The sole sits at exactly rig y = 0: pelvis height is the leg length.
+    this.box(`${name}.foot.${suffix}`, h * 0.1, h * 0.035, h * 0.15, foot, joint, 0, h * 0.0175, h * 0.02);
+    this.box(`${name}.toePlate.${suffix}`, h * 0.09, h * 0.03, h * 0.05, foot, plate, 0, h * 0.04, h * 0.075);
+    this.box(
+      `${name}.heel.${suffix}`,
+      h * 0.08,
+      h * 0.03,
+      h * 0.04,
+      foot,
+      plateDeep,
+      0,
+      h * 0.04,
+      -h * 0.045,
+    );
+    return leg;
+  }
+
+  private material(name: string, colour: Color3, region?: JaegerRegion): StandardMaterial {
     const material = new StandardMaterial(name, this.scene);
-    // Painted plate under a full sun: the palette colour is what the surface
-    // reads as, not what it reflects, so the albedo sits well below it.
     material.diffuseColor = colour.scale(0.62);
-    // The roughness floor from the style guide, as specular restraint: these
-    // surfaces are painted plate, never chrome.
-    const shine = Math.max(0, 1 - SURFACE_STYLES.machine.roughnessFloor);
-    material.specularColor = new Color3(shine * 0.3, shine * 0.3, shine * 0.32);
+    material.specularColor = new Color3(0.14, 0.15, 0.17);
+    material.specularPower = 28;
+    material.metadata = { base: colour };
     this.materials.push(material);
+    if (region) {
+      const list = this.regionMaterials.get(region) ?? [];
+      list.push(material);
+      this.regionMaterials.set(region, list);
+    }
     return material;
   }
 
@@ -410,9 +974,11 @@ export class JaegerRig {
     mesh.parent = parent;
     mesh.position.set(x, y, z);
     mesh.material = material;
-    mesh.isPickable = false;
     // Never a pick target: the camera's obstruction ray must pass through the body it follows.
     mesh.isPickable = false;
+    mesh.enableEdgesRendering(0.99);
+    mesh.edgesWidth = this.h * 0.22;
+    mesh.edgesColor = EDGE_COLOUR;
     this.meshes.push(mesh);
     return mesh;
   }
@@ -431,7 +997,7 @@ export class JaegerRig {
   ): Mesh {
     const mesh = MeshBuilder.CreateCylinder(
       name,
-      { diameter: radius * 2, height, tessellation: 12 },
+      { diameter: radius * 2, height, tessellation: 14 },
       this.scene,
     );
     mesh.parent = parent;
@@ -440,9 +1006,17 @@ export class JaegerRig {
     mesh.rotation.z = rotZ;
     mesh.material = material;
     mesh.isPickable = false;
-    // Never a pick target: the camera's obstruction ray must pass through the body it follows.
-    mesh.isPickable = false;
     this.meshes.push(mesh);
     return mesh;
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function approach(value: number, target: number, rate: number): number {
+  if (value < target) return Math.min(target, value + rate);
+  if (value > target) return Math.max(target, value - rate);
+  return value;
 }

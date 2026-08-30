@@ -27,23 +27,48 @@ A player build (the production build, or the dev server with `?production=1`) sh
 
 ### In the hunt (action layout)
 
-| Input         | Action                                                                                              |
-| ------------- | --------------------------------------------------------------------------------------------------- |
-| `W A S D`     | Move; the body turns toward the camera as it moves                                                  |
-| Mouse         | Look (pointer lock on the first click in the canvas)                                                |
-| Left button   | Chain: jab, cross, forward smash, launcher, inside a 0.9 s window                                   |
-| Right button  | Heavy overhead; hold 320 ms and release for the charged haymaker                                    |
-| `F`           | Guard; a press as the hit lands is the parry, with a free counter                                   |
-| `Q`           | Booster dodge (i-frames from tick 2 to 12, 167 ms)                                                  |
-| `E`           | Grab; `E` again throws                                                                              |
-| `1` to `4`    | Plasma Caster, Elbow Rocket, Chain Sword (held), Missiles                                           |
-| `R`           | Ultimate: the plasma-drop finisher on an opening, or the charged haymaker on a full overdrive meter |
-| Middle button | Lock the camera on the creature; again to release                                                   |
-| `Shift`       | Sprint                                                                                              |
-| `Space`       | Booster step                                                                                        |
-| `Escape`      | Pause                                                                                               |
+| Input         | Action                                                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `W A S D`     | Move; the body turns toward the camera as it moves                                                                                                  |
+| Mouse         | Look (pointer lock on the first click in the canvas)                                                                                                |
+| Left button   | Chain: jab, cross, forward smash, launcher, inside a 0.9 s window                                                                                   |
+| Right button  | Heavy overhead; hold 320 ms and release for the charged haymaker                                                                                    |
+| `F`           | Guard; a press as the hit lands is the parry, with a free counter                                                                                   |
+| `Q`           | Booster dodge (i-frames from tick 2 to 12, 167 ms)                                                                                                  |
+| `E`           | Grab when the creature is off balance; `E` again throws, WASD picks the direction, a harbour piece that way turns the throw into a slam             |
+| `1`           | Elbow Rocket: a rocket-assisted advancing strike, six second cooldown, heavy on stability                                                           |
+| `2`           | Plasma Caster: a short aim state, then the shot; modest on plate, heavy on an exposed region                                                        |
+| `3`           | Chain Sword: out for twelve seconds or until the reactor is hot; the mouse buttons become cuts that shred exposed tissue                            |
+| `4`           | Reactor Purge: vents heat, shoves everything off the machine, breaks a bite; fourteen second cooldown                                               |
+| `R`           | Synchronized Breaker: with the Breaker charged and Drift Flow deep, against a staggered, downed or twice-broken creature; one direction on the beat |
+| Middle button | Lock the camera on the creature; again to release                                                                                                   |
+| `Shift`       | Sprint                                                                                                                                              |
+| `Space`       | Booster step                                                                                                                                        |
+| `Escape`      | Pause                                                                                                                                               |
 
-Timings, at 60 ticks a second: jab 7 ticks of startup (117 ms), cross 8 (133 ms), heavy 18 (300 ms) with 28 of recovery (467 ms), forward smash 16, launcher 15, dodge 3 (50 ms), guard raised in 2 with a perfect window through tick 7 (133 ms), parry window through tick 9 (150 ms). Contacts in the chain land 250 to 450 ms apart; the whole chain runs about 2 s.
+Timings, at 60 ticks a second: jab 7 ticks of startup (117 ms), cross 8 (133 ms), heavy 18 (300 ms) with 28 of recovery (467 ms), forward smash 16, launcher 15, dodge 3 (50 ms) with i-frames from tick 2 to 12, guard raised in 2 with a perfect window through tick 7 (133 ms), parry window through tick 9 (150 ms). Contacts in the chain land 250 to 450 ms apart; the whole chain runs about 2 s.
+
+### Momentum and counters
+
+| Input                         | Branch                                                |
+| ----------------------------- | ----------------------------------------------------- |
+| Forward plus heavy            | Advancing smash                                       |
+| Side plus heavy               | Spinning sweep with a lateral step                    |
+| Back plus heavy               | Retreating counter: a step back into a straight right |
+| Sprint plus light             | Running punch                                         |
+| Sprint plus heavy             | Shoulder check (guard break)                          |
+| Dodge, then light or heavy    | Re-entry from tick 12 of the dodge                    |
+| Perfect guard, then light     | Fast body counter (the cross)                         |
+| Perfect guard, then heavy     | Guard punish: slow, takes armour and stability        |
+| Light in recovery, then heavy | Only with Drift Flow deep: the extra cancel route     |
+
+### Titan Clash
+
+When a heavy of yours and a heavy of Knifehead's meet in their active frames at contact range, at most three times a hunt and never twice inside forty seconds, both freeze and an arrow appears. Press that direction within nine tenths of a second: win, and the creature goes down; lose or wait, and the machine is shoved back with a little damage. No mashing.
+
+### Camera
+
+Free, soft framing near the creature, hard lock (middle mouse; on by default in a hunt), sprint, close pressure, aim, grapple, clash, knockdown, finisher and boundary recovery are the director's states. The mouse turns the camera at once in every state; under a lock it drags the view off the creature and relaxes back when idle. The boom sphere-casts against the city and the terrain and pulls in before it enters anything. Shake and reduced motion are settings; at zero shake the camera still frames, it just does not move on its own.
 
 ## Debug overlay
 

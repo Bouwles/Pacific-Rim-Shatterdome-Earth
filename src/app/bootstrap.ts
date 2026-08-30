@@ -1,4 +1,4 @@
-import { Color4, Tools, Vector3, type Scene } from "@babylonjs/core";
+import { Color4, Ray, Tools, Vector3, type AbstractMesh, type Scene } from "@babylonjs/core";
 import { createEngineAdapter } from "../engine/engineAdapter";
 import { buildBootScene, type BootScene } from "../engine/scene";
 import { DebugOverlay } from "../debug/overlay";
@@ -111,7 +111,7 @@ import {
   type ScreenHandle,
 } from "../ui/opScreens";
 import { HudScreen, type LimbId } from "../ui/hudScreen";
-import { ActionHud, type AbilityView } from "../ui/actionHud";
+import { ActionHud, type AbilityView, type HudPrompt } from "../ui/actionHud";
 import {
   renderComms,
   renderHangar,
@@ -124,6 +124,26 @@ import {
   type CommsHandle,
 } from "../ui/hangarScreens";
 import { HUNTS, huntById, type HuntDefinition } from "../data/hunts";
+import { openOrientationScene, type OrientationSceneHandle } from "../debug/orientationScene";
+import type { CombatCameraContext, ObstructionQuery } from "../jaegers/cameraDirector";
+import { zonePosition } from "../combat/targeting";
+import { BossController, type BossAction, type BossDecision } from "../combat/bossController";
+import {
+  createTitanBreak,
+  damageShares,
+  flowGrants,
+  flowLevel,
+  REGION_BY_ZONE,
+  regionName,
+  stepTitanBreak,
+  TITAN_REGIONS,
+  ZONES_BY_REGION,
+  type TitanBreakState,
+  type TitanNotice,
+} from "../combat/titanBreak";
+import type { JaegerAttackKind, JaegerWeaponMode } from "../engine/jaegerRig";
+import type { CreatureAttackKind } from "../engine/creatureRig";
+import { HarborSet } from "../engine/harborSet";
 import { experienceForLevel } from "../jaegers/progression";
 import { PropLibrary, type PlacedProp } from "../assets/props";
 import { EncounterDirector, gradeSortie } from "../game/encounterDirector";
@@ -194,8 +214,8 @@ import {
   type SquadPanelState,
 } from "../ui/pilotScreen";
 import type { CameraMode } from "../jaegers/camera";
-import { COMBAT_TICK_SECONDS, createMoveRegistry } from "../data/moves";
-import { createKaijuRegistry } from "../data/kaiju";
+import { COMBAT_TICK_SECONDS, createMoveRegistry, type DamageKind } from "../data/moves";
+import { createKaijuRegistry, type KaijuDefinition } from "../data/kaiju";
 import {
   CombatArena,
   type ArenaFighterView,
@@ -420,7 +440,28 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // briefing, bay, deployment, approach, fight, results, return. Debug builds
   // keep every panel; a player build shows only these screens.
   // A player build, or a debug build asked to behave like one so the path can be tested.
-  const production = !debugMode || new URLSearchParams(window.location.search).has("production");
+  const production =
+    !debugMode ||
+    new URLSearchParams(window.location.search).has("production") ||
+    new URLSearchParams(window.location.search).has("hunt");
+  /**
+   * The direct route: `?hunt=knifehead` boots straight into the encounter
+   * with the player presentation and no title, hangar or deployment card.
+   * Built for playtesting the fight; the ordinary path is untouched.
+   */
+  const directHuntParam = new URLSearchParams(window.location.search).get("hunt");
+  const directHuntId =
+    directHuntParam === null
+      ? null
+      : directHuntParam.startsWith("hunt.")
+        ? directHuntParam
+        : (HUNTS.find((hunt) => hunt.id.includes(`.${directHuntParam}.`))?.id ?? null);
+  let directHuntPending = directHuntId !== null;
+  let continueConsumed = false;
+  /** `?scene=orientation`: the orientation test scene instead of the title. */
+  const orientationSceneRequested =
+    new URLSearchParams(window.location.search).get("scene") === "orientation";
+  let orientationScene: OrientationSceneHandle | null = null;
   type OpStage = "command" | "briefing" | "bay" | "deploying" | "fight" | "results";
   let opStage: OpStage | null = null;
   let opScreen: ScreenHandle | null = null;
@@ -451,6 +492,685 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   let creatureWasOpen = false;
   let huntEndAt: number | null = null;
   let huntOutcome: "won" | "lost" | "aborted" | null = null;
+
+  // Camera director inputs for the hunt. Trauma and kicks are set while the
+  // arena's events are read and consumed by the next camera frame.
+  let pendingCameraTrauma: { readonly strength: number; readonly bearingDeg: number | null } | null = null;
+  let pendingFovKick = 0;
+  let boostPulse = 0;
+  let aimingPlasma = false;
+  let clashActive = false;
+  let breakerActive = false;
+  let arenaCentreGeo: GeoPosition | null = null;
+  let arenaRadiusMeters = 900;
+  let huntCreatureHeight = 90;
+  let huntKaiju: KaijuDefinition | null = null;
+  /** Debug builds expose the fight's live numbers for the automated checks. */
+  const titanDebug: Record<string, unknown> = {};
+  if (debugMode) (window as unknown as { __titan: Record<string, unknown> }).__titan = titanDebug;
+
+  // Titan Break: the fight's layers above the arena. Reset at every arrival.
+  let titan: TitanBreakState = createTitanBreak();
+  let boss: BossController | null = null;
+  let bossDecision: BossDecision | null = null;
+  let weaponMode: JaegerWeaponMode = "fists";
+  let swordUntil = 0;
+  let swordStep = 0;
+  let lastWeaponSwitchAt = -10;
+  const abilityCooldowns = [0, 0, 0, 0];
+  let aimUntil = -1;
+  let aimFireAt = -1;
+  let counterWindowUntilTick = 0;
+  let clash: {
+    readonly untilTick: number;
+    readonly direction: "L" | "R" | "F" | "B";
+    readonly startedTick: number;
+  } | null = null;
+  let clashCount = 0;
+  let lastClashAt = -100;
+  let breaker: {
+    beat: number;
+    untilTick: number;
+    direction: "L" | "R" | "F" | "B";
+    startedTick: number;
+    success: boolean;
+    environmental: boolean;
+  } | null = null;
+  const recentHitsOnCreature: number[] = [];
+  let inputPulse = false;
+  let lastChargeReleasedAt = -10;
+  let environmentalHitThisTick = false;
+  let clashWonThisTick = false;
+  let clashLostThisTick = false;
+  let grappleAtThresholdThisTick = false;
+  let circleSign = 1;
+  let kaijuPoiseCapacity = 320;
+  let titanNotices: TitanNotice[] = [];
+  let lastSampledInput: { readonly forward: number; readonly strafe: number } = { forward: 0, strafe: 0 };
+  let creatureKnockdown = 0;
+  const approachValue = (value: number, target: number, rate: number): number =>
+    value < target ? Math.min(target, value + rate) : Math.max(target, value - rate);
+  let clashRng = 1;
+
+  interface EnvironmentAnchor {
+    readonly id: string;
+    readonly kind: "crane" | "warehouse" | "containers" | "ship" | "tanks" | "water";
+    readonly label: string;
+    readonly east: number;
+    readonly north: number;
+    readonly radiusMeters: number;
+    used: boolean;
+    destroy: () => void;
+  }
+  let anchors: EnvironmentAnchor[] = [];
+  let harbor: HarborSet | null = null;
+
+  // Training: the same fight with the creature holding back and a list of
+  // things to do, each taught by doing it. Escape skips it.
+  interface TrainingStep {
+    readonly objective: string;
+    readonly action: BossAction | null;
+    readonly actionRangeMeters: number;
+  }
+  const TRAINING_STEPS: readonly TrainingStep[] = [
+    {
+      objective: "Training. Walk to the creature: W, Shift to sprint. Escape skips.",
+      action: null,
+      actionRangeMeters: 0,
+    },
+    {
+      objective: "Land a light, then a heavy: left button, then right button.",
+      action: null,
+      actionRangeMeters: 0,
+    },
+    {
+      objective: "It will claw. Hold F as it lands; a press on the hit is a perfect guard.",
+      action: "kaiju.claw.right",
+      actionRangeMeters: 44,
+    },
+    {
+      objective: "It will charge. Q with a direction dodges across it.",
+      action: "kaiju.charge.blade",
+      actionRangeMeters: 140,
+    },
+    {
+      objective: "Crack the torso plate: hold the right button and release for the charged heavy.",
+      action: null,
+      actionRangeMeters: 0,
+    },
+    {
+      objective: "The plate is off. 2 fires the Plasma Caster into the exposed torso.",
+      action: null,
+      actionRangeMeters: 0,
+    },
+    {
+      objective: "It is off balance. E grabs; E again throws, WASD picks where.",
+      action: null,
+      actionRangeMeters: 0,
+    },
+  ];
+  let trainingStep = -1;
+  let trainingStartEast = 0;
+  let trainingStartNorth = 0;
+  let trainingLastLightAt = -10;
+  let trainingActionCooldown = 0;
+  const trainingActive = (): boolean => trainingStep >= 0 && trainingStep < TRAINING_STEPS.length;
+  const advanceTraining = (): void => {
+    trainingStep += 1;
+    samples?.play("ui.confirm", { gain: 0.7 });
+    if (trainingStep >= TRAINING_STEPS.length) {
+      actionHud?.announce("Training complete");
+      huntOutcome = "won";
+      huntEndAt = huntSeconds + 2;
+    } else {
+      actionHud?.announce(`Step ${trainingStep + 1} of ${TRAINING_STEPS.length}`);
+    }
+  };
+
+  const angleDelta = (fromDeg: number, toDeg: number): number => {
+    let delta = (toDeg - fromDeg) % 360;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+  };
+  const directionOfInput = (input: {
+    readonly forward: number;
+    readonly strafe: number;
+  }): "L" | "R" | "F" | "B" | null =>
+    Math.abs(input.forward) > 0.5
+      ? input.forward > 0
+        ? "F"
+        : "B"
+      : Math.abs(input.strafe) > 0.5
+        ? input.strafe > 0
+          ? "R"
+          : "L"
+        : null;
+  const REELING: ReadonlySet<string> = new Set([
+    "stagger",
+    "knockdown",
+    "launch",
+    "guard-break",
+    "wall-impact",
+  ]);
+  const isReeling = (view: ArenaFighterView | undefined): boolean =>
+    view !== undefined && view.reaction !== null && view.reactionTicksLeft > 0 && REELING.has(view.reaction);
+  const nextClashRandom = (): number => {
+    let x = clashRng;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    clashRng = x >>> 0 || 1;
+    return clashRng / 4_294_967_296;
+  };
+  const JAEGER_ATTACK_KIND: Readonly<Record<string, JaegerAttackKind>> = {
+    "melee.light.jab": "jab",
+    "melee.light.cross": "cross",
+    "melee.run.punch": "jab",
+    "melee.heavy.smash.forward": "smash",
+    "melee.launcher.uppercut": "launcher",
+    "melee.heavy.overhead": "overhead",
+    "melee.heavy.spin.side": "spin",
+    "melee.charge.haymaker": "haymaker",
+    "melee.heavy.back.counter": "counter",
+    "melee.counter.heavy": "smash",
+    "melee.guard-break.shoulder": "shoulder",
+    "ability.elbow-rocket": "elbow",
+    "ability.reactor-purge": "purge",
+    "melee.sword.slash": "sword",
+    "melee.sword.cleave": "sword",
+    "melee.finisher.plasma-drop": "finisher",
+    "grapple.clinch": "smash",
+    "env.swing.prop": "haymaker",
+    "defense.counter.parry": "counter",
+  };
+  const CREATURE_ATTACK_KIND: Readonly<Record<string, CreatureAttackKind>> = {
+    "kaiju.claw.swipe": "claw.R",
+    "kaiju.claw.left": "claw.L",
+    "kaiju.claw.right": "claw.R",
+    "kaiju.blade.sweep": "blade.sweep",
+    "kaiju.blade.down": "blade.down",
+    "kaiju.charge.blade": "charge",
+    "kaiju.bite.clinch": "bite",
+    "kaiju.shove": "shove",
+    "kaiju.tail.sweep": "tail",
+  };
+
+  const resetTitan = (seed: number, poiseCapacity: number): void => {
+    titan = createTitanBreak();
+    boss = new BossController(seed);
+    bossDecision = null;
+    weaponMode = "fists";
+    swordUntil = 0;
+    swordStep = 0;
+    lastWeaponSwitchAt = -10;
+    for (let i = 0; i < abilityCooldowns.length; i += 1) abilityCooldowns[i] = 0;
+    aimUntil = -1;
+    aimFireAt = -1;
+    counterWindowUntilTick = 0;
+    clash = null;
+    clashActive = false;
+    clashCount = 0;
+    lastClashAt = -100;
+    breaker = null;
+    breakerActive = false;
+    recentHitsOnCreature.length = 0;
+    kaijuPoiseCapacity = poiseCapacity;
+    titanNotices = [];
+    clashRng = seed >>> 0 || 1;
+    anchors = [];
+    // A hunt is lost to structure, not to one lucky claw on the Conn-Pod: the
+    // critical components carry heavy plate here and the integrity floor ends it.
+    combatArena?.setZoneArmor("jaeger", "component.conn-pod", 0.7);
+    combatArena?.setZoneArmor("jaeger", "component.reactor", 0.65);
+  };
+
+  const setWeaponMode = (mode: JaegerWeaponMode): void => {
+    if (mode === weaponMode) return;
+    weaponMode = mode;
+    lastWeaponSwitchAt = huntSeconds;
+    if (mode === "sword") {
+      swordUntil = huntSeconds + 9;
+      swordStep = 0;
+      samples?.play("scifi.metal", { gain: 0.9, rate: 1.1 });
+      actionHud?.announce("Chain Sword");
+    } else if (mode === "fists") {
+      samples?.play("scifi.metal", { gain: 0.6, rate: 0.8 });
+    }
+  };
+
+  /**
+   * Knifehead's turn. The controller decides, this steers the body and
+   * presses the move; the arena resolves it like any other.
+   */
+  const driveBoss = (arena: CombatArena): void => {
+    if (!boss || !creature) return;
+    const snapshot = arena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    const jaegerView = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    if (!kaijuView || !jaegerView || kaijuView.defeated) return;
+    const distance = Math.hypot(jaegerView.east - kaijuView.east, jaegerView.north - kaijuView.north);
+    const bearing = bearingDegTo(kaijuView, jaegerView);
+    const offset = angleDelta(kaijuView.yawDeg, bearing);
+    const pose = pilotSession?.pose;
+    const lateral = pose ? Math.abs(Math.sin(((pose.yawDeg - bearing) * Math.PI) / 180)) * pose.speedMps : 0;
+    const lethal = kaijuView.zones.find((zone) => zone.id === "core") ?? kaijuView.zones[0];
+    const health = lethal ? lethal.health / Math.max(1, lethal.maxHealth) : 1;
+    const groundHere = localGroundHeight(kaijuView.east, kaijuView.north) ?? 0;
+    let water: { bearingDeg: number; distanceMeters: number } | null = null;
+    for (let step = 0; step < 8 && !water; step += 1) {
+      const angle = (step * 45 * Math.PI) / 180;
+      for (const reach of [60, 120, 180]) {
+        const depth = localGroundHeight(
+          kaijuView.east + Math.sin(angle) * reach,
+          kaijuView.north + Math.cos(angle) * reach,
+        );
+        if (depth !== null && depth < -8) {
+          water = { bearingDeg: step * 45, distanceMeters: reach };
+          break;
+        }
+      }
+    }
+    const regions = {
+      head: titan.regions.head,
+      "arm.L": titan.regions["arm.L"],
+      "arm.R": titan.regions["arm.R"],
+      torso: titan.regions.torso,
+      "leg.L": titan.regions["leg.L"],
+      "leg.R": titan.regions["leg.R"],
+      tail: titan.regions.tail,
+    };
+    const decision = trainingActive()
+      ? trainingDecision(distance)
+      : boss.step({
+          tick: arena.tick,
+          distanceMeters: distance,
+          bearingToPlayerDeg: bearing,
+          headingDeg: kaijuView.yawDeg,
+          playerOffsetDeg: offset,
+          playerAttacking: jaegerView.activeMove !== null,
+          playerRecovering: jaegerView.activePhase === "recovery",
+          playerGuarding: jaegerView.guarding,
+          playerOverheated: jaegerView.overheated,
+          playerAiming: aimingPlasma,
+          playerLateralMps: lateral,
+          recentHitsTaken: recentHitsOnCreature.filter((at) => huntSeconds - at < 2).length,
+          healthFraction: health,
+          poiseFraction: Math.min(1, kaijuView.poise / Math.max(1, kaijuPoiseCapacity)),
+          reeling: isReeling(kaijuView),
+          busy:
+            kaijuView.activeMove !== null ||
+            kaijuView.grapplePhase === "held" ||
+            clash !== null ||
+            breaker !== null,
+          regions,
+          adaptation: titan.adaptation,
+          water,
+          inWater: groundHere < -8,
+        });
+    bossDecision = decision;
+
+    // Steering. Only while the arena is not moving it: an attack's own
+    // movement curve is the arena's, and a reaction's knockback is too.
+    const free =
+      kaijuView.activeMove === null &&
+      !isReeling(kaijuView) &&
+      kaijuView.grapplePhase !== "held" &&
+      clash === null &&
+      breaker === null;
+    if (free) {
+      const dt = COMBAT_TICK_SECONDS;
+      const baseSpeed = 15 * decision.speedScale;
+      let moveEast = 0;
+      let moveNorth = 0;
+      let faceDeg = bearing;
+      const toPlayerEast = Math.sin((bearing * Math.PI) / 180);
+      const toPlayerNorth = Math.cos((bearing * Math.PI) / 180);
+      if (decision.movement === "approach" && distance > 30) {
+        moveEast = toPlayerEast * baseSpeed;
+        moveNorth = toPlayerNorth * baseSpeed;
+      } else if (decision.movement === "circle") {
+        if (nextClashRandom() < 0.004) circleSign = -circleSign;
+        moveEast = toPlayerNorth * circleSign * baseSpeed * 0.7;
+        moveNorth = -toPlayerEast * circleSign * baseSpeed * 0.7;
+        if (distance > 44) {
+          moveEast += toPlayerEast * baseSpeed * 0.4;
+          moveNorth += toPlayerNorth * baseSpeed * 0.4;
+        }
+      } else if (decision.movement === "retreat") {
+        moveEast = -toPlayerEast * baseSpeed * 0.8;
+        moveNorth = -toPlayerNorth * baseSpeed * 0.8;
+      } else if (decision.movement === "reposition" && water) {
+        const angle = (water.bearingDeg * Math.PI) / 180;
+        moveEast = Math.sin(angle) * baseSpeed * 1.1;
+        moveNorth = Math.cos(angle) * baseSpeed * 1.1;
+        faceDeg = water.bearingDeg;
+      }
+      const turnRate = 110 * decision.speedScale;
+      const yawDeg =
+        kaijuView.yawDeg +
+        Math.max(-turnRate * dt, Math.min(turnRate * dt, angleDelta(kaijuView.yawDeg, faceDeg)));
+      const east = kaijuView.east + moveEast * dt;
+      const north = kaijuView.north + moveNorth * dt;
+      arena.moveTo("kaiju", { east, north, up: localGroundHeight(east, north) ?? 0, yawDeg });
+      creature.east = east;
+      creature.north = north;
+      creature.headingDeg = yawDeg;
+    }
+    if (decision.action) {
+      const request = arena.request("kaiju", decision.action);
+      if (request.ok) {
+        arena.press("kaiju", decision.action);
+        const definition = moveRegistry.get(decision.action);
+        samples?.play("impact.soft.heavy", { gain: 0.5, rate: 0.55 });
+        void definition;
+      }
+    }
+  };
+
+  /** What the creature does in training: waits, and throws the one move the step needs. */
+  const trainingDecision = (distance: number): BossDecision => {
+    const step = TRAINING_STEPS[trainingStep];
+    if (trainingActionCooldown > 0) trainingActionCooldown -= 1;
+    const wantsMove = step?.action !== null && step !== undefined && distance < step.actionRangeMeters;
+    const stepNeedsBalance = trainingStep === 6;
+    if (stepNeedsBalance && combatArena) combatArena.addPoise("kaiju", 4);
+    if (wantsMove && trainingActionCooldown <= 0 && step) {
+      trainingActionCooldown = 200;
+      return {
+        action: step.action,
+        movement: "hold",
+        speedScale: 1,
+        phase: "hunter",
+        stumble: false,
+        why: "training",
+      };
+    }
+    return {
+      action: null,
+      movement: distance > 60 ? "approach" : "hold",
+      speedScale: 0.7,
+      phase: "hunter",
+      stumble: false,
+      why: "training, holding back",
+    };
+  };
+
+  /** A clash: two heavies meeting. Both freeze, the player answers with a direction. */
+  const startClash = (
+    arena: CombatArena,
+    tick: number,
+    mine: ArenaFighterView,
+    kaijuView: ArenaFighterView,
+  ): void => {
+    arena.clearAttack("jaeger");
+    arena.clearAttack("kaiju");
+    arena.forceReaction("jaeger", "stagger", 60);
+    arena.forceReaction("kaiju", "stagger", 60);
+    const directions = ["L", "R", "F", "B"] as const;
+    const direction = directions[Math.floor(nextClashRandom() * 4)] ?? "F";
+    clash = { untilTick: tick + 54, direction, startedTick: tick };
+    clashActive = true;
+    clashCount += 1;
+    lastClashAt = huntSeconds;
+    renderFreezeLeft = Math.max(renderFreezeLeft, 0.12);
+    samples?.play("impact.bell", { gain: 0.9, rate: 0.5 });
+    samples?.play("impact.metal.heavy", { gain: 1 });
+    actionHud?.announce("Titan Clash");
+    void mine;
+    void kaijuView;
+  };
+  const resolveClash = (arena: CombatArena, won: boolean): void => {
+    if (!clash) return;
+    const snapshot = arena.snapshot();
+    const mine = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    clash = null;
+    clashActive = false;
+    if (!mine || !kaijuView) return;
+    const bearing = bearingDegTo(mine, kaijuView);
+    if (won) {
+      arena.clearReaction("jaeger");
+      arena.forceReaction("kaiju", "knockdown", 78, { mps: 24, directionDeg: bearing });
+      clashWonThisTick = true;
+      samples?.play("blast.crunch", { gain: 1 });
+      actionHud?.announce("Clash won");
+      pendingCameraTrauma = { strength: 0.9, bearingDeg: bearing };
+    } else {
+      arena.clearReaction("kaiju");
+      arena.forceReaction("jaeger", "stagger", 30, { mps: 18, directionDeg: bearing + 180 });
+      arena.damageZone("jaeger", "component.torso", 120, "impact");
+      clashLostThisTick = true;
+      samples?.play("impact.plate.heavy", { gain: 1, rate: 0.7 });
+      actionHud?.announce("Clash lost");
+      pendingCameraTrauma = { strength: 0.7, bearingDeg: bearing };
+    }
+  };
+
+  /** The Synchronized Breaker: a short interactive finisher with one real choice in it. */
+  const startBreaker = (arena: CombatArena, tick: number): boolean => {
+    const snapshot = arena.snapshot();
+    const mine = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    if (!mine || !kaijuView || kaijuView.defeated) return false;
+    const broken = Object.values(titan.regions).filter((region) => region.broken).length;
+    const open = isReeling(kaijuView) || kaijuView.finisherOpen || broken >= 2;
+    if (titan.ultimate < 0.999 || !flowGrants(titan.flow).breakerAccess || !open) {
+      actionHud?.announce(
+        titan.ultimate < 0.999
+          ? "Breaker charging"
+          : !flowGrants(titan.flow).breakerAccess
+            ? "Drift too shallow"
+            : "No opening",
+      );
+      return false;
+    }
+    const distance = Math.hypot(kaijuView.east - mine.east, kaijuView.north - mine.north);
+    if (distance > 70) {
+      actionHud?.announce("Too far");
+      return false;
+    }
+    arena.clearAttack("jaeger");
+    arena.clearAttack("kaiju");
+    arena.forceReaction("kaiju", "knockdown", 330);
+    arena.forceReaction("jaeger", "stagger", 330);
+    const directions = ["L", "R", "F", "B"] as const;
+    const near = anchors.find(
+      (anchor) =>
+        !anchor.used &&
+        Math.hypot(anchor.east - kaijuView.east, anchor.north - kaijuView.north) < anchor.radiusMeters + 60,
+    );
+    breaker = {
+      beat: 0,
+      untilTick: tick + 66,
+      direction: directions[Math.floor(nextClashRandom() * 4)] ?? "F",
+      startedTick: tick,
+      success: false,
+      environmental: near !== undefined,
+    };
+    breakerActive = true;
+    titan = { ...titan, ultimate: 0, flow: Math.max(0, titan.flow - 0.3) };
+    samples?.play("laser.large", { gain: 0.9, rate: 0.6 });
+    actionHud?.announce("Synchronized Breaker");
+    return true;
+  };
+  const finishBreaker = (arena: CombatArena): void => {
+    if (!breaker) return;
+    const snapshot = arena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    const mine = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    const wounded = Object.values(titan.regions)
+      .filter((region) => region.broken && !region.severed)
+      .sort((a, b) => b.wound - a.wound)[0];
+    const zoneId = wounded ? (ZONES_BY_REGION[wounded.id][0] ?? "core") : "core";
+    let amount = breaker.success ? 1_500 : 800;
+    if (breaker.environmental) {
+      amount += 400;
+      const near = anchors.find(
+        (anchor) =>
+          !anchor.used &&
+          kaijuView &&
+          Math.hypot(anchor.east - kaijuView.east, anchor.north - kaijuView.north) < anchor.radiusMeters + 60,
+      );
+      if (near) {
+        near.used = true;
+        near.destroy();
+      }
+      environmentalHitThisTick = true;
+    }
+    arena.damageZone("kaiju", zoneId, amount, "plasma");
+    arena.damageZone("kaiju", "core", amount * 0.4, "plasma");
+    arena.clearReaction("jaeger");
+    arena.forceReaction("kaiju", "knockdown", 96, {
+      mps: 12,
+      directionDeg: mine && kaijuView ? bearingDegTo(mine, kaijuView) : 0,
+    });
+    renderFreezeLeft = Math.max(renderFreezeLeft, 0.16);
+    samples?.play("blast.low", { gain: 1, rate: 0.6 });
+    samples?.play("blast.crunch", { gain: 1 });
+    if (kaijuView && effectsView) {
+      effectsView.burst(
+        "finisher",
+        kaijuView.east,
+        (localGroundHeight(kaijuView.east, kaijuView.north) ?? 0) + 30,
+        kaijuView.north,
+      );
+      effectsView.burst(
+        "kaiju-blue",
+        kaijuView.east,
+        (localGroundHeight(kaijuView.east, kaijuView.north) ?? 0) + 30,
+        kaijuView.north,
+      );
+    }
+    pendingCameraTrauma = { strength: 1, bearingDeg: null };
+    actionHud?.announce(breaker.success ? "Breaker" : "Breaker, off the beat");
+    breaker = null;
+    breakerActive = false;
+  };
+
+  /** An anchor slam: the grapple is thrown into the harbour and the harbour answers. */
+  const anchorSlam = (arena: CombatArena, anchor: EnvironmentAnchor): void => {
+    const snapshot = arena.snapshot();
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
+    anchor.used = true;
+    anchor.destroy();
+    arena.damageZone("kaiju", "torso", anchor.kind === "water" ? 250 : 650, "crush");
+    arena.addPoise("kaiju", anchor.kind === "water" ? 90 : 170);
+    environmentalHitThisTick = true;
+    renderFreezeLeft = Math.max(renderFreezeLeft, 0.1);
+    samples?.play("blast.low", { gain: 1, rate: 0.7 });
+    samples?.play(anchor.kind === "water" ? "impact.soft.heavy" : "impact.metal.heavy", { gain: 1 });
+    if (kaijuView && effectsView) {
+      const up = (localGroundHeight(kaijuView.east, kaijuView.north) ?? 0) + 20;
+      effectsView.burst(
+        anchor.kind === "water" ? "water-displacement" : "debris-burst",
+        kaijuView.east,
+        up,
+        kaijuView.north,
+      );
+      effectsView.burst("dust", kaijuView.east, up, kaijuView.north);
+    }
+    pendingCameraTrauma = { strength: 1, bearingDeg: null };
+    actionHud?.announce(`${anchor.label} slam`);
+  };
+
+  /** What the abilities do in a hunt: one per slot, cooldowns scaled by flow. */
+  const useAbility = (index: number): void => {
+    if (!combatArena || huntStage !== "fight") return;
+    inputPulse = true;
+    if (clash || breaker) return;
+    const grants = flowGrants(titan.flow);
+    if ((abilityCooldowns[index] ?? 0) > 0) {
+      actionHud?.announce("Cooling");
+      return;
+    }
+    if (index === 0) {
+      if (pressMove("ability.elbow-rocket")) {
+        abilityCooldowns[0] = 6 * grants.cooldownScale;
+        boostPulse = 1;
+        samples?.play("thruster", { gain: 1, rate: 1.2 });
+      }
+    } else if (index === 1) {
+      aimUntil = huntSeconds + 0.9;
+      aimFireAt = huntSeconds + 0.3;
+      abilityCooldowns[1] = 1.6 * grants.cooldownScale;
+    } else if (index === 2) {
+      setWeaponMode(weaponMode === "sword" ? "fists" : "sword");
+      abilityCooldowns[2] = 0.6;
+    } else if (index === 3) {
+      if (pressMove("ability.reactor-purge")) {
+        abilityCooldowns[3] = 14 * grants.cooldownScale;
+        combatArena.coolFighter("jaeger", 45);
+        const me = combatArena.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+        if (me && me.grapplePhase !== "none" && me.grapplePhase !== "released")
+          combatArena.grappleRelease("kaiju");
+        samples?.play("forcefield", { gain: 1, rate: 0.8 });
+        const pose = pilotSession?.pose;
+        if (pose && effectsView) effectsView.burst("steam", pose.east, pose.up + 42, pose.north);
+      }
+    }
+  };
+
+  const bearingDegTo = (
+    from: { readonly east: number; readonly north: number },
+    to: { readonly east: number; readonly north: number },
+  ): number => {
+    const degrees = (Math.atan2(to.east - from.east, to.north - from.north) * 180) / Math.PI;
+    return ((degrees % 360) + 360) % 360;
+  };
+
+  /**
+   * The camera boom's sphere cast: five rays (the line and four offsets by the
+   * radius) against everything pickable that is not a body, plus the terrain
+   * heightfield under the boom. Returns the distance to the first thing hit.
+   */
+  const cameraObstruction: ObstructionQuery = (from, to, radius) => {
+    const origin = new Vector3(from.east, from.up, from.north);
+    const end = new Vector3(to.east, to.up, to.north);
+    const delta = end.subtract(origin);
+    const length = delta.length();
+    if (length < 1e-3) return null;
+    const direction = delta.scale(1 / length);
+    const side = Vector3.Cross(direction, Vector3.Up());
+    if (side.lengthSquared() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    const up = Vector3.Cross(side, direction).normalize();
+    let nearest: number | null = null;
+    const predicate = (mesh: AbstractMesh): boolean =>
+      mesh.isPickable &&
+      mesh.isEnabled() &&
+      mesh.isVisible &&
+      !mesh.name.startsWith("jaeger.") &&
+      !mesh.name.startsWith("combat.") &&
+      !mesh.name.startsWith("weather") &&
+      !mesh.name.startsWith("effects");
+    for (const offset of [
+      Vector3.Zero(),
+      side.scale(radius),
+      side.scale(-radius),
+      up.scale(radius),
+      up.scale(-radius),
+    ]) {
+      const ray = new Ray(origin.add(offset), direction, length);
+      const hit = bootScene.scene.pickWithRay(ray, predicate);
+      if (hit?.hit && hit.distance > 0 && (nearest === null || hit.distance < nearest))
+        nearest = hit.distance;
+    }
+    const samples = 8;
+    for (let i = 1; i <= samples; i += 1) {
+      const t = i / samples;
+      const east = from.east + (to.east - from.east) * t;
+      const north = from.north + (to.north - from.north) * t;
+      const upAt = from.up + (to.up - from.up) * t;
+      const ground = localGroundHeight(east, north);
+      if (ground !== null && upAt - radius < ground + 1.5) {
+        const distance = length * t;
+        if (nearest === null || distance < nearest) nearest = distance;
+        break;
+      }
+    }
+    return nearest;
+  };
   /** Runs and best grades per hunt, kept in local storage; not part of a save. */
   const HUNT_RECORDS_KEY = "shatterdome.hunts.v1";
   const huntRecords: Record<string, { cleared: number; best: string | null }> = (() => {
@@ -834,6 +1554,88 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       });
   };
 
+  /**
+   * Loads a slot and hands every system its part of the document. The saves
+   * screen and Continue both come through here, so there is one order of
+   * restoration and one place it can go wrong.
+   */
+  const loadAndApply = async (slotId: string): Promise<string> => {
+    const result = await saveService.load(slotId);
+    if (!kernel) throw new Error("No simulation is running.");
+    if (result.document.sim.seed !== kernel.seed) {
+      // Restoring needs a kernel built for the save's seed, which means a
+      // full reload. Say so rather than silently loading the wrong world.
+      return (
+        `"${result.document.metadata.name}" uses world seed ${result.document.sim.seed}, ` +
+        `but this session is running seed ${kernel.seed}. Reload with ?seed=${result.document.sim.seed} to load it.`
+      );
+    }
+    saveService.applyToKernel(result.document, kernel);
+    worldState.restore(result.document.world);
+    shatterdomeState.restore(result.document.shatterdome, knownRoomIds);
+    // Damage and scars come back with the machines that earned them.
+    roster.restore(result.document.roster);
+    // And so does the war: escalation, threat and everything inbound.
+    attackDirector.restore(result.document.director);
+    // Money, standing, orders in transit and the board itself.
+    market.restore(result.document.market);
+    // Links, stress, injuries, and which sorties have already paid out.
+    crew.restore(result.document.crew);
+    // What the allied crews became, and what they fly.
+    squad.restore(result.document.squad);
+    // Every balance and the ledger behind it, last so that the economy's
+    // own record wins: the market restores the three figures it used to
+    // own, and this restores all six plus the history and the references
+    // that stop a settled reward being paid a second time.
+    market.economy.restore(result.document.economy);
+    // What has been learned, what is in the labs, and what is on the
+    // shelf. Restored after the economy because the research data it
+    // spends lives there.
+    research.restore(result.document.research);
+    // Blueprints and the one machine a campaign may hold.
+    blueprintLibrary.restore(result.document.library);
+    // What was found and what was taken. The sites themselves are placed
+    // from the seed, so only the player's own doings have to come back.
+    exploration.restore(result.document.exploration);
+    // What was said, and when. Restored last because it is a record of
+    // everything above rather than a system anything else reads.
+    soundscape.radio.restore(result.document.radio);
+    refreshCustomChassis();
+    applyCountermeasures();
+    marketDay = worldState.environment.clock.dayNumber;
+    floatingOrigin.forceRebase(worldState.playerPosition);
+    saveController.resetPlayTime(result.document.metadata.playTimeMs);
+    const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
+    const migrated = result.migratedFrom !== null ? ` (migrated from version ${result.migratedFrom})` : "";
+    return `Loaded "${result.document.metadata.name}"${recovered}${migrated}.`;
+  };
+
+  /**
+   * Continue in a player build: the newest slot, loaded and applied, then
+   * the hangar. A slot on another seed reloads the page on that seed and
+   * continues there; no slot at all is a fresh campaign.
+   */
+  const continueLatest = async (): Promise<void> => {
+    try {
+      const slots = await saveService.listSlots();
+      const newest = [...slots].filter((slot) => !slot.damaged).sort((a, b) => b.savedAt - a.savedAt)[0];
+      if (newest && kernel) {
+        const peek = await saveService.load(newest.slotId);
+        if (peek.document.sim.seed !== kernel.seed) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("seed", String(peek.document.sim.seed));
+          url.searchParams.set("continue", "1");
+          window.location.href = url.toString();
+          return;
+        }
+        await loadAndApply(newest.slotId);
+      }
+    } catch (error) {
+      console.warn("Continue could not load the newest save; starting from the live state.", error);
+    }
+    stateMachine.transition(AppState.WorldMap);
+  };
+
   const openSaves = async (): Promise<void> => {
     saveScreen = renderSaveScreen(
       uiRoot,
@@ -888,58 +1690,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             );
             return `Overwrote "${name}".`;
           }),
-        onLoad: (slotId) =>
-          runSaveAction(async () => {
-            const result = await saveService.load(slotId);
-            if (!kernel) throw new Error("No simulation is running.");
-            if (result.document.sim.seed !== kernel.seed) {
-              // Restoring needs a kernel built for the save's seed, which means a
-              // full reload. Say so rather than silently loading the wrong world.
-              return (
-                `"${result.document.metadata.name}" uses world seed ${result.document.sim.seed}, ` +
-                `but this session is running seed ${kernel.seed}. Reload with ?seed=${result.document.sim.seed} to load it.`
-              );
-            }
-            saveService.applyToKernel(result.document, kernel);
-            worldState.restore(result.document.world);
-            shatterdomeState.restore(result.document.shatterdome, knownRoomIds);
-            // Damage and scars come back with the machines that earned them.
-            roster.restore(result.document.roster);
-            // And so does the war: escalation, threat and everything inbound.
-            attackDirector.restore(result.document.director);
-            // Money, standing, orders in transit and the board itself.
-            market.restore(result.document.market);
-            // Links, stress, injuries, and which sorties have already paid out.
-            crew.restore(result.document.crew);
-            // What the allied crews became, and what they fly.
-            squad.restore(result.document.squad);
-            // Every balance and the ledger behind it, last so that the economy's
-            // own record wins: the market restores the three figures it used to
-            // own, and this restores all six plus the history and the references
-            // that stop a settled reward being paid a second time.
-            market.economy.restore(result.document.economy);
-            // What has been learned, what is in the labs, and what is on the
-            // shelf. Restored after the economy because the research data it
-            // spends lives there.
-            research.restore(result.document.research);
-            // Blueprints and the one machine a campaign may hold.
-            blueprintLibrary.restore(result.document.library);
-            // What was found and what was taken. The sites themselves are placed
-            // from the seed, so only the player's own doings have to come back.
-            exploration.restore(result.document.exploration);
-            // What was said, and when. Restored last because it is a record of
-            // everything above rather than a system anything else reads.
-            soundscape.radio.restore(result.document.radio);
-            refreshCustomChassis();
-            applyCountermeasures();
-            marketDay = worldState.environment.clock.dayNumber;
-            floatingOrigin.forceRebase(worldState.playerPosition);
-            saveController.resetPlayTime(result.document.metadata.playTimeMs);
-            const recovered = result.recoveredFrom ? ` (recovered from ${result.recoveredFrom})` : "";
-            const migrated =
-              result.migratedFrom !== null ? ` (migrated from version ${result.migratedFrom})` : "";
-            return `Loaded "${result.document.metadata.name}"${recovered}${migrated}.`;
-          }),
+        onLoad: (slotId) => runSaveAction(() => loadAndApply(slotId)),
         onRename: (slotId, name) =>
           runSaveAction(async () => {
             await saveService.rename(slotId, name);
@@ -2523,7 +3274,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           pose: { east: pose.east, north: pose.north, up: pose.up, yawDeg: pose.yawDeg },
           // The machine walks into the fight carrying what it walked out with,
           // and everything its levels and rank are worth.
-          zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage, undefined, growth),
+          zones: jaegerZones(session.jaeger, roster.get(session.jaeger.id)?.damage, undefined, growth).map(
+            (zone) =>
+              // A hunt is lost to structure, not to one component: the integrity
+              // floor in updateHuntFrame ends it, so no zone is a kill here.
+              activeHunt && zone.onDestroyed === "kill"
+                ? { ...zone, onDestroyed: "cripple-attack" as const }
+                : zone,
+          ),
           layout: jaegerLayout(session.jaeger),
           finisherThreshold: 0.2,
           damageScale: growth.damage * huntScales.machine,
@@ -2592,6 +3350,16 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       groundHeightAt: localGroundHeight,
     });
     combatView.setDebugVolumes(combatDebugVolumes);
+    combatView.moveTicks = (moveId) => {
+      const definition = moveRegistry.get(moveId);
+      return definition
+        ? {
+            startup: definition.startupTicks,
+            active: definition.activeTicks,
+            recovery: definition.recoveryTicks,
+          }
+        : null;
+    };
 
     // The creature that is going to fight. Everything about how it behaves
     // comes from its own definition.
@@ -2740,6 +3508,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   const HEAVY_VARIANTS: Readonly<Record<string, string>> = {
     forward: "melee.heavy.smash.forward",
     side: "melee.heavy.spin.side",
+    back: "melee.heavy.back.counter",
   };
 
   /**
@@ -3144,7 +3913,26 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     return true;
   };
   const primaryChain = (): void => {
+    inputPulse = true;
+    if (clash || breaker) return;
     const now = performance.now();
+    const tick = combatArena?.tick ?? 0;
+    // After a perfect guard the light is the fast body counter.
+    if (tick < counterWindowUntilTick) {
+      if (pressMove("melee.light.cross")) {
+        counterWindowUntilTick = 0;
+        return;
+      }
+    }
+    if (weaponMode === "sword") {
+      const moveId = swordStep % 3 === 2 ? "melee.sword.cleave" : "melee.sword.slash";
+      if (pressMove(moveId)) swordStep += 1;
+      return;
+    }
+    const pose = pilotSession?.pose;
+    if (pose && pose.speedMps > pilotSession!.jaeger.locomotion.walkSpeedMps * 1.1 && chainStep === 0) {
+      if (pressMove("melee.run.punch")) return;
+    }
     if (now - chainAt > 900) chainStep = 0;
     const moveId = CHAIN[chainStep] ?? CHAIN[0] ?? "melee.light.jab";
     if (pressMove(moveId)) {
@@ -3161,30 +3949,120 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     }, 320);
   };
   const secondaryUp = (): void => {
+    inputPulse = true;
     if (secondaryTimer !== null) {
       window.clearTimeout(secondaryTimer);
       secondaryTimer = null;
     }
+    if (clash || breaker) return;
     if (secondaryCharging) {
       combatArena?.releaseCharge("jaeger");
       secondaryCharging = false;
+      lastChargeReleasedAt = huntSeconds;
       return;
+    }
+    const tick = combatArena?.tick ?? 0;
+    if (tick < counterWindowUntilTick) {
+      if (pressMove("melee.counter.heavy")) {
+        counterWindowUntilTick = 0;
+        return;
+      }
+    }
+    if (weaponMode === "sword") {
+      pressMove("melee.sword.cleave");
+      return;
+    }
+    const pose = pilotSession?.pose;
+    if (pose && pose.speedMps > pilotSession!.jaeger.locomotion.walkSpeedMps * 1.1) {
+      if (pressMove("melee.guard-break.shoulder")) return;
+    }
+    // Deep Drift buys one extra route: a light's recovery cancels into the heavy.
+    const me = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    if (
+      me &&
+      flowGrants(titan.flow).extraCancel &&
+      me.activePhase === "recovery" &&
+      me.activeMove !== null &&
+      me.activeMove.startsWith("melee.light")
+    ) {
+      combatArena?.clearAttack("jaeger");
     }
     const direction = pilotInput?.moveDirection ?? "neutral";
     pressMove(HEAVY_VARIANTS[direction] ?? "melee.heavy.overhead");
   };
   const boosterDodge = (): void => {
+    inputPulse = true;
+    if (clash || breaker) return;
     if (!pressMove("defense.dodge.step")) return;
     pilotSession?.press("booster", kernel?.tick ?? 0);
+    boostPulse = 1;
   };
   const grab = (): void => {
-    const me = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "jaeger");
+    inputPulse = true;
+    if (!combatArena || clash || breaker) return;
+    const snapshot = combatArena.snapshot();
+    const me = snapshot.fighters.find((fighter) => fighter.id === "jaeger");
+    const kaijuView = snapshot.fighters.find((fighter) => fighter.id === "kaiju");
     const holding =
-      me !== undefined && me.grapplePhase !== "" && me.grapplePhase !== "none" && me.grapplePhase !== "idle";
-    if (holding) combatArena?.grappleThrow("jaeger");
-    else pressMove("grapple.clinch");
+      me !== undefined &&
+      me.grapplePhase !== "" &&
+      me.grapplePhase !== "none" &&
+      me.grapplePhase !== "idle" &&
+      me.grapplePhase !== "released";
+    if (holding && me && kaijuView) {
+      // The direction is the stick's, camera relative; the harbour decides
+      // what the throw hits.
+      const camYaw = pilotSession?.camera.yawDeg ?? me.yawDeg;
+      const wish = pilotInput?.moveDirection ?? "neutral";
+      const sampled = pilotInput?.sample(camYaw, 0, true);
+      const strafe = sampled?.strafe ?? 0;
+      const forward = sampled?.forward ?? 0;
+      let throwBearing = me.yawDeg;
+      if (wish !== "neutral") throwBearing = camYaw + (Math.atan2(strafe, forward) * 180) / Math.PI;
+      combatArena.moveTo("jaeger", { yawDeg: throwBearing });
+      const radians = (throwBearing * Math.PI) / 180;
+      const landing = { east: me.east + Math.sin(radians) * 60, north: me.north + Math.cos(radians) * 60 };
+      const anchor = anchors.find(
+        (entry) =>
+          !entry.used &&
+          Math.hypot(entry.east - landing.east, entry.north - landing.north) < entry.radiusMeters + 30,
+      );
+      const outcome = combatArena.grappleThrow("jaeger");
+      pushCombatLine(outcome);
+      if (anchor) anchorSlam(combatArena, anchor);
+      else if ((localGroundHeight(landing.east, landing.north) ?? 0) < -8) {
+        anchorSlam(combatArena, {
+          id: "water",
+          kind: "water",
+          label: "Harbour",
+          east: landing.east,
+          north: landing.north,
+          radiusMeters: 30,
+          used: false,
+          destroy: () => undefined,
+        });
+      }
+      return;
+    }
+    // A clinch needs the creature off balance, or at least leaning on it.
+    if (kaijuView) {
+      const poiseFraction = kaijuView.poise / Math.max(1, kaijuPoiseCapacity);
+      if (poiseFraction < 0.45 && !isReeling(kaijuView)) {
+        actionHud?.announce("Not off balance yet");
+        samples?.play("ui.error", { gain: 0.4 });
+        return;
+      }
+      grappleAtThresholdThisTick = poiseFraction >= 0.45;
+    }
+    pressMove("grapple.clinch");
   };
   const ultimate = (): void => {
+    inputPulse = true;
+    if (huntStage === "fight" && combatArena) {
+      if (clash || breaker) return;
+      startBreaker(combatArena, combatArena.tick);
+      return;
+    }
     const creature = combatArena?.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
     if (creature?.finisherOpen) {
       combatArena?.setFinisherHold("jaeger", true);
@@ -3596,6 +4474,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       onDodge: boosterDodge,
       onGrab: grab,
       onAbility: (index: number) => {
+        if (huntStage === "fight") {
+          useAbility(index);
+          return;
+        }
         const code = ABILITY_CODES[index];
         if (code) pressWeapon(code);
       },
@@ -4495,7 +5377,49 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (!session || !pilotInput) return;
 
     const cameraInput = pilotInput.sampleCamera(deltaSeconds);
-    const input = pilotInput.sample(session.camera.yawDeg, deltaSeconds, session.camera.mode !== "cockpit");
+    const sampled = pilotInput.sample(session.camera.yawDeg, deltaSeconds, session.camera.mode !== "cockpit");
+    // In a hunt the machine faces a locked creature whatever the stick says:
+    // forward walks in, sides circle, back gives ground. The body still turns
+    // at its own rate, so a creature crossing behind is a turn, not a snap.
+    lastSampledInput = sampled;
+    const lockedNow = session.camera.lockedTargetId !== null && lastTargetPosition !== null;
+    const input =
+      huntStage === "fight" && lockedNow && lastTargetPosition
+        ? { ...sampled, desiredHeadingDeg: bearingDegTo(session.pose, lastTargetPosition) }
+        : sampled;
+    boostPulse = Math.max(0, boostPulse - deltaSeconds * 2.5);
+    const arenaView = huntStage === "fight" ? combatArena?.snapshot() : undefined;
+    const mineView = arenaView?.fighters.find((fighter) => fighter.id === "jaeger");
+    let boundaryBearingDeg: number | null = null;
+    if (huntStage === "fight" && arenaCentreGeo) {
+      const centre = floatingOrigin.toLocal(arenaCentreGeo);
+      const fromCentre = Math.hypot(session.pose.east - centre.east, session.pose.north - centre.north);
+      if (fromCentre > arenaRadiusMeters * 0.82) boundaryBearingDeg = bearingDegTo(session.pose, centre);
+    }
+    const combatContext: CombatCameraContext | null =
+      huntStage === "fight"
+        ? {
+            targetPosition: lastTargetPosition,
+            targetHeightMeters: huntCreatureHeight,
+            locked: lockedNow,
+            sprinting: sampled.run && session.pose.speedMps > session.jaeger.locomotion.walkSpeedMps * 1.05,
+            boost: boostPulse,
+            aiming: aimingPlasma,
+            grapple:
+              mineView !== undefined &&
+              mineView.grapplePhase !== "none" &&
+              mineView.grapplePhase !== "released",
+            clash: clashActive,
+            knockedDown: mineView?.reaction === "knockdown",
+            finisher: breakerActive || mineView?.finisherPhase === "running",
+            boundaryBearingDeg,
+            attacking: (mineView?.activeMove ?? null) !== null,
+            trauma: pendingCameraTrauma,
+            fovKick: pendingFovKick,
+          }
+        : null;
+    pendingCameraTrauma = null;
+    pendingFovKick = 0;
     // Guarding is one idea with two consumers: it slows the machine down and it
     // is what the arena checks when a hit lands.
     combatArena?.setGuard("jaeger", input.guard);
@@ -4520,9 +5444,63 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // there, which is why the lock reports honestly rather than swinging to
       // an imaginary target.
       targetPosition: lastTargetPosition,
+      combat: combatContext,
+      obstructionQuery: cameraObstruction,
     });
     lastPilotHeadingError = frame.headingErrorDeg;
     lastPilotBlocked = frame.blocked;
+    // Region aim: the creature's zone nearest the camera's line of sight is
+    // the one a contact prefers, so looking at the head blade or a claw is
+    // how a player takes it apart. Soft: the contact still has to reach it.
+    if (huntStage === "fight" && huntKaiju && combatArena) {
+      const creatureView = arenaView?.fighters.find((fighter) => fighter.id === "kaiju");
+      if (creatureView && !creatureView.defeated) {
+        const placement = frame.placement;
+        const forwardEast = placement.targetEast - placement.east;
+        const forwardUp = placement.targetUp - placement.up;
+        const forwardNorth = placement.targetNorth - placement.north;
+        const forwardLength = Math.hypot(forwardEast, forwardUp, forwardNorth) || 1;
+        let bestZone: string | null = null;
+        let bestCosine = -1;
+        const creaturePose = {
+          east: creatureView.east,
+          north: creatureView.north,
+          up: localGroundHeight(creatureView.east, creatureView.north) ?? 0,
+          yawDeg: creatureView.yawDeg,
+        };
+        for (const zone of huntKaiju.zones) {
+          const live = creatureView.zones.find((entry) => entry.id === zone.id);
+          if (!live || live.health <= 0) continue;
+          const point = zonePosition(huntKaiju, zone, creaturePose);
+          const toEast = point.east - placement.east;
+          const toUp = point.up - placement.up;
+          const toNorth = point.north - placement.north;
+          const length = Math.hypot(toEast, toUp, toNorth) || 1;
+          const cosine =
+            (toEast * forwardEast + toUp * forwardUp + toNorth * forwardNorth) / (length * forwardLength);
+          if (cosine > bestCosine) {
+            bestCosine = cosine;
+            bestZone = zone.id;
+          }
+        }
+        combatArena.setAim("jaeger", bestZone);
+      }
+    }
+    if (debugMode) {
+      titanDebug["camera"] = {
+        state: session.director.state,
+        yawDeg: session.camera.yawDeg,
+        pitchDeg: session.camera.pitchDeg,
+        distanceMeters: session.director.distanceMeters,
+        rollDeg: frame.placement.rollDeg,
+        fovDeg: frame.placement.fovDeg,
+        locked: lockedNow,
+        bodyYawDeg: frame.pose.yawDeg,
+        speedMps: frame.pose.speedMps,
+        up: frame.placement.up,
+        targetUp: frame.placement.targetUp,
+      };
+    }
 
     jaegerView?.update(frame.pose, frame.placement, frame.events, deltaSeconds, frame.camera.mode);
     // A footfall is a plate hit an octave down with the floor under it.
@@ -4533,6 +5511,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           samples?.play("blast.low", { gain: 0.25 * event.intensity, rate: 0.8 });
       } else if (event.kind === "booster") {
         samples?.play("thruster", { gain: 0.8 });
+        boostPulse = 1;
       } else if (event.kind === "knockdown") {
         samples?.play("blast.crunch", { gain: 0.9 });
         samples?.play("impact.plate.heavy", { rate: 0.5, gain: 1 });
@@ -4600,7 +5579,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // close enough. Nothing here knows which creature it is.
       // Passive creatures move and react but do not commit, which is a rule
       // read here rather than a setting written into the creature.
-      if (!sandboxRun || adjustmentsFor(sandboxRun.rules).aggressionScale > 0) {
+      if (huntStage === "fight" && boss) {
+        driveBoss(arena);
+      } else if (!sandboxRun || adjustmentsFor(sandboxRun.rules).aggressionScale > 0) {
         driveCreature(arena, COMBAT_TICK_SECONDS);
       }
       // While hosting, the session steps the arena and announces what happened,
@@ -4642,26 +5623,353 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
             ? move.activeTicks
             : move.recoveryTicks
         : 1;
+      const phaseStart =
+        phase === "startup"
+          ? 0
+          : phase === "active"
+            ? (move?.startupTicks ?? 0)
+            : (move?.startupTicks ?? 0) + (move?.activeTicks ?? 0);
+      const dodging = mine.activeMove === "defense.dodge.step";
+      const dodgeDirection: "L" | "R" | "F" | "B" =
+        Math.abs(lastSampledInput.strafe) > 0.3
+          ? lastSampledInput.strafe > 0
+            ? "R"
+            : "L"
+          : lastSampledInput.forward < -0.3
+            ? "B"
+            : lastSampledInput.forward > 0.3
+              ? "F"
+              : "L";
+      const damageState = pilotDamageState();
+      const regionDamage: Partial<
+        Record<"arm.L" | "arm.R" | "leg.L" | "leg.R" | "torso" | "reactor", number>
+      > = {};
+      for (const component of damageState?.components ?? []) {
+        const key =
+          component.name === "Left arm"
+            ? "arm.L"
+            : component.name === "Right arm"
+              ? "arm.R"
+              : component.name === "Left leg"
+                ? "leg.L"
+                : component.name === "Right leg"
+                  ? "leg.R"
+                  : component.name === "Torso"
+                    ? "torso"
+                    : component.name === "Reactor"
+                      ? "reactor"
+                      : null;
+        if (key) regionDamage[key] = 1 - component.percent / 100;
+      }
       jaegerView.setCombatPose({
         attack:
-          mine.activeMove && phase
+          mine.activeMove && phase && !dodging
             ? {
                 phase: phase === "startup" ? "windup" : phase === "active" ? "active" : "recover",
-                progress: Math.min(1, mine.activeMoveTick / Math.max(1, total)),
+                progress: Math.min(1, Math.max(0, mine.activeMoveTick - phaseStart) / Math.max(1, total)),
+                kind: JAEGER_ATTACK_KIND[mine.activeMove] ?? "jab",
               }
             : null,
         guarding: mine.guarding,
-        damage: 1 - (pilotDamageState()?.integrityPercent ?? 100) / 100,
+        damage: 1 - (damageState?.integrityPercent ?? 100) / 100,
+        dodge: dodging
+          ? {
+              progress: Math.min(1, mine.activeMoveTick / Math.max(1, move ? moveLengthTicks(move) : 30)),
+              direction: dodgeDirection,
+            }
+          : null,
+        knockdown:
+          mine.reaction === "knockdown" && mine.reactionTicksLeft > 0
+            ? {
+                progress: mine.reactionTicksLeft > 40 ? 1 : mine.reactionTicksLeft / 40,
+                recovering: mine.reactionTicksLeft <= 40,
+              }
+            : null,
+        grapple:
+          mine.grapplePhase === "held" || mine.grapplePhase === "throwing" || mine.grapplePhase === "slamming"
+            ? { holding: true, progress: Math.min(1, mine.grappleStruggle) }
+            : null,
+        weapon: aimingPlasma ? "plasma" : weaponMode,
+        boost: boostPulse,
+        charge: titan.flow,
+        regionDamage,
       });
       for (const event of events) {
         if (event.targetId !== "jaeger" || event.damage <= 0) continue;
+        pendingCameraTrauma = {
+          strength: Math.min(1, event.damage / 160),
+          bearingDeg: lastTargetPosition ? bearingDegTo(pose, lastTargetPosition) : null,
+        };
         // Recoil scales with the impact grammar's exaggeration, so the same
         // hit kicks harder on Cinematic and not at all under reduced motion.
         jaegerView.addRecoil(Math.min(1, event.damage / 120) * (impactFrame.poseScale > 1 ? 1 : 0.6));
       }
     }
+    for (const event of events) {
+      if (event.type === "weapon-fired" && event.actorId === "jaeger") pendingFovKick = 1;
+    }
     if (mine) advanceEncounter(arena, mine, pose, deltaSeconds);
-    if (huntStage === "fight") {
+    if (huntStage === "fight" && mine) {
+      const kaijuNow = arena.snapshot().fighters.find((fighter) => fighter.id === "kaiju");
+      const tick = arena.tick;
+      // Perfect guards open the counter window; the two counters read it.
+      for (const event of events) {
+        if ((event.type === "perfect-guard" || event.type === "parried") && event.actorId === "jaeger") {
+          counterWindowUntilTick = tick + 40;
+        }
+        if (event.type === "hit" && event.targetId === "kaiju" && event.damage > 0)
+          recentHitsOnCreature.push(huntSeconds);
+        if (event.type === "attack-started" && event.actorId === "kaiju" && event.moveId) {
+          const kind = CREATURE_ATTACK_KIND[event.moveId];
+          if (kind === "charge") samples?.play("blast.low", { gain: 0.5, rate: 1.3 });
+          else if (kind === "bite") samples?.play("impact.soft.heavy", { gain: 0.6, rate: 0.7 });
+          else samples?.play("impact.punch.medium", { gain: 0.35, rate: 0.5 });
+        }
+      }
+      while (recentHitsOnCreature.length > 0 && huntSeconds - (recentHitsOnCreature[0] ?? 0) > 4)
+        recentHitsOnCreature.shift();
+
+      // The clash: two heavies in their active frames at contact range.
+      const HEAVY_CLASS: ReadonlySet<string> = new Set([
+        "melee.heavy.overhead",
+        "melee.heavy.smash.forward",
+        "melee.heavy.spin.side",
+        "melee.charge.haymaker",
+        "melee.counter.heavy",
+        "melee.heavy.back.counter",
+        "ability.elbow-rocket",
+        "kaiju.charge.blade",
+        "kaiju.blade.down",
+        "kaiju.claw.left",
+        "kaiju.claw.right",
+        "kaiju.blade.sweep",
+      ]);
+      if (
+        !clash &&
+        !breaker &&
+        kaijuNow &&
+        mine.activePhase === "active" &&
+        kaijuNow.activePhase === "active" &&
+        mine.activeMove !== null &&
+        kaijuNow.activeMove !== null &&
+        HEAVY_CLASS.has(mine.activeMove) &&
+        HEAVY_CLASS.has(kaijuNow.activeMove) &&
+        clashCount < 3 &&
+        huntSeconds - lastClashAt > 40 &&
+        Math.hypot(kaijuNow.east - mine.east, kaijuNow.north - mine.north) < 62
+      ) {
+        startClash(arena, tick, mine, kaijuNow);
+      }
+      if (clash) {
+        const jaegerFighter = arena.fighter("jaeger");
+        const kaijuFighter = arena.fighter("kaiju");
+        if (jaegerFighter) jaegerFighter.reactionTicksLeft = Math.max(jaegerFighter.reactionTicksLeft, 3);
+        if (kaijuFighter) kaijuFighter.reactionTicksLeft = Math.max(kaijuFighter.reactionTicksLeft, 3);
+        const pressed = directionOfInput(lastSampledInput);
+        if (pressed !== null && tick > clash.startedTick + 6)
+          resolveClash(arena, pressed === clash.direction);
+        else if (tick >= clash.untilTick) resolveClash(arena, false);
+      }
+      if (breaker) {
+        const jaegerFighter = arena.fighter("jaeger");
+        const kaijuFighter = arena.fighter("kaiju");
+        if (jaegerFighter) jaegerFighter.reactionTicksLeft = Math.max(jaegerFighter.reactionTicksLeft, 3);
+        if (kaijuFighter) kaijuFighter.reactionTicksLeft = Math.max(kaijuFighter.reactionTicksLeft, 3);
+        if (breaker.beat === 0) {
+          const pressed = directionOfInput(lastSampledInput);
+          if (pressed !== null && tick > breaker.startedTick + 8) {
+            breaker.success = pressed === breaker.direction;
+            breaker.beat = 1;
+            breaker.untilTick = tick + 54;
+            samples?.play(breaker.success ? "impact.bell" : "ui.error", {
+              gain: 0.8,
+              rate: breaker.success ? 1.6 : 0.8,
+            });
+          } else if (tick >= breaker.untilTick) {
+            breaker.beat = 1;
+            breaker.untilTick = tick + 54;
+          }
+        } else if (tick >= breaker.untilTick) {
+          finishBreaker(arena);
+        }
+      }
+
+      if (trainingActive()) {
+        const pose = pilotSession?.pose;
+        const walked = pose ? Math.hypot(pose.east - trainingStartEast, pose.north - trainingStartNorth) : 0;
+        let done = false;
+        for (const event of events) {
+          if (
+            event.type === "hit" &&
+            event.actorId === "jaeger" &&
+            event.targetId === "kaiju" &&
+            event.moveId
+          ) {
+            if (event.moveId.startsWith("melee.light")) trainingLastLightAt = huntSeconds;
+            if (
+              trainingStep === 1 &&
+              /heavy|charge|smash|spin/.test(event.moveId) &&
+              huntSeconds - trainingLastLightAt < 3
+            )
+              done = true;
+            if (trainingStep === 5 && event.moveId.startsWith("weapon.plasma")) done = true;
+          }
+          if (
+            trainingStep === 2 &&
+            (event.type === "perfect-guard" || event.type === "guarded" || event.type === "parried") &&
+            (event.actorId === "jaeger" || event.targetId === "jaeger")
+          )
+            done = true;
+          if (trainingStep === 3 && event.type === "evaded" && event.actorId === "jaeger") done = true;
+          if (
+            trainingStep === 3 &&
+            event.type === "whiffed" &&
+            event.actorId === "kaiju" &&
+            event.moveId === "kaiju.charge.blade"
+          )
+            done = true;
+          if (
+            trainingStep === 6 &&
+            event.type === "grapple-ended" &&
+            event.reason &&
+            /thrown|slammed/i.test(event.reason)
+          )
+            done = true;
+        }
+        // Walking to it counts when the machine has covered the ground or the
+        // creature has closed it; it comes to meet the player.
+        const creatureDistance = kaijuNow
+          ? Math.hypot(kaijuNow.east - mine.east, kaijuNow.north - mine.north)
+          : Infinity;
+        if (trainingStep === 0 && (walked > 25 || creatureDistance < 52)) done = true;
+        if (trainingStep === 4 && titan.regions.torso.broken) done = true;
+        if (done) advanceTraining();
+      }
+      // Titan Break: armour, stability, vital, flow, telemetry.
+      const step = stepTitanBreak(titan, events, {
+        secondsElapsed: huntSeconds,
+        deltaSeconds,
+        creatureReeling: isReeling(kaijuNow),
+        creatureReaction: kaijuNow?.reaction ?? null,
+        chargedHit: huntSeconds - lastChargeReleasedAt < 0.9,
+        meaningfulInput: inputPulse,
+        recentWeaponSwitch: huntSeconds - lastWeaponSwitchAt < 4,
+        grappleAtThreshold: grappleAtThresholdThisTick,
+        environmentalHit: environmentalHitThisTick,
+        clashWon: clashWonThisTick,
+        clashLost: clashLostThisTick,
+        weaponOfEvent: (event) => (event.moveId && event.moveId.startsWith("weapon.") ? event.moveId : null),
+      });
+      titan = step.state;
+      inputPulse = false;
+      grappleAtThresholdThisTick = false;
+      environmentalHitThisTick = false;
+      clashWonThisTick = false;
+      clashLostThisTick = false;
+      for (const bonus of step.bonusDamage) {
+        arena.damageZone("kaiju", bonus.zoneId, bonus.amount, bonus.kind as DamageKind);
+      }
+      if (step.extraPoise > 0) arena.addPoise("kaiju", step.extraPoise);
+      if (titan.staggerImmunitySeconds > 0) {
+        const kaijuFighter = arena.fighter("kaiju");
+        if (kaijuFighter && kaijuFighter.poise > kaijuPoiseCapacity * 0.6 && !isReeling(kaijuNow)) {
+          kaijuFighter.poise = kaijuPoiseCapacity * 0.6;
+        }
+      }
+      for (const notice of step.notices) {
+        titanNotices.push(notice);
+        if (notice.kind === "armor-broken" && notice.zoneIds) {
+          for (const zoneId of notice.zoneIds) arena.setZoneArmor("kaiju", zoneId, 0);
+          samples?.play("impact.metal.heavy", { gain: 1, rate: 0.8 });
+          samples?.play("blast.crunch", { gain: 0.9 });
+          renderFreezeLeft = Math.max(renderFreezeLeft, 0.09);
+          if (kaijuNow && effectsView) {
+            const up = (localGroundHeight(kaijuNow.east, kaijuNow.north) ?? 0) + huntCreatureHeight * 0.55;
+            effectsView.burst("debris-burst", kaijuNow.east, up, kaijuNow.north);
+            effectsView.burst("kaiju-blue", kaijuNow.east, up, kaijuNow.north);
+          }
+          pendingCameraTrauma = { strength: 0.8, bearingDeg: null };
+        } else if (notice.kind === "armor-crack") {
+          samples?.play("impact.metal.medium", { gain: 0.6, rate: 1.1 });
+        } else if (notice.kind === "opening") {
+          samples?.play("impact.bell", { gain: 0.7, rate: 0.9 });
+        } else if (
+          notice.kind === "flow-level" ||
+          notice.kind === "ultimate-ready" ||
+          notice.kind === "adaptation"
+        ) {
+          samples?.play("computer", { gain: 0.5, rate: notice.kind === "adaptation" ? 0.7 : 1.2 });
+        }
+        actionHud?.announce(notice.text);
+      }
+      if (titanNotices.length > 8) titanNotices = titanNotices.slice(-8);
+      if (debugMode) {
+        titanDebug["titan"] = {
+          flow: titan.flow,
+          ultimate: titan.ultimate,
+          adaptation: titan.adaptation,
+          regions: Object.fromEntries(
+            Object.entries(titan.regions).map(([id, region]) => [
+              id,
+              { armor: region.armor, broken: region.broken },
+            ]),
+          ),
+          telemetry: titan.telemetry,
+          shares: damageShares(titan.telemetry),
+          boss: bossDecision
+            ? {
+                phase: bossDecision.phase,
+                movement: bossDecision.movement,
+                why: bossDecision.why,
+                history: boss?.history ?? [],
+              }
+            : null,
+          weaponMode,
+          trainingStep,
+          clash: clash ? clash.direction : null,
+          breaker: breaker ? { beat: breaker.beat, direction: breaker.direction } : null,
+          kaiju: kaijuNow
+            ? {
+                activeMove: kaijuNow.activeMove,
+                activePhase: kaijuNow.activePhase,
+                activeMoveTick: kaijuNow.activeMoveTick,
+                reaction: kaijuNow.reactionTicksLeft > 0 ? kaijuNow.reaction : null,
+                reactionTicksLeft: kaijuNow.reactionTicksLeft,
+                poiseFraction: Math.min(1, kaijuNow.poise / Math.max(1, kaijuPoiseCapacity)),
+                distance: Math.hypot(kaijuNow.east - mine.east, kaijuNow.north - mine.north),
+                defeated: kaijuNow.defeated,
+                finisherOpen: kaijuNow.finisherOpen,
+                grapplePhase: kaijuNow.grapplePhase,
+                health: (() => {
+                  const core = kaijuNow.zones.find((zone) => zone.id === "core");
+                  return core ? core.health / Math.max(1, core.maxHealth) : 1;
+                })(),
+              }
+            : null,
+          machine: {
+            east: mine.east,
+            north: mine.north,
+            yawDeg: mine.yawDeg,
+            activeMove: mine.activeMove,
+            activePhase: mine.activePhase,
+            guarding: mine.guarding,
+            heat: mine.heat,
+            overheated: mine.overheated,
+            grapplePhase: mine.grapplePhase,
+            reaction: mine.reactionTicksLeft > 0 ? mine.reaction : null,
+            integrity: (pilotDamageState()?.integrityPercent ?? 100) / 100,
+            stamina: mine.stamina,
+          },
+          anchors: anchors.map((anchor) => ({
+            id: anchor.id,
+            used: anchor.used,
+            east: anchor.east,
+            north: anchor.north,
+          })),
+          cooldowns: [...abilityCooldowns],
+          huntSeconds,
+        };
+      }
       for (const event of events) {
         if (event.actorId === "jaeger" && event.targetId === "kaiju" && event.damage > 0) {
           huntDamageDealt += event.damage;
@@ -4726,7 +6034,32 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       // arena stepped above, whatever this passes. A frozen frame draws the
       // fight exactly where it was, which is the whole point of the hold.
       const visualDelta = renderFreezeLeft > 0 ? 0 : deltaSeconds;
-      combatView.update(kaijuView, events, visualDelta);
+      creatureKnockdown = approachValue(
+        creatureKnockdown,
+        kaijuView.reaction === "knockdown" && kaijuView.reactionTicksLeft > 0 ? 1 : 0,
+        deltaSeconds * (kaijuView.reaction === "knockdown" ? 5 : 2.5),
+      );
+      const creatureGround = localGroundHeight(kaijuView.east, kaijuView.north) ?? 0;
+      combatView.update(kaijuView, events, visualDelta, {
+        attackKind: kaijuView.activeMove ? CREATURE_ATTACK_KIND[kaijuView.activeMove] : undefined,
+        stagger:
+          kaijuView.reaction === "stagger" || kaijuView.reaction === "guard-break"
+            ? 1
+            : bossDecision?.stumble
+              ? 0.6
+              : 0,
+        knockdown: creatureKnockdown,
+        submerged: creatureGround < 0 ? Math.min(1, -creatureGround / 30) : 0,
+        regions: {
+          head: titan.regions.head,
+          "arm.L": titan.regions["arm.L"],
+          "arm.R": titan.regions["arm.R"],
+          torso: titan.regions.torso,
+          "leg.L": titan.regions["leg.L"],
+          "leg.R": titan.regions["leg.R"],
+          tail: titan.regions.tail,
+        },
+      });
       // Draw exactly what is live, and nothing that is not.
       combatView.updateProjectiles(
         arena
@@ -5372,7 +6705,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         debug: debugMode,
       },
       {
-        onContinue: () => stateMachine.transition(production ? AppState.WorldMap : AppState.Saves),
+        onContinue: () => {
+          if (production) void continueLatest();
+          else stateMachine.transition(AppState.Saves);
+        },
         onNewOperation: () => stateMachine.transition(production ? AppState.WorldMap : AppState.Loading),
         onSettings: () => openOpSettings(),
         onCredits: () => {
@@ -6048,7 +7384,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
   // The hunt loop
   // ========================================================================
 
-  const ABILITY_LABELS: readonly string[] = ["Plasma Caster", "Elbow Rocket", "Chain Sword", "Missiles"];
+  const ABILITY_LABELS: readonly string[] = ["Elbow Rocket", "Plasma Caster", "Chain Sword", "Reactor Purge"];
   const CONTROL_LINES: readonly string[] = [
     "WASD move · mouse look · Shift sprint · Space booster step",
     "Left mouse: four-hit chain · Right mouse: heavy, hold to charge",
@@ -6095,6 +7431,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   const closeHuntStage = (keepBay = false): void => {
     clearOpTimers();
+    harbor?.dispose();
+    harbor = null;
+    anchors = [];
+    boss = null;
     comms?.dispose();
     comms = null;
     actionHud?.dispose();
@@ -6151,6 +7491,10 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         onLoadout: () => enterLoadout(selectedHuntId ?? HUNTS[0]?.id ?? ""),
         onUpgrades: () => openUpgrades(),
         onRecords: () => enterRecords(),
+        onTraining: () => {
+          const training = HUNTS.find((entry) => entry.training);
+          if (training) beginHunt(training);
+        },
         onSettings: () => openOpSettings(),
         onRepair: () => {
           const machineId = machineForHunt();
@@ -6431,7 +7775,46 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           dressDistrict(layout, region.centre);
           dressRoads(layout, region.centre);
         }
+        arenaCentreGeo = region ? { ...region.centre, altitudeMeters: 0 } : null;
+        arenaRadiusMeters = layout ? layout.radiusMeters : 900;
+        huntCreatureHeight = kaijuRegistry.get(hunt.kaijuId)?.heightMeters ?? 90;
+        huntKaiju = kaijuRegistry.get(hunt.kaijuId) ?? null;
         spawnTarget(hunt.kaijuId, hunt.openingRangeMeters, inlandBearingDeg);
+        resetTitan((kernel?.seed ?? 20260930) >>> 0, kaijuRegistry.get(hunt.kaijuId)?.poise ?? 320);
+        if (hunt.training) {
+          trainingStep = 0;
+          trainingLastLightAt = -10;
+          trainingActionCooldown = 120;
+          const start = pilotSession?.pose;
+          trainingStartEast = start?.east ?? 0;
+          trainingStartNorth = start?.north ?? 0;
+          combatArena?.setZoneArmor("kaiju", "torso", 0.3);
+        } else {
+          trainingStep = -1;
+        }
+        harbor?.dispose();
+        const arrivalPose = pilotSession?.pose;
+        if (arrivalPose) {
+          districtProps ??= new PropLibrary(bootScene.scene);
+          const seawardDeg = layout
+            ? (layout.seawardBearingRadians * 180) / Math.PI
+            : (inlandBearingDeg ?? 0) + 180;
+          harbor = new HarborSet({
+            scene: bootScene.scene,
+            props: districtProps,
+            east: arrivalPose.east,
+            north: arrivalPose.north,
+            seawardBearingDeg: seawardDeg,
+            groundHeight: localGroundHeight,
+            onDestroy: (east, up, north) => {
+              effectsView?.burst("debris-burst", east, up, north);
+              effectsView?.burst("dust", east, up, north);
+              effectsView?.burst("sparks", east, up, north);
+            },
+            lightBudget: 3,
+          });
+          anchors = harbor.anchors().map((anchor) => anchor);
+        }
         comms?.dispose();
         comms = null;
         actionHud?.dispose();
@@ -6508,37 +7891,6 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     });
   };
 
-  const huntAbilities = (
-    weapons: readonly {
-      id: string;
-      magazine: number;
-      magazineSize: number;
-      reserve: number;
-      cooldownTicksLeft: number;
-      reloadTicksLeft: number;
-      feed: string;
-      channelling: boolean;
-    }[],
-  ): AbilityView[] =>
-    ABILITY_CODES.map((code, index) => {
-      const weaponId = WEAPON_KEYS[code];
-      const weapon = weapons.find((entry) => entry.id === weaponId);
-      const cooling = weapon ? Math.max(weapon.cooldownTicksLeft, weapon.reloadTicksLeft) : 0;
-      return {
-        key: String(index + 1),
-        label: ABILITY_LABELS[index] ?? weaponId ?? "",
-        ready: weapon
-          ? cooling > 0
-            ? Math.max(0, 1 - cooling / 120)
-            : weapon.feed === "rounds" && weapon.magazine === 0 && weapon.reserve === 0
-              ? 0
-              : 1
-          : 0,
-        ammo: weapon && weapon.feed === "rounds" ? `${weapon.magazine}/${weapon.magazineSize}` : "",
-        active: weapon?.channelling ?? false,
-      };
-    });
-
   updateHuntFrame = (deltaSeconds: number): void => {
     if (!actionHud || huntStage !== "fight") return;
     huntSeconds += deltaSeconds;
@@ -6556,24 +7908,163 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
     if (creature && creature.finisherOpen && !creatureWasOpen) flash = "Armour break";
     creatureWasOpen = creature?.finisherOpen ?? false;
     const cue = encounter?.cue();
+    harbor?.update(deltaSeconds);
+    // Ability clocks, the sword's heat and the plasma aim state live on the
+    // frame clock, like the HUD they are shown on.
+    for (let i = 0; i < abilityCooldowns.length; i += 1) {
+      abilityCooldowns[i] = Math.max(0, (abilityCooldowns[i] ?? 0) - deltaSeconds);
+    }
+    if (weaponMode === "sword" && combatArena) {
+      const fighter = combatArena.fighter("jaeger");
+      if (fighter) {
+        fighter.heat = Math.min(
+          fighter.profile.heatMax,
+          fighter.heat + deltaSeconds * 7.5 * flowGrants(titan.flow).heatScale,
+        );
+        if (fighter.overheated || huntSeconds > swordUntil) {
+          setWeaponMode("fists");
+          actionHud?.announce(fighter.overheated ? "Reactor hot, sword stowed" : "Sword stowed");
+        }
+      }
+    }
+    if (aimFireAt >= 0 && huntSeconds >= aimFireAt && combatArena) {
+      aimFireAt = -1;
+      const outcome = combatArena.fireWeapon("jaeger", "weapon.plasma-caster");
+      if (outcome.ok) {
+        samples?.play("laser.large", { gain: 1 });
+        pendingFovKick = 1;
+      } else {
+        actionHud?.announce(outcome.message);
+      }
+    }
+    aimingPlasma = huntSeconds < aimUntil;
+    const integrityRegions: Partial<
+      Record<"arm.L" | "arm.R" | "leg.L" | "leg.R" | "torso" | "reactor", number>
+    > = {};
+    for (const component of damage?.components ?? []) {
+      const key =
+        component.name === "Left arm"
+          ? "arm.L"
+          : component.name === "Right arm"
+            ? "arm.R"
+            : component.name === "Left leg"
+              ? "leg.L"
+              : component.name === "Right leg"
+                ? "leg.R"
+                : component.name === "Torso"
+                  ? "torso"
+                  : component.name === "Reactor"
+                    ? "reactor"
+                    : null;
+      if (key) integrityRegions[key] = 1 - component.percent / 100;
+    }
+    const holding =
+      machine !== undefined &&
+      (machine.grapplePhase === "held" ||
+        machine.grapplePhase === "throwing" ||
+        machine.grapplePhase === "slamming");
+    const separation =
+      machine && creature
+        ? Math.hypot(creature.east - machine.east, creature.north - machine.north)
+        : Infinity;
+    const nearAnchor = machine
+      ? anchors.find(
+          (anchor) =>
+            !anchor.used &&
+            Math.hypot(anchor.east - machine.east, anchor.north - machine.north) < anchor.radiusMeters + 70,
+        )
+      : undefined;
+    const poiseFraction = creature ? Math.min(1, creature.poise / Math.max(1, kaijuPoiseCapacity)) : 0;
+    const prompt: HudPrompt = clash
+      ? { kind: "clash", text: "Push", direction: clash.direction }
+      : breaker
+        ? breaker.beat === 0
+          ? { kind: "breaker", text: "Drift", direction: breaker.direction }
+          : { kind: "breaker", text: "Breaker", direction: null }
+        : holding
+          ? nearAnchor
+            ? { kind: "slam", text: `E: throw into the ${nearAnchor.label.toLowerCase()}` }
+            : { kind: "grapple", text: "E: throw, WASD aims" }
+          : creature && separation < 48 && (poiseFraction >= 0.45 || isReeling(creature))
+            ? { kind: "grapple", text: "E: grab" }
+            : null;
+    const cooldownMax = [6, 1.6, 0.6, 14];
+    const plasma = machine?.weapons.find((weapon) => weapon.id === "weapon.plasma-caster");
+    const abilities: AbilityView[] = [
+      {
+        key: "1",
+        label: "Elbow Rocket",
+        ready: 1 - Math.min(1, (abilityCooldowns[0] ?? 0) / (cooldownMax[0] ?? 1)),
+        ammo: "",
+        active: machine?.activeMove === "ability.elbow-rocket",
+        icon: "elbow",
+      },
+      {
+        key: "2",
+        label: "Plasma Caster",
+        ready: machine?.overheated
+          ? 0
+          : Math.min(
+              1 - Math.min(1, (abilityCooldowns[1] ?? 0) / (cooldownMax[1] ?? 1)),
+              plasma ? 1 - Math.min(1, plasma.cooldownTicksLeft / 90) : 1,
+            ),
+        ammo: machine?.overheated ? "HOT" : "",
+        active: aimingPlasma,
+        icon: "plasma",
+      },
+      {
+        key: "3",
+        label: "Chain Sword",
+        ready: machine?.overheated ? 0 : 1 - Math.min(1, (abilityCooldowns[2] ?? 0) / (cooldownMax[2] ?? 1)),
+        ammo: weaponMode === "sword" ? `${Math.max(0, Math.ceil(swordUntil - huntSeconds))}s` : "",
+        active: weaponMode === "sword",
+        icon: "sword",
+      },
+      {
+        key: "4",
+        label: "Reactor Purge",
+        ready: 1 - Math.min(1, (abilityCooldowns[3] ?? 0) / (cooldownMax[3] ?? 1)),
+        ammo: "",
+        active: machine?.activeMove === "ability.reactor-purge",
+        icon: "purge",
+      },
+    ];
+    const aimRegion = machine?.aimZoneId ? REGION_BY_ZONE[machine.aimZoneId] : undefined;
     actionHud.update(
       {
         health: (damage?.integrityPercent ?? 100) / 100,
         stamina: machine ? machine.stamina / 100 : 1,
-        overdrive: creature?.finisherOpen ? 1 : overdrive,
+        heat: machine ? machine.heat / 100 : 0,
+        overheated: machine?.overheated ?? false,
+        integrityRegions,
         enemyName: creature ? (hunt?.title ?? creature.displayName) : null,
         enemyHealth: creatureHealth,
-        enemyPosture: creature ? Math.min(1, creature.poise / 60) : 0,
-        phase:
-          cue && cue.phase !== "approach" && cue.phase !== "opening" && cue.phase !== "spacing"
-            ? cue.phase.toUpperCase()
-            : "",
+        enemyStability: creature ? 1 - poiseFraction : 0,
+        // The boss plate names the phase from the first frame: HUNTER, then
+        // WOUNDED, then DESPERATE, so a change reads as a change.
+        phase: bossDecision ? bossDecision.phase.toUpperCase() : "",
+        regions: TITAN_REGIONS.map((id) => ({
+          id,
+          label: regionName(id),
+          armor: titan.regions[id].armor,
+          broken: titan.regions[id].broken,
+          severed: titan.regions[id].severed,
+        })),
+        targetRegion: aimRegion ?? null,
         locked:
           pilotSession?.camera.lockedTargetId !== null && pilotSession?.camera.lockedTargetId !== undefined,
-        abilities: huntAbilities(machine?.weapons ?? []),
+        abilities,
+        flow: titan.flow,
+        flowLevel: flowLevel(titan.flow),
+        ultimate: titan.ultimate,
         combo: machine?.comboHits ?? 0,
-        objective: cue?.objective ?? "",
+        objective: trainingActive()
+          ? (TRAINING_STEPS[trainingStep]?.objective ?? "")
+          : (cue?.objective ?? ""),
         flash,
+        prompt,
+        weaponMode: aimingPlasma ? "plasma" : weaponMode,
+        aiming: aimingPlasma,
       },
       deltaSeconds,
     );
@@ -6583,7 +8074,7 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
         huntEndAt = huntSeconds + 3;
         samples?.play("blast.low", { gain: 1, rate: 0.6 });
         actionHud.announce("Kaiju down");
-      } else if (machine?.defeated) {
+      } else if (machine?.defeated || (damage?.integrityPercent ?? 100) <= 8) {
         huntOutcome = "lost";
         huntEndAt = huntSeconds + 2.5;
         actionHud.announce("Machine down");
@@ -6596,6 +8087,42 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
   const finishHunt = (outcome: "won" | "lost" | "aborted"): void => {
     const hunt = selectedHuntId ? huntById(selectedHuntId) : undefined;
+    if (hunt?.training) {
+      trainingStep = -1;
+      stopPilot();
+      actionHud?.dispose();
+      actionHud = null;
+      encounter = null;
+      huntStage = "rewards";
+      opScreen = renderRewards(
+        uiRoot,
+        {
+          grade: outcome === "won" ? "S" : "D",
+          outcome: outcome === "won" ? "Simulation complete" : "Simulation ended",
+          headline:
+            outcome === "won"
+              ? "Every step done. The real one does not hold back."
+              : "Left early. The bay will run it again whenever you like.",
+          experienceGained: 0,
+          levelBefore: 1,
+          levelAfter: 1,
+          progress: 0,
+          lines: [
+            {
+              label: "Steps",
+              value: `${Math.max(0, Math.min(TRAINING_STEPS.length, trainingStep + 1))} of ${TRAINING_STEPS.length}`,
+              plus: false,
+            },
+          ],
+          unlocked: [],
+          nextHunt: null,
+        },
+        () => (hunt ? beginHunt(hunt) : enterHangar()),
+        null,
+        () => enterHangar(),
+      );
+      return;
+    }
     const machineId = machineForHunt();
     const record = roster.get(machineId);
     const levelBefore = record?.level ?? 1;
@@ -6630,6 +8157,9 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       saveHuntRecords();
     }
     stopPilot();
+    // The hunt's consequences are written down now, after the machine's
+    // damage has gone back to the roster, not at the next menu.
+    void flushSaves();
     actionHud?.dispose();
     actionHud = null;
     encounter = null;
@@ -6667,12 +8197,35 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
           { label: "Damage dealt", value: `${Math.round(huntDamageDealt).toLocaleString()}`, plus: true },
           { label: "Hits taken", value: `${huntHitsTaken}`, plus: false },
           { label: "Best combo", value: `${huntBestCombo}`, plus: huntBestCombo >= 4 },
-          { label: "Perfect guards", value: `${huntPerfectGuards}`, plus: huntPerfectGuards > 0 },
+          {
+            label: "Perfect guards",
+            value: `${titan.telemetry.perfectGuards}`,
+            plus: titan.telemetry.perfectGuards > 0,
+          },
           { label: "Salvage", value: `${salvageTons} t`, plus: salvageTons > 0 },
           {
             label: "Materials",
             value: outcome === "won" ? (hunt?.materials.join(", ") ?? "") : "None",
             plus: outcome === "won",
+          },
+          {
+            label: "Regions broken",
+            value: `${Object.values(titan.regions).filter((region) => region.broken).length} of 7`,
+            plus: Object.values(titan.regions).some((region) => region.broken),
+          },
+          {
+            label: "Damage by",
+            value: (() => {
+              const shares = damageShares(titan.telemetry);
+              const fists = Math.round(shares["light-chain"] * 100);
+              const heavies = Math.round(
+                (shares.heavy + shares.counter + shares["elbow-rocket"] + shares["reactor-purge"]) * 100,
+              );
+              const weapons = Math.round((shares.plasma + shares["chain-sword"]) * 100);
+              const throws = Math.round((shares.grapple + shares.environment + shares.finisher) * 100);
+              return `fists ${fists}% · heavies ${heavies}% · weapons ${weapons}% · throws ${throws}%`;
+            })(),
+            plus: false,
           },
           { label: "Machine damage", value: `${Math.round(structureLost * 100)}%`, plus: false },
           {
@@ -8908,6 +10461,19 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
 
     switch (state) {
       case AppState.MainMenu:
+        if (production && new URLSearchParams(window.location.search).has("continue") && !continueConsumed) {
+          continueConsumed = true;
+          void continueLatest();
+          break;
+        }
+        if (orientationSceneRequested && !orientationScene) {
+          orientationScene = openOrientationScene(bootScene, uiRoot, debugMode);
+          break;
+        }
+        if (directHuntPending) {
+          window.setTimeout(() => stateMachine.transition(AppState.WorldMap), 0);
+          break;
+        }
         renderOpTitle();
         void refreshPwaPanel();
         void refreshTitleSummary();
@@ -8918,6 +10484,14 @@ export async function startApp(root: HTMLElement): Promise<AppHandle> {
       case AppState.WorldMap:
         openWorld();
         if (production) enterHangar();
+        if (production && directHuntPending) {
+          directHuntPending = false;
+          const hunt = directHuntId ? huntById(directHuntId) : undefined;
+          if (hunt) {
+            beginHunt(hunt);
+            arriveForHunt(hunt);
+          }
+        }
         break;
       case AppState.Saves:
         void openSaves().catch((error) => {

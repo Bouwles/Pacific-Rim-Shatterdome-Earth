@@ -33,7 +33,7 @@ import {
   type Point3,
   type TargetSphere,
 } from "./hitVolumes";
-import { resolveReaction, type ReactionDefinition } from "./reactions";
+import { reactionDefinition, resolveReaction, type ReactionDefinition, type ReactionId } from "./reactions";
 import {
   NO_COMBO,
   NO_DEFENSE,
@@ -922,6 +922,87 @@ export class CombatArena {
       }
     }
     return true;
+  }
+
+  /**
+   * Titan Break hooks. The hunt layer owns armour, stability pressure and the
+   * clash; these are the narrow doors it uses rather than reaching into the
+   * fighter state, so the arena stays the one thing that changes a fighter.
+   */
+  setZoneArmor(fighterId: string, zoneId: string, armor: number): boolean {
+    const fighter = this.fighters.get(fighterId);
+    const zone = fighter?.zones.find((entry) => entry.id === zoneId);
+    if (!fighter || !zone) return false;
+    (zone as { armor: number }).armor = Math.max(0, Math.min(0.95, armor));
+    return true;
+  }
+
+  /** Adds stability pressure directly; a stagger follows on the next hit that spends it. */
+  addPoise(fighterId: string, amount: number): number {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || !Number.isFinite(amount)) return 0;
+    fighter.poise = Math.max(0, fighter.poise + amount);
+    return fighter.poise;
+  }
+
+  /** Forces a reaction, cancelling whatever the fighter was doing if it loses control. */
+  forceReaction(
+    fighterId: string,
+    reactionId: ReactionId,
+    ticks?: number,
+    knockback?: { readonly mps: number; readonly directionDeg: number },
+  ): boolean {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || fighter.defeated) return false;
+    const definition = reactionDefinition(reactionId);
+    fighter.reaction = definition;
+    fighter.reactionTicksLeft = ticks ?? definition.durationTicks;
+    if (definition.losesControl) {
+      fighter.attack = null;
+      fighter.guarding = false;
+    }
+    if (knockback) {
+      fighter.knockbackMps = knockback.mps;
+      fighter.knockbackDirectionDeg = normalizeDegrees(knockback.directionDeg);
+    }
+    this.pushEvent({
+      type: "reaction",
+      actorId: fighterId,
+      targetId: null,
+      reaction: definition.id,
+      reason: "forced",
+    });
+    return true;
+  }
+
+  /** Ends a reaction early. */
+  clearReaction(fighterId: string): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return;
+    fighter.reaction = null;
+    fighter.reactionTicksLeft = 0;
+  }
+
+  /** Cancels the running attack without a reaction; the clash uses it on both sides. */
+  clearAttack(fighterId: string): boolean {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter || !fighter.attack) return false;
+    this.pushEvent({
+      type: "attack-cancelled",
+      actorId: fighterId,
+      moveId: fighter.attack.move.id,
+      reason: "clash",
+    });
+    fighter.attack = null;
+    return true;
+  }
+
+  /** Vents heat, for the reactor purge. */
+  coolFighter(fighterId: string, amount: number): void {
+    const fighter = this.fighters.get(fighterId);
+    if (!fighter) return;
+    fighter.heat = Math.max(0, fighter.heat - Math.max(0, amount));
+    if (fighter.heat < fighter.profile.heatMax * 0.5) fighter.overheated = false;
   }
 
   projectilePool(): ProjectilePool {

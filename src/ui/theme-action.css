@@ -693,3 +693,329 @@
   font-family: var(--f-display);
   font-size: 20px;
 }
+
+/* Titan Break HUD: one system, icons over text, the centre kept clear. */
+#uiRoot .op.hud3 {
+  --hud-ink: rgba(6, 10, 15, 0.55);
+  --hud-line: rgba(180, 205, 225, 0.22);
+}
+#uiRoot .op.hud3 .player {
+  left: 26px;
+  top: auto;
+  bottom: 30px;
+  width: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 0;
+  background: none;
+}
+#uiRoot .op.hud3 .silhouette {
+  width: 46px;
+  height: 74px;
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
+}
+#uiRoot .op.hud3 .silhouette rect,
+#uiRoot .op.hud3 .silhouette circle {
+  fill: #7fd6ff;
+  transition:
+    fill 0.3s ease,
+    opacity 0.3s ease;
+}
+#uiRoot .op.hud3 .silhouette circle {
+  fill: #66e0ff;
+}
+#uiRoot .op.hud3 .silhouette .hurt {
+  fill: #ffc247;
+}
+#uiRoot .op.hud3 .silhouette .critical {
+  fill: #ff5a4a;
+}
+#uiRoot .op.hud3 .player .bars {
+  display: grid;
+  gap: 5px;
+  width: 210px;
+}
+#uiRoot .op.hud3 .hbar.heat > i {
+  background: linear-gradient(90deg, #ffb347, #ff6a3d);
+}
+#uiRoot .op.hud3 .hbar.heat.hot > i {
+  background: #ff3b3b;
+}
+#uiRoot .op.hud3 .boss {
+  right: auto;
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%);
+  width: min(560px, 42vw);
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+#uiRoot .op.hud3 .boss-head {
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+#uiRoot .op.hud3 .boss .lock {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 1px solid var(--c-amber);
+  border-radius: 50%;
+  font-size: 0;
+  opacity: 0.35;
+}
+#uiRoot .op.hud3 .boss .lock.on {
+  opacity: 1;
+  background: var(--c-amber);
+  box-shadow: 0 0 8px var(--c-amber);
+}
+#uiRoot .op.hud3 .hbar.boss-health {
+  height: 7px;
+}
+#uiRoot .op.hud3 .hbar.boss-stability {
+  height: 3px;
+  margin-top: 3px;
+  background: rgba(20, 28, 38, 0.7);
+}
+#uiRoot .op.hud3 .hbar.boss-stability > i {
+  background: linear-gradient(90deg, #ffc247, #ffe0a0);
+}
+#uiRoot .op.hud3 .hbar.boss-stability.broken > i {
+  background: #7fe8ff;
+  box-shadow: 0 0 8px #7fe8ff;
+}
+#uiRoot .op.hud3 .regions {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+#uiRoot .op.hud3 .pip {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--hud-line);
+  transform: rotate(45deg);
+  overflow: hidden;
+  background: var(--hud-ink);
+}
+#uiRoot .op.hud3 .pip i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  background: rgba(127, 214, 255, 0.55);
+  transition: height 0.25s ease;
+}
+#uiRoot .op.hud3 .pip span {
+  display: none;
+}
+#uiRoot .op.hud3 .pip.broken {
+  border-color: #4fe8ff;
+  box-shadow: 0 0 8px rgba(79, 232, 255, 0.6);
+}
+#uiRoot .op.hud3 .pip.broken i {
+  background: rgba(79, 232, 255, 0.25);
+  height: 100% !important;
+}
+#uiRoot .op.hud3 .pip.severed {
+  border-color: #ff5a4a;
+  opacity: 0.5;
+}
+#uiRoot .op.hud3 .pip.target {
+  border-color: var(--c-amber);
+}
+#uiRoot .op.hud3 .objective2 {
+  top: 84px;
+  max-width: 44vw;
+}
+#uiRoot .op.hud3 .actionbar {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+#uiRoot .op.hud3 .abilities {
+  position: static;
+  transform: none;
+  display: flex;
+  gap: 10px;
+}
+#uiRoot .op.hud3 .ability .glyph {
+  fill: none;
+  stroke: #dfe7ee;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+#uiRoot .op.hud3 .ability.active .glyph {
+  stroke: #7fe8ff;
+}
+#uiRoot .op.hud3 .ability:not(.ready) .glyph {
+  opacity: 0.35;
+}
+#uiRoot .op.hud3 .arc {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 6px;
+}
+#uiRoot .op.hud3 .arc svg {
+  width: 60px;
+  height: 60px;
+  transform: rotate(-90deg);
+}
+#uiRoot .op.hud3 .arc .arc-back {
+  fill: var(--hud-ink);
+  stroke: var(--hud-line);
+  stroke-width: 3;
+}
+#uiRoot .op.hud3 .arc .arc-fill {
+  fill: none;
+  stroke: #7fd6ff;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.15s linear;
+}
+#uiRoot .op.hud3 .arc.flow .arc-fill.deep {
+  stroke: #b8f1ff;
+  filter: drop-shadow(0 0 4px #7fe8ff);
+}
+#uiRoot .op.hud3 .arc.ultimate .arc-fill {
+  stroke: var(--c-amber);
+}
+#uiRoot .op.hud3 .arc.ultimate .arc-fill.ready {
+  filter: drop-shadow(0 0 6px var(--c-amber));
+}
+#uiRoot .op.hud3 .arc .mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--f-display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: #dfe7ee;
+}
+#uiRoot .op.hud3 .combo {
+  left: auto;
+  right: 26%;
+  bottom: 110px;
+}
+#uiRoot .op.hud3 .notices {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+#uiRoot .op.hud3 .notice {
+  font-family: var(--f-display);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #eef4f8;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+  animation: notice-in 0.18s ease-out;
+  transition: opacity 0.4s ease;
+}
+#uiRoot .op.hud3 .notice.fade {
+  opacity: 0;
+}
+@keyframes notice-in {
+  from {
+    transform: translateY(8px) scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+#uiRoot .op.hud3 .prompt {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border: 1px solid var(--c-amber);
+  background: var(--hud-ink);
+  font-family: var(--f-display);
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff3d6;
+}
+#uiRoot .op.hud3 .prompt .arrow {
+  font-size: 30px;
+  line-height: 1;
+  color: var(--c-amber);
+  animation: prompt-pulse 0.5s ease-in-out infinite alternate;
+}
+#uiRoot .op.hud3 .prompt[data-kind="grapple"],
+#uiRoot .op.hud3 .prompt[data-kind="slam"] {
+  top: auto;
+  bottom: 150px;
+  border-color: #7fd6ff;
+  color: #dff6ff;
+  font-size: 12px;
+}
+@keyframes prompt-pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.18);
+  }
+}
+#uiRoot .op.hud3 .reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 1px solid #7fe8ff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(127, 232, 255, 0.5);
+}
+#uiRoot .op.hud3 .reticle::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 2px;
+  height: 2px;
+  background: #7fe8ff;
+}
+#uiRoot .op.hud3 .phase {
+  color: #f06a66;
+}
+#uiRoot .op.hud3 .flash {
+  display: none;
+}
+#uiRoot .op.hud3 .abilities {
+  gap: 18px;
+}
+#uiRoot .op.hud3 .ability .label {
+  width: 64px;
+  margin-left: -6px;
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  white-space: normal;
+  line-height: 1.1;
+}

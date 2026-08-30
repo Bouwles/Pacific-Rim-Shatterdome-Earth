@@ -27,6 +27,14 @@ import {
   type CameraPlacement,
   type CameraState,
 } from "./camera";
+import {
+  directorPlacement,
+  initialDirector,
+  stepDirector,
+  type CameraDirectorSnapshot,
+  type CombatCameraContext,
+  type ObstructionQuery,
+} from "./cameraDirector";
 
 /**
  * A piloted machine.
@@ -66,6 +74,14 @@ export interface PilotUpdate {
   readonly effects: Pick<EnvironmentEffects, "tractionMultiplier" | "movementMultiplier">;
   readonly obstruction?: (desiredDistanceMeters: number) => number | null;
   readonly targetPosition?: { readonly east: number; readonly north: number; readonly up: number } | null;
+  /**
+   * The fight, for the camera director. When present the director frames the
+   * camera; when absent the rig-based camera runs as before, so the sandbox
+   * and the world map keep their cameras.
+   */
+  readonly combat?: CombatCameraContext | null;
+  /** Sphere cast for the director's boom. */
+  readonly obstructionQuery?: ObstructionQuery;
 }
 
 export interface PilotFrame {
@@ -91,6 +107,7 @@ export class PilotSession {
   private comfortValue: CameraComfort;
   private readonly bufferValue: InputBuffer;
   private lastPlacement: CameraPlacement | null = null;
+  private directorValue: CameraDirectorSnapshot = initialDirector();
   private lastInput: JaegerInput = NEUTRAL_JAEGER_INPUT;
   private pendingImpulse = 0;
 
@@ -124,6 +141,11 @@ export class PilotSession {
 
   get placement(): CameraPlacement | null {
     return this.lastPlacement;
+  }
+
+  /** The camera director's blend and state, for the HUD and the tests. */
+  get director(): CameraDirectorSnapshot {
+    return this.directorValue;
   }
 
   /** Records a press for the controller to take when it becomes legal. */
@@ -206,9 +228,47 @@ export class PilotSession {
       obstruction: update.obstruction,
       targetPosition: update.targetPosition ?? null,
     };
-    this.cameraValue = stepCamera(this.cameraValue, update.cameraInput, update.deltaSeconds, cameraContext);
+    if (update.combat) {
+      // The director owns yaw and framing; the rig camera still keeps pitch,
+      // impulse and stride sway so comfort settings mean the same thing in
+      // both cameras.
+      const stepped = stepDirector(
+        this.directorValue,
+        this.cameraValue.yawDeg,
+        update.cameraInput,
+        update.deltaSeconds,
+        this.poseValue,
+        this.profile,
+        this.comfortValue,
+        update.combat,
+      );
+      const base = stepCamera(
+        { ...this.cameraValue, lockedTargetId: null },
+        { yawDeltaDeg: 0, pitchDeltaDeg: update.cameraInput.pitchDeltaDeg },
+        update.deltaSeconds,
+        { ...cameraContext, targetPosition: null, obstruction: undefined },
+      );
+      this.cameraValue = { ...base, yawDeg: stepped.yawDeg, lockedTargetId: this.cameraValue.lockedTargetId };
+      const placed = directorPlacement({
+        director: stepped.director,
+        yawDeg: this.cameraValue.yawDeg,
+        pitchDeg: this.cameraValue.pitchDeg,
+        pose: this.poseValue,
+        profile: this.profile,
+        comfort: this.comfortValue,
+        combat: update.combat,
+        obstruction: update.obstructionQuery,
+        deltaSeconds: update.deltaSeconds,
+        swayPhase: this.cameraValue.swayPhase,
+        impulse: this.cameraValue.impulse,
+      });
+      this.directorValue = placed.director;
+      this.lastPlacement = placed.placement;
+    } else {
+      this.cameraValue = stepCamera(this.cameraValue, update.cameraInput, update.deltaSeconds, cameraContext);
+      this.lastPlacement = cameraPlacement(this.cameraValue, cameraContext);
+    }
     this.pendingImpulse = 0;
-    this.lastPlacement = cameraPlacement(this.cameraValue, cameraContext);
 
     return {
       pose: this.poseValue,

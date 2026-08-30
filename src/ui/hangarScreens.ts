@@ -79,6 +79,7 @@ export interface HangarCallbacks {
   onLoadout: () => void;
   onUpgrades: () => void;
   onRecords: () => void;
+  onTraining: () => void;
   onSettings: () => void;
   onRepair: () => void;
   onMenu: () => void;
@@ -97,6 +98,7 @@ export function renderHangar(
     button("Loadout", "loadout", callbacks.onLoadout),
     button("Upgrades", "upgrades", callbacks.onUpgrades),
     button("Records", "records", callbacks.onRecords),
+    button("Training", "training", callbacks.onTraining),
     el("div", "spacer"),
     button("Settings", "settings", callbacks.onSettings, { ghost: true }),
     button("Title", "exit-to-menu", callbacks.onMenu, { ghost: true, small: true }),

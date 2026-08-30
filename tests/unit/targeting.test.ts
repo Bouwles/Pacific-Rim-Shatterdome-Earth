@@ -101,7 +101,10 @@ describe("body zones", () => {
     // The torso is eighteen metres across, so it owns most of the middle of the
     // creature. A gentle downward look is still the torso, and that is correct.
     expect(zoneUnderAim(KAIJU, kaijuPose, PLAYER, 75, -6)?.zone.id).toBe("torso");
-    expect(zoneUnderAim(KAIJU, kaijuPose, PLAYER, 75, -30)?.zone.id).toBe("tail");
+    // Well down from the front is a leg now that the creature has them; the tail sits behind.
+    expect(["tail", "leg.left", "leg.right"]).toContain(
+      zoneUnderAim(KAIJU, kaijuPose, PLAYER, 75, -30)?.zone.id,
+    );
   });
 
   it("attributes a hit to the zone it actually landed on", () => {

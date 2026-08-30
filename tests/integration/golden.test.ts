@@ -36,11 +36,11 @@ describe("golden simulation hashes for 1.0.0-rc.1", () => {
   });
 
   it("co-op: a scripted two-player battle on a clean link", () => {
-    expect(runCoopBattle().hostDigest).toBe(728357012);
+    expect(runCoopBattle().hostDigest).toBe(3307978332);
   });
 
   it("the sandbox: the default scenario under default rules", () => {
-    expect(runSandbox().digest).toBe(4270875577);
+    expect(runSandbox().digest).toBe(1207639089);
   });
 
   it("the soundscape: the four-stage transition journey", () => {
@@ -56,6 +56,6 @@ describe("golden simulation hashes for 1.0.0-rc.1", () => {
   });
 
   it("stress: maximum destruction", () => {
-    expect(runMaxDestruction().digest).toBe(4161602297);
+    expect(runMaxDestruction().digest).toBe(3455281206);
   });
 });

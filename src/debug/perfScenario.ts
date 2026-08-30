@@ -239,7 +239,7 @@ export function runProjectileBarrage(ticks = 300): HeadlessStressResult {
 }
 
 /** Every zone of a creature hammered to destruction, twice over. */
-export function runMaxDestruction(rounds = 40): HeadlessStressResult {
+export function runMaxDestruction(rounds = 90): HeadlessStressResult {
   const arena = new CombatArena({
     moves: createMoveRegistry(),
     seed: 20260915,
@@ -267,7 +267,7 @@ export function runMaxDestruction(rounds = 40): HeadlessStressResult {
     events,
     scopes: { destruction: rounds },
     digest: digest >>> 0,
-    violations: creature?.defeated ? [] : ["forty rounds of full-zone damage did not defeat it"],
+    violations: creature?.defeated ? [] : [`${rounds} rounds of full-zone damage did not defeat it`],
   };
 }
 

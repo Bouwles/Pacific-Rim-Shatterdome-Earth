@@ -16,7 +16,7 @@ import type { KaijuDefinition } from "../data/kaiju";
 import type { QualityPreset } from "../data/quality";
 import type { ArenaFighterView, CombatEvent } from "../combat/arena";
 import { zonePosition, type TargetingPose } from "../combat/targeting";
-import { CreatureRig } from "./creatureRig";
+import { CreatureRig, type CreatureRigPose } from "./creatureRig";
 
 /**
  * Combat, drawn.
@@ -87,6 +87,13 @@ export class CombatView {
   private worldSeconds = 0;
   private flinch = 0;
   private lastEast = 0;
+  /** Move lengths, for the anticipation curve; set by the owner when it has a registry. */
+  moveTicks: ((moveId: string) => { startup: number; active: number; recovery: number } | null) | null = null;
+
+  private currentMoveTicks(view: ArenaFighterView): { startup: number; active: number; recovery: number } {
+    const resolved = view.activeMove && this.moveTicks ? this.moveTicks(view.activeMove) : null;
+    return resolved ?? { startup: 20, active: 7, recovery: 24 };
+  }
   private lastNorth = 0;
   private readonly ready: Promise<void>;
 
@@ -212,7 +219,12 @@ export class CombatView {
     this.zoneMesh.setEnabled(enabled);
   }
 
-  update(view: ArenaFighterView, events: readonly CombatEvent[], deltaSeconds: number): void {
+  update(
+    view: ArenaFighterView,
+    events: readonly CombatEvent[],
+    deltaSeconds: number,
+    extra: Partial<CreatureRigPose> = {},
+  ): void {
     if (this.disposed) return;
     const ground = this.groundHeightAt(view.east, view.north) ?? 0;
     const pose: TargetingPose = { east: view.east, north: view.north, up: ground, yawDeg: view.yawDeg };
@@ -234,14 +246,30 @@ export class CombatView {
     this.flinch = Math.max(0, this.flinch - deltaSeconds * 3);
     const phase = view.activePhase ?? "";
     const health = view.zones.reduce((sum, zone) => sum + zone.health / Math.max(1, zone.maxHealth), 0);
+    // Anticipation grows through the startup so the silhouette reads before
+    // the strike; the strike itself is instant.
+    const total = this.currentMoveTicks(view);
+    const windup =
+      phase === "startup" || phase === "windup"
+        ? Math.min(1, 0.35 + (view.activeMoveTick / Math.max(1, total.startup)) * 0.65)
+        : 0;
     this.rig?.update({
       timeSeconds: this.worldSeconds,
       speedMps: speed,
-      windup: phase === "startup" || phase === "windup" ? 1 : 0,
-      striking: phase === "active" ? 1 : 0,
+      windup,
+      striking:
+        phase === "active"
+          ? 1
+          : phase === "recovery"
+            ? Math.max(
+                0,
+                1 - (view.activeMoveTick - total.startup - total.active) / Math.max(1, total.recovery),
+              ) * 0.4
+            : 0,
       flinch: this.flinch,
       damage: 1 - health / Math.max(1, view.zones.length),
       defeated: view.defeated,
+      ...extra,
     });
 
     if (this.debugVolumesValue) {

@@ -266,7 +266,9 @@ describe("the machine, drawn", () => {
     // mesh is drawn and keeps it for the life of the scene, so the count is not
     // the measure. What must be gone is everything this view named.
     expect(scene.materials.filter((material) => material.name.startsWith("jaeger."))).toEqual([]);
-    expect(scene.materials.length - materials).toBeLessThanOrEqual(1);
+    // The inked rig also leaves Babylon's one shared edge-line shader behind,
+    // cached on the scene exactly like the default material.
+    expect(scene.materials.length - materials).toBeLessThanOrEqual(2);
   });
 
   it("reports a real sound delay for a distant footfall", () => {

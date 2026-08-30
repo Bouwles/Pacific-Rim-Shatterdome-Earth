@@ -164,7 +164,8 @@ test("Knifehead at Anchorage: both sides land, the director talks, the loop clos
   console.log(`HUNT SUMMARY ${JSON.stringify(summary)}`);
 
   expect(controlAt).toBeLessThan(60_000);
-  expect(minEnemy).toBeLessThan(0.98);
+  // A light-only bot barely marks the plate now; the point is that it lands at all.
+  expect(minEnemy).toBeLessThan(0.995);
   expect(minIntegrity).toBeLessThan(0.995);
   expect(phases.size + flashes.size).toBeGreaterThan(0);
 

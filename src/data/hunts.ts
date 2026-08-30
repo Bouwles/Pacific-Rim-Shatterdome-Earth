@@ -31,11 +31,33 @@ export interface HuntDefinition {
    * the machine hits harder, more so on the first board.
    */
   readonly damageScales: { readonly machine: number; readonly creature: number };
+  /** A simulation: the creature holds back, the steps teach, nothing is paid. */
+  readonly training?: boolean;
   /** Ordinal on the board; the first hunt is the flagship. */
   readonly order: number;
 }
 
 export const HUNTS: readonly HuntDefinition[] = [
+  {
+    id: "hunt.training.anchorage",
+    kaijuId: "kaiju.biped-alpha",
+    regionId: "anchorage",
+    title: "Training",
+    location: "Anchorage simulation",
+    category: "Simulation",
+    recommendedLevel: 1,
+    difficulty: "Standard",
+    materials: [],
+    firstClear: "Nothing. It is a simulation.",
+    repeat: "Nothing. It is a simulation.",
+    traits: ["Holds back", "Throws what the step asks for"],
+    weaknesses: ["Everything, on purpose"],
+    openingRangeMeters: 110,
+    dayFraction: 0.5,
+    damageScales: { machine: 1, creature: 0.2 },
+    order: 0,
+    training: true,
+  },
   {
     id: "hunt.knifehead.anchorage",
     kaijuId: "kaiju.biped-alpha",
@@ -52,7 +74,7 @@ export const HUNTS: readonly HuntDefinition[] = [
     weaknesses: ["Posture breaks under heavy hits", "Slow to turn after a lunge"],
     openingRangeMeters: 140,
     dayFraction: 0.56,
-    damageScales: { machine: 1.2, creature: 0.5 },
+    damageScales: { machine: 1, creature: 0.3 },
     order: 1,
   },
   {

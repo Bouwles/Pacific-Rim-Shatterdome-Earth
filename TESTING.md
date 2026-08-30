@@ -174,6 +174,13 @@ Every deterministic system added from here on (attack director seeding, damage m
   - Walking in a flat tangent plane lifted the player 239 m off a curved globe over 25 km. Movement now carries geodetic altitude.
 - **Not verified:** shadow stability under a moving Jaeger, because no Jaeger exists in the world view yet; only the mechanism that prevents jitter (local coordinates bounded at 2,000 m) is confirmed. Physics behaviour across a rebase is likewise unverified, since no physics backend is wired.
 
+## Titan Break (2026-08-30)
+
+- `tests/integration/orientation.test.ts`: both rigs against the contract in every pose the fight uses; mirrored roots, roots on their head, front markers behind the body and bodies below the ground are refused.
+- `tests/unit/cameraDirector.test.ts`: state selection with hysteresis, critically damped blending without overshoot, long-frame stability, immediate mouse, lock drag and relax, overlap hold, lock break at range, framing, obstruction pull-in and let-out, roll and pitch limits, zero shake and reduced motion, the knockdown horizon.
+- `tests/unit/titanBreak.test.ts`: armour efficiency by source, region break and the zones to strip, exposed bonuses, Drift Flow against repetition, flow on guards and dodges and its decay, grants by level, one opening per stagger with immunity, stability pressure from counters, damage shares; Knifehead's controller on cadence, repetition, range, pressure, phases and the stumble.
+- Playwright on the direct route (`?hunt=knifehead&debug=1`): `titanProbe.spec.ts` (frames of looking, walking, swinging, and the orientation test scene's verdicts), `titanCamera.spec.ts` (immediate mouse, states, level horizon, the boom near the crane and the containers, a performance readout), `titanClear.spec.ts` (a representative clear by a bot that reads the HUD's numbers: duration, damage by source, screenshots, a recording), `titanViewports.spec.ts` (16:9, 16:10, 21:9, laptop: HUD inside the viewport, centre clear, camera inside limits), `titanSave.spec.ts` (a hunt's outcome after a reload through Continue; the training simulation from the rail and leaving it early).
+
 ## The hunt loop (2026-08-29)
 
 Two Playwright specs run the player path on the dev server with `?production=1`:

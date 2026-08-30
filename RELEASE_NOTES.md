@@ -2,6 +2,10 @@
 
 First release candidate. Thirty-five milestones, one complete loop: boot, build a complex, take a machine out, fight, come home damaged, repair, research, grow, and keep the save. A private fan project with no affiliation to anybody who owns Pacific Rim; everything in it is original or procedurally generated placeholder work.
 
+## After the candidate: Titan Break (2026-08-30)
+
+The flagship fight is rebuilt: the machine faces where it walks, the camera has states and never rolls, and Knifehead is dismantled region by region with armour, stability and vital damage, Drift Flow, grapples into the harbour, a clash and the Synchronized Breaker. Details in CHANGELOG.md and PROMPT_42_TITAN_BREAK_STATE.md.
+
 ## After the candidate: the hunt loop (2026-08-29)
 
 The player path is now a hunt loop: title, hangar, hunt board, loadout, deployment card, arrival, boss fight, rewards, hangar. The first controllable machine arrives inside twenty seconds of launch and the first contact inside thirty. The roster and the creatures carry canon names on unchanged ids, so every save written by the candidate still loads. Details in CHANGELOG.md and FMKH_REBUILD_STATE.md.

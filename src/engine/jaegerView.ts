@@ -21,6 +21,9 @@ import type { JaegerPose, LocomotionEvent } from "../jaegers/locomotion";
 import { SPEED_OF_SOUND_MPS, type AmbientAudio } from "./ambientAudio";
 import { JaegerRig, type JaegerRigPose } from "./jaegerRig";
 
+/** Everything the fight tells the body, minus what the locomotion tells it. */
+export type CombatPoseFeed = Omit<JaegerRigPose, "stridePhase" | "speedMps" | "timeSeconds">;
+
 /**
  * The piloted machine, drawn.
  *
@@ -122,7 +125,7 @@ export class JaegerView {
   /** The articulated body that stands in until a real model resolves. */
   private rig: JaegerRig | null = null;
   /** What the fight says the body is doing, fed from outside each frame. */
-  private combatPose: Pick<JaegerRigPose, "attack" | "guarding" | "damage"> = {
+  private combatPose: CombatPoseFeed = {
     attack: null,
     guarding: false,
     damage: 0,
@@ -336,7 +339,7 @@ export class JaegerView {
    * What the fight says the body is doing. Fed each combat tick from the arena
    * snapshot, so the arm that swings is the arm the resolver is checking.
    */
-  setCombatPose(pose: Partial<Pick<JaegerRigPose, "attack" | "guarding" | "damage">>): void {
+  setCombatPose(pose: Partial<CombatPoseFeed>): void {
     this.combatPose = { ...this.combatPose, ...pose };
   }
 
@@ -366,12 +369,10 @@ export class JaegerView {
     this.worldSeconds += deltaSeconds;
     this.rig?.update(
       {
+        ...this.combatPose,
         stridePhase: pose.stridePhase,
         speedMps: pose.speedMps,
         timeSeconds: this.worldSeconds,
-        attack: this.combatPose.attack,
-        guarding: this.combatPose.guarding,
-        damage: this.combatPose.damage,
       },
       deltaSeconds,
     );

@@ -1,0 +1,72 @@
+{
+  "controlAtMs": 4886,
+  "firstContactAtMs": 19365,
+  "ended": true,
+  "won": true,
+  "durationSeconds": 255.99999999998974,
+  "shares": {
+    "light-chain": 0.015541765061233457,
+    "heavy": 0.27975177110220223,
+    "counter": 0,
+    "elbow-rocket": 0.03569663353286836,
+    "plasma": 0.11422922730517876,
+    "chain-sword": 0.5547256851007744,
+    "reactor-purge": 0,
+    "grapple": 0,
+    "environment": 0,
+    "finisher": 0,
+    "other": 0.0000549178977428744
+  },
+  "telemetry": {
+    "moveUsage": {
+      "ability.elbow-rocket": 3,
+      "melee.charge.haymaker": 21,
+      "defense.counter.parry": 4,
+      "melee.sword.slash": 25,
+      "melee.sword.cleave": 9,
+      "melee.light.jab": 3
+    },
+    "damageBySource": {
+      "light-chain": 283,
+      "heavy": 5094,
+      "counter": 0,
+      "elbow-rocket": 650,
+      "plasma": 2080,
+      "chain-sword": 10101,
+      "reactor-purge": 0,
+      "grapple": 0,
+      "environment": 0,
+      "finisher": 0,
+      "other": 1
+    },
+    "repeatedSequences": 0,
+    "defensiveActions": 4,
+    "perfectGuards": 0,
+    "timedDodges": 0,
+    "regionBreaks": 1,
+    "bossOpenings": 0,
+    "clashesWon": 0,
+    "clashesLost": 0,
+    "grapples": 0,
+    "environmentalHits": 0,
+    "hitsTaken": 112,
+    "idleSeconds": 38.50000000000028,
+    "durationSeconds": 255.99999999998974
+  },
+  "bossHistory": [
+    "drive",
+    "sweep",
+    "sweep",
+    "shove",
+    "claws",
+    "drive",
+    "charge",
+    "drive",
+    "sweep",
+    "bite",
+    "drive",
+    "sweep"
+  ],
+  "rewards": "HUNT RESULTS A KNIFEHEAD DOWN Anchorage, Alaska holds. LEVEL 1 +0 XP Time 4:16 Grade A · 90 pts Damage dealt 18,253 Hits taken 181 Best combo 2 Perfect guards 0 Salvage 408 t Materials Kaiju bone, Blade plating, Tissue sample Regions broken 1 of 7 Damage by fists 2% · heavies 32% · weapons 67% · throws 0% Machine damage 48% Repair 74 h NOW AVAILABLE Plasma Caster calibration, 2,000 funding REPLAY ",
+  "errors": []
+}
