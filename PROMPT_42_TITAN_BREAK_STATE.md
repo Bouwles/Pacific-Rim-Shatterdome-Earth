@@ -179,7 +179,7 @@ measured number or a commit. Nothing here is marked from code inspection.
       slot: "90% structure, 12 h of work open" before and after a reload
       (`titanSave.spec.ts`).
 - [x] Typecheck, build, lint, tests: `npx tsc --noEmit` clean, `npm run
-    build` 15 s, `npx eslint .` clean, `npx prettier --check .` clean,
+  build` 15 s, `npx eslint .` clean, `npx prettier --check .` clean,
       2171 unit and integration tests pass (three golden digests updated
       deliberately for the leg zones, the retuned pools and the stress
       scene's longer run).
