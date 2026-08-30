@@ -100,8 +100,10 @@ measured number or a commit. Nothing here is marked from code inspection.
       Scripted representative clears (`titanClear.spec.ts`): light-chain
       share 0 to 1.5 percent; a light-only bot (`huntFight.spec.ts`) takes
       Knifehead from 100 to 99 percent in ninety seconds and cannot strip
-      armour. Latest clear: heavies 33, plasma 28, chain sword 35, elbow 4,
-      grapple 0.4, chain 0 percent (`clear-summary.json`).
+      armour. Fastest clear: chain sword 35, heavies 33, plasma 28, elbow 4,
+      grapple 0.4, chain 0 percent; slowest (4:16, the full suite's run, in
+      `clear-summary.json`): chain sword 55, heavies 28, plasma 11, elbow 4,
+      chain 1.5 percent, one region broken, 112 hits taken.
 - [x] Light, heavy, directional branches, guard, two counters, dodge,
       grapple and all four abilities have roles: the move table in
       docs/CONTROLS.md; in play the bot used charged heavies, the Elbow
@@ -136,7 +138,7 @@ measured number or a commit. Nothing here is marked from code inspection.
       every clear (`14-knifehead-critical.png`); no signature three times
       running (unit test and every logged history).
 - [x] Encounter length: the scripted player, which never idles and times
-      its guards from inside the page, clears in 2:03 to 3:09 across runs;
+      its guards from inside the page, clears in 2:03 to 4:16 across runs;
       the light-only bot loses. A person on a first successful clear lands
       in the five to seven minute target by construction (the scripted
       player is above average); not yet measured with a person.
