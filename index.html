@@ -1,0 +1,1610 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pacific Rim: Shatterdome Earth</title>
+    <link rel="icon" href="./icons/icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#0a1016" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #05070a;
+      }
+      #renderCanvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        touch-action: none;
+      }
+
+      #diagnosticsPanel {
+        position: fixed;
+        left: 12px;
+        bottom: 10px;
+        z-index: 25;
+        font:
+          12px/1.4 "Consolas",
+          monospace;
+        color: #7fd6ff;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        user-select: none;
+      }
+      #diagnosticsPanel[hidden] {
+        display: none;
+      }
+      #diagnosticsPanel .diag-readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        max-width: 70vw;
+        pointer-events: none;
+      }
+      #diagnosticsPanel .diag-label {
+        color: #4f7f99;
+        margin-right: 4px;
+      }
+      #diagnosticsPanel .diag-controls {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+        pointer-events: auto;
+      }
+      #diagnosticsPanel .diag-controls button,
+      #diagnosticsPanel .diag-controls select {
+        font: inherit;
+        color: #cfe9f7;
+        background: rgba(8, 12, 18, 0.85);
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        border-radius: 3px;
+        padding: 2px 8px;
+        cursor: pointer;
+      }
+
+      #contextBanner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        padding: 8px 16px;
+        text-align: center;
+        font:
+          13px/1.4 "Consolas",
+          monospace;
+        color: #fff;
+        background: #7a1f1f;
+      }
+      #contextBanner[hidden] {
+        display: none;
+      }
+
+      /* ------------------------------------------------------------------
+         The design system. One palette, one type voice, one panel chrome.
+         Deep navy and graphite ground, cold steel lines, amber for machinery
+         and caution, cyan for neutral systems, red only for real trouble.
+         ------------------------------------------------------------------ */
+      :root {
+        --ink: #05070a;
+        --graphite: #0b1016;
+        --panel: rgba(9, 14, 20, 0.92);
+        --panel-light: rgba(16, 24, 33, 0.92);
+        --steel: #3c4a57;
+        --line: rgba(120, 150, 175, 0.28);
+        --line-strong: rgba(140, 190, 220, 0.5);
+        --text: #d8e6f2;
+        --text-dim: #8aa0b2;
+        --cyan: #7fd6ff;
+        --amber: #ffb347;
+        --alert: #ff5a48;
+        --ok: #6fd68f;
+        --font-ui: "Segoe UI", "Inter", system-ui, sans-serif;
+        --font-data: "Cascadia Mono", "Consolas", monospace;
+      }
+      #uiRoot {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      #uiRoot:empty {
+        display: none;
+      }
+      #uiRoot .screen {
+        pointer-events: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-top: 1px solid var(--line-strong);
+        clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        padding: 26px 34px;
+        max-width: 460px;
+        text-align: center;
+        color: var(--text);
+        font: 14px/1.5 var(--font-ui);
+        animation: screen-in 240ms ease-out;
+      }
+      @keyframes screen-in {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #uiRoot .screen {
+          animation: none;
+        }
+      }
+      #uiRoot h1 {
+        font-size: 30px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 4px;
+        color: var(--text);
+        text-shadow: 0 0 24px rgba(127, 214, 255, 0.25);
+      }
+      #uiRoot h2 {
+        font-size: 15px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 10px;
+        color: var(--cyan);
+      }
+      #uiRoot h2::before {
+        content: "// ";
+        color: var(--text-dim);
+      }
+      #uiRoot p {
+        margin: 0 0 14px;
+        color: var(--text-dim);
+      }
+      #uiRoot button {
+        font: 600 13px/1.2 var(--font-ui);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 10px 22px;
+        cursor: pointer;
+        color: var(--text);
+        background: linear-gradient(180deg, rgba(60, 74, 87, 0.35), rgba(24, 32, 41, 0.55));
+        border: 1px solid var(--line);
+        border-left: 2px solid var(--amber);
+        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        transition:
+          background 140ms ease,
+          border-color 140ms ease,
+          color 140ms ease;
+      }
+      #uiRoot button:hover:not(:disabled) {
+        background: linear-gradient(180deg, rgba(127, 214, 255, 0.18), rgba(24, 32, 41, 0.6));
+        border-color: var(--line-strong);
+      }
+      #uiRoot button:focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 2px;
+      }
+      #uiRoot button:disabled {
+        opacity: 0.45;
+        cursor: default;
+        border-left-color: var(--steel);
+      }
+      #uiRoot .primary-button {
+        background: linear-gradient(180deg, rgba(255, 179, 71, 0.25), rgba(120, 70, 20, 0.3));
+        border-left-color: var(--amber);
+        color: #ffe9c9;
+      }
+      #uiRoot .secondary-button {
+        color: var(--text-dim);
+      }
+      #uiRoot select,
+      #uiRoot input[type="text"],
+      #uiRoot textarea {
+        font: 13px/1.4 var(--font-ui);
+        color: var(--text);
+        background: rgba(5, 9, 13, 0.8);
+        border: 1px solid var(--line);
+        padding: 6px 8px;
+      }
+      #uiRoot select:focus-visible,
+      #uiRoot input:focus-visible,
+      #uiRoot textarea:focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 1px;
+      }
+      #uiRoot input[type="range"] {
+        accent-color: var(--amber);
+      }
+      #uiRoot input[type="checkbox"] {
+        accent-color: var(--amber);
+      }
+      #uiRoot label {
+        color: var(--text-dim);
+      }
+
+      /* ------------------------- the title menu ------------------------- */
+      #uiRoot .screen-menu {
+        position: absolute;
+        left: clamp(32px, 6vw, 120px);
+        top: clamp(24px, 9vh, 110px);
+        bottom: auto;
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        max-width: 380px;
+        text-align: left;
+        background: none;
+        border: none;
+        clip-path: none;
+        padding: 0;
+      }
+      #uiRoot .screen-menu h1 {
+        font-size: clamp(26px, 2.6vw, 44px);
+        line-height: 1.05;
+        margin-bottom: 6px;
+      }
+      #uiRoot .screen-menu > p {
+        font: 12px/1.5 var(--font-data);
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        margin-bottom: 22px;
+      }
+      #uiRoot .screen-menu button {
+        display: block;
+        width: 240px;
+        text-align: left;
+        margin: 0 0 8px;
+        background: linear-gradient(90deg, rgba(9, 14, 20, 0.9), rgba(9, 14, 20, 0.4));
+      }
+      @media (max-height: 820px) {
+        #uiRoot .screen-menu h1 {
+          font-size: clamp(22px, 2.4vw, 30px);
+          line-height: 1.05;
+        }
+        #uiRoot .screen-menu #pwaPanel {
+          margin-top: 10px;
+        }
+      }
+      #uiRoot .screen-menu #pwaPanel {
+        margin-top: 18px;
+        max-width: 300px;
+        font-size: 11px;
+        opacity: 0.85;
+      }
+      #uiRoot .screen-error {
+        border-color: rgba(255, 120, 120, 0.5);
+      }
+
+      /* World map panel: a readout column, not a dialog. */
+      #uiRoot .screen-world {
+        max-width: none;
+        width: min(420px, 36vw);
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: 13px;
+        /* The streaming readout doubled this panel's height, pushing the walk and
+           route buttons off screen and then under the debug overlay, where they
+           could not be clicked at all. Stop short of the overlay and scroll the
+           readouts inside the panel instead. */
+        max-height: calc(100vh - 240px);
+        overflow-y: auto;
+      }
+      /* An author `display` rule outranks the user agent's `[hidden]` rule, so a
+         hidden flex row stayed on screen. Important is the right tool here: the
+         attribute has to win over every layout rule below, present and future. */
+      #uiRoot [hidden] {
+        display: none !important;
+      }
+      #uiRoot .world-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .world-header h2 {
+        margin: 0;
+      }
+      /* The HUD. A layer above the dense panel, sized from the player's own
+         text scale and faded by their own opacity, except for the critical
+         band which ignores both. */
+      #uiRoot .pilot-hud {
+        --hud-opacity: 1;
+        --hud-text-scale: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 6px 0 10px;
+        /* Safe area: never against the edge, and never under a notch. */
+        padding: calc(8px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-right, 0px))
+          calc(8px + env(safe-area-inset-bottom, 0px)) calc(10px + env(safe-area-inset-left, 0px));
+        border: 1px solid rgba(127, 214, 255, 0.16);
+        border-radius: 5px;
+        background: rgba(6, 14, 22, 0.5);
+      }
+      #uiRoot .pilot-hud-critical {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        /* Deliberately not affected by --hud-opacity. */
+        opacity: 1;
+      }
+      #uiRoot .pilot-hud-alert {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        border-left-style: solid;
+        padding: 4px 8px;
+        border-radius: 3px;
+        background: rgba(60, 12, 8, 0.55);
+        font:
+          calc(12px * var(--hud-text-scale)) / 1.4 "Consolas",
+          monospace;
+      }
+      /* The subtitle band. Sits under the critical alerts and above the
+         instruments, because it is read at the same glance as both, and it is
+         never faded: a line you cannot read is a line that was not said. */
+      #uiRoot .pilot-subtitle {
+        padding: 5px 10px;
+        border-left: 3px solid rgba(127, 214, 255, 0.7);
+        border-radius: 3px;
+        background: rgba(4, 10, 16, 0.72);
+        opacity: 1;
+        font:
+          calc(13px * var(--hud-text-scale)) / 1.45 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-subtitle[data-priority="critical"] {
+        border-left-color: rgb(255, 128, 106);
+      }
+      #uiRoot .pilot-faders {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 2px 10px;
+      }
+      #uiRoot .pilot-faders label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        justify-content: space-between;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-faders input[type="range"] {
+        flex: 1 1 70px;
+        min-width: 60px;
+      }
+      #uiRoot .pwa-status,
+      #uiRoot .pwa-packs {
+        font:
+          12px/1.6 "Consolas",
+          monospace;
+        opacity: 0.85;
+      }
+      #uiRoot .pwa-packs {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+      }
+      #uiRoot .pwa-packs li {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .pwa-update {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid rgba(255, 194, 71, 0.5);
+        border-radius: 3px;
+        padding: 6px 10px;
+        margin: 6px 0;
+        font:
+          12px/1.5 "Consolas",
+          monospace;
+      }
+      #uiRoot .pwa-update span {
+        flex: 1 1 100%;
+      }
+      #uiRoot .pwa-update button {
+        flex: 1 1 auto;
+        display: inline-block;
+        width: auto;
+        margin: 0;
+      }
+      /* While piloting, the world panel keeps only the sortie: the fight owns the screen. */
+      #uiRoot #worldScreen.is-piloting {
+        max-width: 360px;
+        max-height: 46vh;
+      }
+      #uiRoot #worldScreen.is-piloting > .world-readout:not([data-section="war"]),
+      #uiRoot #worldScreen.is-piloting > [data-section="identity"],
+      #uiRoot #worldScreen.is-piloting > [data-section="map"],
+      #uiRoot #worldScreen.is-piloting > [data-section="route"],
+      #uiRoot #worldScreen.is-piloting > [data-section="water"],
+      #uiRoot #worldScreen.is-piloting > [data-section="city"],
+      #uiRoot #worldScreen.is-piloting > [data-section="environment"],
+      #uiRoot #worldScreen.is-piloting > [data-section="streaming"] {
+        display: none;
+      }
+      #uiRoot #worldScreen.is-piloting [data-section="crisis-frequency"] {
+        display: none;
+      }
+      #uiRoot .pilot-drawer {
+        margin: 10px 0 0;
+        border-top: 1px solid var(--line);
+        padding-top: 6px;
+      }
+      #uiRoot .pilot-drawer > summary {
+        cursor: pointer;
+        list-style: none;
+        font: 600 11px/1.6 var(--font-ui);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--cyan);
+        opacity: 0.8;
+        padding: 2px 0;
+      }
+      #uiRoot .pilot-drawer > summary::-webkit-details-marker {
+        display: none;
+      }
+      #uiRoot .pilot-drawer > summary::before {
+        content: "+ ";
+      }
+      #uiRoot .pilot-drawer[open] > summary::before {
+        content: "- ";
+      }
+      #uiRoot .pilot-drawer > summary:hover {
+        opacity: 1;
+      }
+      #uiRoot .pwa-detail {
+        color: rgb(255, 168, 148);
+      }
+      #uiRoot .screen-sandbox .sandbox-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      #uiRoot .screen-sandbox .sandbox-blurb,
+      #uiRoot .screen-sandbox .sandbox-note {
+        font:
+          12px/1.5 "Consolas",
+          monospace;
+        opacity: 0.8;
+        margin: 2px 0;
+      }
+      #uiRoot .screen-sandbox textarea {
+        flex-basis: 100%;
+        min-height: 52px;
+        resize: vertical;
+        font:
+          10px/1.4 "Consolas",
+          monospace;
+        color: inherit;
+        background: rgba(4, 10, 16, 0.7);
+        border: 1px solid rgba(127, 214, 255, 0.2);
+        border-radius: 3px;
+        padding: 4px 6px;
+      }
+      #uiRoot .screen-sandbox .sandbox-library,
+      #uiRoot .screen-sandbox .sandbox-problems {
+        flex-basis: 100%;
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          12px/1.7 "Consolas",
+          monospace;
+      }
+      #uiRoot .screen-sandbox .sandbox-problems {
+        color: rgb(255, 168, 148);
+      }
+      #uiRoot .screen-sandbox .sandbox-library li {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #uiRoot .screen-sandbox .sandbox-advanced {
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 3px;
+        padding: 4px 8px;
+        margin: 6px 0;
+        font:
+          12px/1.6 "Consolas",
+          monospace;
+      }
+      #uiRoot .screen-sandbox .sandbox-advanced summary {
+        cursor: pointer;
+      }
+      #uiRoot .pilot-controls[data-section="coop"] {
+        flex-wrap: wrap;
+        gap: 6px 10px;
+      }
+      #uiRoot .pilot-controls[data-section="coop"] textarea {
+        flex-basis: 100%;
+        min-height: 44px;
+        resize: vertical;
+        font:
+          10px/1.4 "Consolas",
+          monospace;
+        color: inherit;
+        background: rgba(4, 10, 16, 0.7);
+        border: 1px solid rgba(127, 214, 255, 0.2);
+        border-radius: 3px;
+        padding: 4px 6px;
+      }
+      #uiRoot .pilot-controls[data-section="coop"] ol {
+        flex-basis: 100%;
+      }
+      #uiRoot .pilot-transcript {
+        flex-basis: 100%;
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        max-height: 140px;
+        overflow-y: auto;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        opacity: 0.85;
+      }
+      #uiRoot .pilot-hud-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 4px 14px;
+        opacity: var(--hud-opacity);
+      }
+      #uiRoot .pilot-hud-strip,
+      #uiRoot .pilot-cockpit {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      #uiRoot .pilot-cockpit {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 2px 12px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.14);
+        opacity: var(--hud-opacity);
+      }
+      #uiRoot .pilot-hud-entry {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+        border-left-style: solid;
+        border-left-color: currentColor;
+        padding-left: 6px;
+        transition-property: color, opacity;
+        font:
+          calc(11px * var(--hud-text-scale)) / 1.5 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-hud-glyph {
+        min-width: 2.2em;
+        letter-spacing: 0.06em;
+      }
+      /* One pulse for a critical warning, and only when motion is allowed. */
+      @media (prefers-reduced-motion: no-preference) {
+        #uiRoot .pilot-hud-alert {
+          animation: hud-attention 900ms ease-out 1;
+        }
+      }
+      @keyframes hud-attention {
+        0% {
+          background: rgba(150, 30, 20, 0.9);
+        }
+        100% {
+          background: rgba(60, 12, 8, 0.55);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #uiRoot .pilot-hud-alert,
+        #uiRoot .pilot-hud-entry {
+          animation: none;
+          transition: none;
+        }
+      }
+      #uiRoot .world-identity-list {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          10px/1.6 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .world-identity-briefing {
+        color: #e2c58f;
+      }
+      #uiRoot .world-site-list {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      #uiRoot .world-site {
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+        padding: 6px 8px;
+        background: rgba(10, 22, 32, 0.55);
+      }
+      #uiRoot .world-site[data-claimed="yes"] {
+        border-color: rgba(143, 220, 174, 0.35);
+      }
+      #uiRoot .world-site-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .world-site-name {
+        color: #d8ecf8;
+      }
+      #uiRoot .world-site-cost {
+        color: #7f9fb4;
+      }
+      #uiRoot .world-site-detail {
+        margin: 4px 0 6px;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #8fb0c4;
+      }
+      #uiRoot .world-site button {
+        font-size: 10px;
+        padding: 3px 8px;
+        margin-right: 4px;
+      }
+      #uiRoot .world-site-empty {
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .world-route {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.14);
+      }
+      #uiRoot .world-route-line {
+        font:
+          10px/1.6 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .world-readout {
+        font-family: "Consolas", monospace;
+        font-size: 12px;
+      }
+      #uiRoot .world-row {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      #uiRoot .world-key {
+        color: #6f97b0;
+        flex: 0 0 104px;
+      }
+      #uiRoot .world-value {
+        color: #e8f4ff;
+        word-break: break-word;
+      }
+      #uiRoot .world-teleport {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .world-teleport label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      #uiRoot .world-teleport select {
+        font: inherit;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .world-walk {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #uiRoot .world-walk-label {
+        font-size: 12px;
+        color: #a9c3d6;
+        margin-right: 4px;
+      }
+      #uiRoot .world-walk button {
+        padding: 4px 12px;
+        font-size: 12px;
+      }
+      #uiRoot .world-view {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #uiRoot .world-view button {
+        padding: 4px 14px;
+        font-size: 12px;
+      }
+      #uiRoot .world-view button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
+      }
+      /* Streaming instrumentation reads as a second block, not as more coordinates. */
+      #uiRoot .world-streaming,
+      #uiRoot .world-city,
+      #uiRoot .world-environment {
+        border-top: 1px solid #1d3244;
+        padding-top: 8px;
+      }
+      #uiRoot .world-streaming .world-key,
+      #uiRoot .world-city .world-key,
+      #uiRoot .world-environment .world-key {
+        color: #86a7bd;
+      }
+      #uiRoot .world-walk button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
+      }
+      /* The Shatterdome interior: a heads-up layer over a first-person view,
+         plus the panels that open at a terminal, a berth or a Conn-Pod. */
+      #uiRoot .screen-shatterdome-interior {
+        max-width: none;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        background: none;
+        border: none;
+        text-align: left;
+        pointer-events: none;
+      }
+      #uiRoot .sd-fade {
+        position: fixed;
+        inset: 0;
+        background: #04060a;
+        opacity: 0;
+        transition: opacity 90ms linear;
+        pointer-events: none;
+      }
+      #uiRoot .sd-hud {
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        width: min(360px, 32vw);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(8, 12, 18, 0.72);
+        border: 1px solid rgba(127, 214, 255, 0.28);
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 13px;
+      }
+      #uiRoot .sd-room h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      #uiRoot .sd-room p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: #8fb0c6;
+      }
+      #uiRoot .sd-readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #9fd0e8;
+      }
+      #uiRoot .sd-prompt {
+        margin: 4px 0 0;
+        color: #ffe6a8;
+        font-size: 13px;
+      }
+      #uiRoot .sd-announcement {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      #uiRoot .sd-radio {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 12px;
+        color: #c3d8e6;
+      }
+      #uiRoot .sd-radio-speaker {
+        color: #6fd0ff;
+      }
+      #uiRoot .sd-hints {
+        margin: 6px 0 0;
+        font-size: 11px;
+        color: #6f97b0;
+      }
+      #uiRoot .sd-panel-host {
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        bottom: 92px;
+        width: min(460px, 40vw);
+        display: flex;
+        pointer-events: auto;
+      }
+      #uiRoot .sd-panel {
+        flex: 1;
+        overflow-y: auto;
+        background: rgba(8, 12, 18, 0.92);
+        border: 1px solid rgba(127, 214, 255, 0.35);
+        border-radius: 6px;
+        padding: 14px 16px;
+        font-size: 13px;
+      }
+      #uiRoot .sd-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .sd-panel-header h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+      #uiRoot .sd-panel-header button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-panel-summary {
+        margin: 8px 0;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #9fd0e8;
+      }
+      #uiRoot .sd-facility-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .sd-facility-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+      }
+      #uiRoot .sd-facility-row[data-here="true"] {
+        border-color: rgba(127, 214, 255, 0.55);
+      }
+      #uiRoot .sd-facility-row[data-working="true"] {
+        border-color: rgba(255, 200, 120, 0.5);
+      }
+      #uiRoot .sd-facility-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+      }
+      #uiRoot .sd-facility-name {
+        font-weight: 600;
+      }
+      #uiRoot .sd-facility-detail,
+      #uiRoot .sd-facility-benefit {
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-facility-row button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-facility-row button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #uiRoot .sd-market-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 46vh;
+        overflow-y: auto;
+      }
+      #uiRoot .sd-market-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px;
+        border: 1px solid rgba(127, 214, 255, 0.18);
+        border-radius: 4px;
+      }
+      #uiRoot .sd-market-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+      }
+      #uiRoot .sd-market-name {
+        font-weight: 600;
+      }
+      #uiRoot .sd-market-price {
+        font-family: "Consolas", monospace;
+        color: #cfe6f5;
+        white-space: nowrap;
+      }
+      #uiRoot .sd-band-set {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 2px 0;
+      }
+      #uiRoot .sd-band {
+        display: grid;
+        grid-template-columns: 74px 1fr 44px;
+        align-items: center;
+        gap: 6px;
+        font:
+          10px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-band-track {
+        position: relative;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.12);
+        overflow: hidden;
+      }
+      #uiRoot .sd-experience-track {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 8px;
+        margin: 4px 0 6px;
+        border-radius: 4px;
+        background: rgba(127, 214, 255, 0.12);
+        overflow: hidden;
+      }
+      #uiRoot .sd-progression {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(127, 214, 255, 0.18);
+      }
+      #uiRoot .sd-progression h4 {
+        margin: 0 0 6px;
+        font-size: 13px;
+      }
+      #uiRoot .pilot-squad {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 214, 255, 0.18);
+      }
+      #uiRoot .pilot-squad-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      #uiRoot .pilot-squad-list {
+        list-style: none;
+        margin: 4px 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      #uiRoot .pilot-squad-list li {
+        display: flex;
+        flex-direction: column;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+      }
+      #uiRoot .pilot-squad-list li[data-down="true"] {
+        opacity: 0.5;
+      }
+      #uiRoot .pilot-squad-name {
+        color: #cfe6f5;
+      }
+      #uiRoot .pilot-squad-doing {
+        color: #7f9fb4;
+      }
+      #uiRoot .pilot-order-dial {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+        margin: 6px 0;
+      }
+      #uiRoot .pilot-order-dial button {
+        font-size: 11px;
+        padding: 4px 6px;
+        text-align: left;
+      }
+      #uiRoot .pilot-squad-log {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-crew [data-field="crew-drawback"][data-firing="true"] {
+        color: #f0b070;
+      }
+      #uiRoot .sd-crew .sd-market-row[data-assigned="true"] {
+        border-color: rgba(127, 214, 255, 0.55);
+      }
+      #uiRoot .world-alert-drawbacks {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .world-alert-drawbacks li[data-firing="true"] {
+        color: #f0b070;
+      }
+      #uiRoot .sd-passive-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 3px 0;
+      }
+      #uiRoot .sd-progression button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-progression button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #uiRoot .sd-band-fill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(127, 214, 255, 0.65);
+        border-radius: 3px;
+      }
+      #uiRoot .sd-band-value {
+        text-align: right;
+      }
+      #uiRoot .sd-market-terms {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font:
+          10px/1.5 "Consolas",
+          monospace;
+        color: #6f97b0;
+      }
+      #uiRoot .sd-market-orders {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        font:
+          11px/1.5 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-panel-subheading {
+        margin: 14px 0 6px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(127, 214, 255, 0.16);
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #7fd6ff;
+      }
+      #uiRoot .sd-balance-list {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 2px 12px;
+        margin: 0 0 8px;
+        padding: 0;
+        font:
+          11px/1.6 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-breakdown-list {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .sd-breakdown-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-breakdown-amount {
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-breakdown-in .sd-breakdown-amount {
+        color: #8fdcae;
+      }
+      #uiRoot .sd-breakdown-out .sd-breakdown-amount {
+        color: #e2a0a0;
+      }
+      #uiRoot .sd-breakdown-track {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 6px;
+        margin-top: 3px;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.12);
+        overflow: hidden;
+      }
+      #uiRoot .sd-breakdown-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: rgba(127, 214, 255, 0.45);
+      }
+      #uiRoot .sd-breakdown-in .sd-breakdown-fill {
+        background: rgba(143, 220, 174, 0.5);
+      }
+      #uiRoot .sd-breakdown-out .sd-breakdown-fill {
+        background: rgba(226, 160, 160, 0.5);
+      }
+      #uiRoot [data-action="choose-part"][data-chosen="yes"] {
+        border-color: rgba(127, 214, 255, 0.75);
+        background: rgba(127, 214, 255, 0.18);
+        color: #d8ecf8;
+      }
+      #uiRoot [data-slot] .sd-market-terms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+      }
+      #uiRoot [data-slot] .sd-market-terms button {
+        font-size: 10px;
+        padding: 3px 8px;
+      }
+      #uiRoot .sd-market-empty {
+        font-size: 12px;
+        color: #7f9fb4;
+      }
+      #uiRoot .sd-market-row button {
+        align-self: flex-start;
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      #uiRoot .sd-market-row button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #uiRoot .sd-panel-fields {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 2px 10px;
+        margin: 10px 0;
+        font-size: 12px;
+      }
+      #uiRoot .sd-panel-fields dt {
+        color: #6f97b0;
+      }
+      #uiRoot .sd-panel-fields dd {
+        margin: 0;
+        font-family: "Consolas", monospace;
+      }
+      #uiRoot .sd-panel-notes {
+        margin: 0;
+        font-size: 12px;
+        color: #a9c3d6;
+      }
+      #uiRoot .sd-pause {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: rgba(4, 6, 10, 0.72);
+        pointer-events: auto;
+      }
+      #uiRoot .sd-pause h2 {
+        margin: 0 0 6px;
+      }
+      /* The pilot layer sits opposite the world panel so both can be read at once. */
+      #uiRoot .screen-pilot {
+        max-width: none;
+        width: min(360px, 32vw);
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 13px;
+        max-height: calc(100vh - 140px);
+        overflow-y: auto;
+      }
+      #uiRoot .pilot-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      #uiRoot .pilot-header h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      #uiRoot .pilot-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 12px;
+      }
+      #uiRoot .pilot-row-label {
+        color: #6f97b0;
+      }
+      #uiRoot .pilot-row button {
+        padding: 3px 10px;
+        font-size: 12px;
+      }
+      #uiRoot .pilot-row button.is-active {
+        border-color: #6fd0ff;
+        color: #eaf8ff;
+      }
+      #uiRoot .pilot-row select {
+        font: inherit;
+        padding: 3px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .pilot-comfort label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #a9c3d6;
+      }
+      #uiRoot .pilot-comfort input[type="range"] {
+        width: 90px;
+      }
+      #uiRoot .pilot-readout {
+        border-top: 1px solid #1d3244;
+        padding-top: 6px;
+      }
+      #uiRoot .pilot-hitlog {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font:
+          11px/1.35 "Consolas",
+          monospace;
+        color: #9fd8b4;
+      }
+      #uiRoot .pilot-hitlog li {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #uiRoot .pilot-movelist {
+        border-top: 1px solid #1d3244;
+        padding-top: 6px;
+        max-height: 40vh;
+        overflow-y: auto;
+        font-size: 12px;
+      }
+      #uiRoot .pilot-movelist h3 {
+        margin: 6px 0 2px;
+        font-size: 12px;
+        color: #6fd0ff;
+      }
+      #uiRoot .pilot-movelist ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #uiRoot .pilot-movelist li {
+        display: flex;
+        flex-direction: column;
+      }
+      #uiRoot .pilot-move-name {
+        color: #e8f4ff;
+      }
+      #uiRoot .pilot-move-coaching {
+        color: #9fb8c9;
+      }
+      #uiRoot .pilot-hint {
+        margin: 0;
+        font-size: 11px;
+        color: #7f9fb4;
+      }
+
+      /* The save panel is a working list, not a dialog. */
+      #uiRoot .screen-saves {
+        max-width: none;
+        width: min(760px, 90vw);
+        max-height: 82vh;
+        overflow-y: auto;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      #uiRoot .save-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #uiRoot .save-header h2 {
+        margin: 0;
+      }
+      #uiRoot .save-storage,
+      #uiRoot .save-warning,
+      #uiRoot .save-notice,
+      #uiRoot .save-empty {
+        margin: 0;
+        font-size: 12px;
+      }
+      #uiRoot .save-warning {
+        color: #ffcf87;
+      }
+      #uiRoot .save-notice[data-kind="error"] {
+        color: #ff9a9a;
+      }
+      #uiRoot .save-notice[data-kind="info"] {
+        color: #9fe6b0;
+      }
+      #uiRoot .save-new {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-new input[type="text"] {
+        flex: 1;
+        min-width: 160px;
+        font: inherit;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 214, 255, 0.4);
+        background: rgba(8, 12, 18, 0.85);
+        color: #e8f4ff;
+      }
+      #uiRoot .save-import {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #a9c3d6;
+      }
+      #uiRoot .save-import input[type="file"] {
+        max-width: 150px;
+        font-size: 11px;
+        color: #a9c3d6;
+      }
+      #uiRoot .save-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #uiRoot .save-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px solid rgba(127, 214, 255, 0.22);
+        border-radius: 4px;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-thumb {
+        width: 64px;
+        height: 36px;
+        object-fit: cover;
+        border-radius: 3px;
+        order: -1;
+      }
+      #uiRoot .save-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 180px;
+      }
+      #uiRoot .save-name {
+        font-weight: 600;
+      }
+      #uiRoot .save-detail {
+        font:
+          11px/1.4 "Consolas",
+          monospace;
+        color: #7f9fb4;
+      }
+      #uiRoot .save-row[data-damaged="true"] {
+        border-color: rgba(255, 190, 120, 0.5);
+      }
+      #uiRoot .save-damaged {
+        font-size: 11px;
+        color: #ffcf87;
+      }
+      #uiRoot .save-actions {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      #uiRoot .save-actions button {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+
+      /* The gallery is a working panel, not a dialog: it needs room and must not
+         cover the asset it is describing. */
+      #uiRoot .screen-gallery {
+        max-width: none;
+        width: min(420px, 34vw);
+        text-align: left;
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        bottom: 92px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+        font-size: 13px;
+      }
+      #uiRoot .gallery-header {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #uiRoot .gallery-summary {
+        margin: 0;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+        flex: 1;
+      }
+      #uiRoot .gallery-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        max-height: 40%;
+        border: 1px solid rgba(127, 214, 255, 0.2);
+        border-radius: 4px;
+      }
+      #uiRoot .gallery-list button {
+        width: 100%;
+        text-align: left;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: #cfe3f2;
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-list button.selected {
+        background: rgba(28, 110, 164, 0.55);
+        color: #fff;
+      }
+      #uiRoot .gallery-detail {
+        overflow-y: auto;
+        font-family: "Consolas", monospace;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-row {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      #uiRoot .gallery-key {
+        color: #6f97b0;
+        flex: 0 0 108px;
+      }
+      #uiRoot .gallery-value {
+        color: #e8f4ff;
+        word-break: break-word;
+      }
+      #uiRoot .gallery-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+      }
+      #uiRoot .gallery-controls label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #uiRoot .gallery-controls input[type="range"] {
+        flex: 1;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-On1U_Dqo.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DwtboWbd.css">
+  </head>
+  <body>
+    <div id="appRoot">
+      <canvas id="renderCanvas"></canvas>
+      <div id="contextBanner" hidden></div>
+      <div id="uiRoot"></div>
+    </div>
+  </body>
+</html>
