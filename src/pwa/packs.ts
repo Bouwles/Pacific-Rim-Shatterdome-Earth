@@ -172,7 +172,9 @@ export class PackStore {
   constructor(options: PackStoreOptions) {
     this.cache = options.cache;
     this.registry = options.registry ?? createPackRegistry();
-    this.fetchFile = options.fetchFile ?? ((path) => fetch(path));
+    // Pack paths are written against the app ("/packs/..."); the request
+    // goes to wherever the build is served from.
+    this.fetchFile = options.fetchFile ?? ((path) => fetch(`${import.meta.env.BASE_URL}${path.slice(1)}`));
   }
 
   get available(): boolean {

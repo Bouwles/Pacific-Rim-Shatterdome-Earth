@@ -25,9 +25,10 @@ import "@babylonjs/loaders/glTF";
 export type PropKit = "factory" | "city" | "roads";
 
 const ROOTS: Readonly<Record<PropKit, string>> = {
-  factory: "/assets/models/factory/",
-  city: "/assets/models/city/",
-  roads: "/assets/models/roads/",
+  // Relative to the build base so a subfolder deployment finds the files.
+  factory: `${import.meta.env.BASE_URL}assets/models/factory/`,
+  city: `${import.meta.env.BASE_URL}assets/models/city/`,
+  roads: `${import.meta.env.BASE_URL}assets/models/roads/`,
 };
 
 export interface PropPlacement {

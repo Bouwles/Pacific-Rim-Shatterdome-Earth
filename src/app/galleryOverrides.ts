@@ -34,7 +34,7 @@ export const GALLERY_OVERRIDES: readonly GalleryOverrideDefinition[] = [
     // Points at a file that is deliberately absent, so the fallback path and its
     // single warning can be exercised from the UI rather than only in tests.
     build: (manifest) => ({
-      source: { url: `/assets/models/${manifest.id}.glb`, format: "glb" },
+      source: { url: `${import.meta.env.BASE_URL}assets/models/${manifest.id}.glb`, format: "glb" },
     }),
   },
 ];

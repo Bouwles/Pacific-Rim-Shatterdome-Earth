@@ -61,7 +61,8 @@ interface SampleSet {
   readonly gain: number;
 }
 
-const ROOT = "/assets/audio/";
+// Relative to the build base so a subfolder deployment finds the files.
+const ROOT = `${import.meta.env.BASE_URL}assets/audio/`;
 
 function takes(prefix: string, count: number, start = 0): string[] {
   const list: string[] = [];

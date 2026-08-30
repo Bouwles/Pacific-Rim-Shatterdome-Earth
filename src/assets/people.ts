@@ -43,7 +43,8 @@ interface PersonModelSpec {
   readonly tint: readonly string[];
 }
 
-const ROOT = "/assets/models/people/";
+// Relative to the build base so a subfolder deployment finds the files.
+const ROOT = `${import.meta.env.BASE_URL}assets/models/people/`;
 
 /** The roster. Files are the CC0 Quaternius characters staged under public/assets/models/people. */
 export const PERSON_MODELS: readonly PersonModelSpec[] = [

@@ -43,6 +43,17 @@ describe("the caching policy", () => {
     expect(decideFetch(url("/icons/icon-192.png"), "GET", true)).toBe("cache-first");
   });
 
+  it("reads paths inside the app when the build lives in a subfolder", () => {
+    const base = "/Pacific-Rim-Shatterdome-Earth/";
+    expect(decideFetch(url(`${base}`), "GET", true, base)).toBe("network-first");
+    expect(decideFetch(url(`${base}index.html`), "GET", true, base)).toBe("network-first");
+    expect(decideFetch(url(`${base}saves/export.json`), "GET", true, base)).toBe("network-only");
+    expect(decideFetch(url(`${base}packs/placeholder-textures/plate-detail.png`), "GET", true, base)).toBe(
+      "network-only",
+    );
+    expect(decideFetch(url(`${base}assets/index-CgWh.js`), "GET", true, base)).toBe("cache-first");
+  });
+
   it("deletes only stale shell caches, never the pack cache", () => {
     expect(isStaleCache(`${SHELL_CACHE_PREFIX}${SHELL_CACHE_VERSION - 1}`)).toBe(true);
     expect(isStaleCache(SHELL_CACHE_NAME)).toBe(false);
@@ -67,8 +78,8 @@ describe("the worker mirrors the policy", () => {
   });
 
   it("refuses the same paths the policy refuses", () => {
-    expect(source).toContain('url.pathname.startsWith("/saves")');
-    expect(source).toContain('url.pathname.startsWith("/packs/")');
+    expect(source).toContain('path.startsWith("/saves")');
+    expect(source).toContain('path.startsWith("/packs/")');
   });
 
   // The comments talk about what the code refuses to do, so the negative

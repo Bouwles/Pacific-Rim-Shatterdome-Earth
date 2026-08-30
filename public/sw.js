@@ -25,12 +25,19 @@ const SKIP_WAITING_MESSAGE = "shatterdome.skip-waiting";
 // never change would never announce an update, so the stamp is the signal.
 const BUILD_STAMP = "__BUILD__";
 void BUILD_STAMP;
+// Where the app lives: "/" at a domain root, "/Repo-Name/" on GitHub Pages.
+// Every route below is written against the app, not the origin.
+const BASE = new URL("./", self.location.href).pathname;
 
 self.addEventListener("install", (event) => {
   // Precache only the smallest set that boots to a menu. Everything else is
   // cached as it is first fetched, so nothing future is downloaded eagerly.
   event.waitUntil(
-    caches.open(SHELL_CACHE_NAME).then((cache) => cache.addAll(SHELL_PRECACHE).catch(() => undefined)),
+    caches
+      .open(SHELL_CACHE_NAME)
+      .then((cache) =>
+        cache.addAll(SHELL_PRECACHE.map((path) => BASE + path.slice(1))).catch(() => undefined),
+      ),
   );
   // Deliberately no skipWaiting() here: a new worker waits until the page says
   // the player accepted the update from a safe place. Never mid-combat.
@@ -66,11 +73,13 @@ self.addEventListener("message", (event) => {
 /** Mirrors decideFetch in swPolicy.ts, in the same order. */
 function decide(url, method, sameOrigin) {
   if (method !== "GET" || !sameOrigin) return "ignore";
-  if (url.pathname.startsWith("/saves")) return "network-only";
-  if (url.pathname.startsWith("/packs/")) return "network-only";
-  if (url.pathname === "/" || url.pathname === "/index.html") return "network-first";
-  if (url.pathname === "/manifest.webmanifest") return "network-first";
-  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/")) return "cache-first";
+  // The path inside the app: "/Repo-Name/assets/x.js" reads as "/assets/x.js".
+  const path = url.pathname.startsWith(BASE) ? `/${url.pathname.slice(BASE.length)}` : url.pathname;
+  if (path.startsWith("/saves")) return "network-only";
+  if (path.startsWith("/packs/")) return "network-only";
+  if (path === "/" || path === "/index.html") return "network-first";
+  if (path === "/manifest.webmanifest") return "network-first";
+  if (path.startsWith("/assets/") || path.startsWith("/icons/")) return "cache-first";
   return "cache-first";
 }
 

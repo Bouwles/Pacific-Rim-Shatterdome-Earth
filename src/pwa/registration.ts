@@ -77,7 +77,8 @@ export function initialisePwa(options: PwaOptions): PwaHandle {
       detail: "Offline play needs HTTPS or localhost. The game runs, but is not installable here.",
     };
   } else {
-    const url = options.url ?? "/sw.js";
+    // Next to index.html wherever the build is served from.
+    const url = options.url ?? `${import.meta.env.BASE_URL}sw.js`;
     navigator.serviceWorker
       .register(url)
       .then((reg) => {

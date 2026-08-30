@@ -291,6 +291,16 @@ npm run preview
 
 The dev server shows the same player path with `?production=1` in the address.
 
+### Playing it on GitHub Pages
+
+The game is a static build, so it runs from GitHub Pages without a server. Every push to `main` runs `.github/workflows/pages.yml`, which builds the game and publishes `dist/` to
+
+https://bouwles.github.io/Pacific-Rim-Shatterdome-Earth/
+
+The direct routes work there too, for example `?hunt=knifehead` or `?seed=12345`. Saves live in the browser's IndexedDB for that address, so a save made on the Pages address stays there. If the page ever fails to publish, check the Actions tab; the only setting the workflow needs is Pages set to "GitHub Actions" as its source, which the workflow turns on itself the first time it runs.
+
+The production build uses relative URLs, so the same `dist/` folder also runs from any subfolder of any static host.
+
 Add `?seed=12345` to the URL to run on a specific seed. The seed decides the whole planet, so the same seed always gives the same coastlines, the same cities and the same storm at the same minute. Debug readouts are only present on the dev server or with `?debug=1`; F3 toggles the overlay there. A production build shows none of it.
 
 Add `?quality=low` to start on a different quality level. Low, medium, high and cinematic are all accepted, and you can change it from the world panel while the game runs.

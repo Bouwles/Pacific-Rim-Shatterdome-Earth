@@ -39,19 +39,24 @@ export const SKIP_WAITING_MESSAGE = "shatterdome.skip-waiting";
 
 export type FetchDecision = "network-first" | "cache-first" | "network-only" | "ignore";
 
-/** The one routing decision, shared by the worker and the tests. */
-export function decideFetch(url: URL, method: string, sameOrigin: boolean): FetchDecision {
+/**
+ * The one routing decision, shared by the worker and the tests. `base` is
+ * where the app lives on its origin: "/" at a domain root, "/Repo-Name/" on
+ * GitHub Pages. Every rule reads the path inside the app.
+ */
+export function decideFetch(url: URL, method: string, sameOrigin: boolean, base = "/"): FetchDecision {
   // Anything that is not a same-origin GET is none of the worker's business.
   if (method !== "GET" || !sameOrigin) return "ignore";
+  const path = url.pathname.startsWith(base) ? `/${url.pathname.slice(base.length)}` : url.pathname;
   // Nothing save-shaped is ever cached, whatever it is called in the future.
-  if (url.pathname.startsWith("/saves")) return "network-only";
+  if (path.startsWith("/saves")) return "network-only";
   // Packs are the pack store's cache, filled deliberately, never eagerly.
-  if (url.pathname.startsWith("/packs/")) return "network-only";
+  if (path.startsWith("/packs/")) return "network-only";
   // The shell entry points go network first so a deploy is noticed.
-  if (url.pathname === "/" || url.pathname === "/index.html") return "network-first";
-  if (url.pathname === "/manifest.webmanifest") return "network-first";
+  if (path === "/" || path === "/index.html") return "network-first";
+  if (path === "/manifest.webmanifest") return "network-first";
   // Hashed build output and icons are immutable: first hit fills the cache.
-  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/")) return "cache-first";
+  if (path.startsWith("/assets/") || path.startsWith("/icons/")) return "cache-first";
   // Everything else, dev-server modules included, is cached as it is fetched so
   // one successful load leaves enough behind to boot again.
   return "cache-first";
